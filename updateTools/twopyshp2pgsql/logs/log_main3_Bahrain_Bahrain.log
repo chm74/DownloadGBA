@@ -1,0 +1,6 @@
+2026-09-22 10:01:58,676 - INFO - 目标目录: \\172.16.0.116\BuildingData\AutoGenerte\Asia\Bahrain\Bahrain
+2026-09-22 10:01:58,676 - INFO - 识别区域: Asia / Bahrain / Bahrain
+2026-09-22 10:01:58,676 - INFO - 共发现 1 个 shp 文件
+2026-09-22 10:01:58,722 - INFO - 已删除旧数据 1 条
+2026-09-22 10:01:58,722 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\Asia\Bahrain\Bahrain\Bahrain.shp
+2026-09-22 10:02:14,320 - INFO - 更新完成: region=Bahrain, 删除=1, 新增=1, 跳过=0

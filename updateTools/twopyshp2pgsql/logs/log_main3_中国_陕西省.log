@@ -1,0 +1,45 @@
+2026-09-22 15:32:17,182 - INFO - 目标目录: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省
+2026-09-22 15:32:17,182 - INFO - 识别区域: 亚洲 / 中国 / 陕西省
+2026-09-22 15:32:17,183 - INFO - 共发现 40 个 shp 文件
+2026-09-22 15:32:17,229 - INFO - 已删除旧数据 127 条
+2026-09-22 15:32:17,229 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_001_3857.shp
+2026-09-22 15:32:19,287 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_002_3857.shp
+2026-09-22 15:32:21,155 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_003_3857.shp
+2026-09-22 15:32:22,427 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_004_3857.shp
+2026-09-22 15:32:25,360 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_005_3857.shp
+2026-09-22 15:32:27,521 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_006_3857.shp
+2026-09-22 15:32:29,723 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_007_3857.shp
+2026-09-22 15:32:31,466 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_008_3857.shp
+2026-09-22 15:32:33,171 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_009_3857.shp
+2026-09-22 15:32:34,109 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_010_3857.shp
+2026-09-22 15:32:36,046 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_011_3857.shp
+2026-09-22 15:32:39,689 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_012_3857.shp
+2026-09-22 15:32:42,380 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_013_3857.shp
+2026-09-22 15:32:43,493 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_014_3857.shp
+2026-09-22 15:32:45,604 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_015_3857.shp
+2026-09-22 15:32:48,941 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_016_3857.shp
+2026-09-22 15:32:53,095 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_017_3857.shp
+2026-09-22 15:32:54,520 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_018_3857.shp
+2026-09-22 15:32:58,554 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_019_3857.shp
+2026-09-22 15:33:01,217 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_020_3857.shp
+2026-09-22 15:33:02,941 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_021_3857.shp
+2026-09-22 15:33:05,092 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_022_3857.shp
+2026-09-22 15:33:06,111 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_023_3857.shp
+2026-09-22 15:33:08,528 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_024_3857.shp
+2026-09-22 15:33:10,459 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_025_3857.shp
+2026-09-22 15:33:11,883 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_026_3857.shp
+2026-09-22 15:33:13,965 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_027_3857.shp
+2026-09-22 15:33:17,883 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_028_3857.shp
+2026-09-22 15:33:19,210 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_029_3857.shp
+2026-09-22 15:33:20,987 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_030_3857.shp
+2026-09-22 15:33:22,376 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_031_3857.shp
+2026-09-22 15:33:26,721 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_032_3857.shp
+2026-09-22 15:33:28,621 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_033_3857.shp
+2026-09-22 15:33:31,263 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_034_3857.shp
+2026-09-22 15:33:33,673 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_035_3857.shp
+2026-09-22 15:33:37,136 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_036_3857.shp
+2026-09-22 15:33:39,662 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_037_3857.shp
+2026-09-22 15:33:41,708 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_038_3857.shp
+2026-09-22 15:33:43,071 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_039_3857.shp
+2026-09-22 15:33:45,631 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\陕西省\shaanxi_001_040_3857.shp
+2026-09-22 15:33:47,336 - INFO - 更新完成: region=陕西省, 删除=127, 新增=40, 跳过=0

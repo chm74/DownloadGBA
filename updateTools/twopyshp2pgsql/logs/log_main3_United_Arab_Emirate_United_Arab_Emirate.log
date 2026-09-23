@@ -1,0 +1,6 @@
+2026-09-18 18:38:52,910 - INFO - 目标目录: \\172.16.0.116\BuildingData\AutoGenerte\Asia\United_Arab_Emirates\United_Arab_Emirates
+2026-09-18 18:38:52,910 - INFO - 识别区域: Asia / United_Arab_Emirates / United_Arab_Emirates
+2026-09-18 18:38:52,910 - INFO - 共发现 1 个 shp 文件
+2026-09-18 18:38:53,032 - INFO - 已删除旧数据 1 条
+2026-09-18 18:38:53,032 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\Asia\United_Arab_Emirates\United_Arab_Emirates\United_Arab_Emirates.shp
+2026-09-18 18:39:27,875 - INFO - 更新完成: region=United_Arab_Emirates, 删除=1, 新增=1, 跳过=0

@@ -1,0 +1,36 @@
+2026-09-22 16:30:35,287 - INFO - 目标目录: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省
+2026-09-22 16:30:35,287 - INFO - 识别区域: 亚洲 / 中国 / 福建省
+2026-09-22 16:30:35,287 - INFO - 共发现 31 个 shp 文件
+2026-09-22 16:30:35,370 - INFO - 已删除旧数据 106 条
+2026-09-22 16:30:35,370 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_001_3857.shp
+2026-09-22 16:30:40,483 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_002_3857.shp
+2026-09-22 16:30:42,867 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_003_3857.shp
+2026-09-22 16:30:45,448 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_004_3857.shp
+2026-09-22 16:30:48,494 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_005_3857.shp
+2026-09-22 16:30:51,199 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_006_3857.shp
+2026-09-22 16:30:55,638 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_007_3857.shp
+2026-09-22 16:30:56,842 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_008_3857.shp
+2026-09-22 16:30:59,557 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_009_3857.shp
+2026-09-22 16:31:01,030 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_010_3857.shp
+2026-09-22 16:31:04,347 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_011_3857.shp
+2026-09-22 16:31:06,185 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_012_3857.shp
+2026-09-22 16:31:11,116 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_013_3857.shp
+2026-09-22 16:31:14,377 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_014_3857.shp
+2026-09-22 16:31:19,554 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_015_3857.shp
+2026-09-22 16:31:21,565 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_016_3857.shp
+2026-09-22 16:31:23,206 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_017_3857.shp
+2026-09-22 16:31:25,485 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_018_3857.shp
+2026-09-22 16:31:28,269 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_019_3857.shp
+2026-09-22 16:31:32,259 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_020_3857.shp
+2026-09-22 16:31:33,874 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_021_3857.shp
+2026-09-22 16:31:38,697 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_022_3857.shp
+2026-09-22 16:31:42,047 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_023_3857.shp
+2026-09-22 16:31:43,733 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_024_3857.shp
+2026-09-22 16:31:46,019 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_025_3857.shp
+2026-09-22 16:31:47,385 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_026_3857.shp
+2026-09-22 16:31:50,528 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_027_3857.shp
+2026-09-22 16:31:53,753 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_028_3857.shp
+2026-09-22 16:31:59,394 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_029_3857.shp
+2026-09-22 16:32:02,479 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_030_3857.shp
+2026-09-22 16:32:05,042 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\福建省\fujian_001_031_3857.shp
+2026-09-22 16:32:07,981 - INFO - 更新完成: region=福建省, 删除=106, 新增=31, 跳过=0

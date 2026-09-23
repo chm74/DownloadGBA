@@ -1,0 +1,53 @@
+2026-09-21 16:40:30,698 - INFO - 目标目录: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York
+2026-09-21 16:40:30,698 - INFO - 识别区域: America / United_States_of_America / New_York
+2026-09-21 16:40:30,698 - INFO - 共发现 48 个 shp 文件
+2026-09-21 16:40:30,747 - INFO - 已删除旧数据 10 条
+2026-09-21 16:40:30,747 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_001_3857.shp
+2026-09-21 16:40:33,681 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_002_3857.shp
+2026-09-21 16:40:35,409 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_003_3857.shp
+2026-09-21 16:40:38,849 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_004_3857.shp
+2026-09-21 16:40:42,304 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_005_3857.shp
+2026-09-21 16:40:45,534 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_006_3857.shp
+2026-09-21 16:40:48,198 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_007_3857.shp
+2026-09-21 16:40:51,443 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_008_3857.shp
+2026-09-21 16:40:53,332 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_009_3857.shp
+2026-09-21 16:40:54,958 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_010_3857.shp
+2026-09-21 16:40:59,119 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_011_3857.shp
+2026-09-21 16:41:00,887 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_012_3857.shp
+2026-09-21 16:41:03,700 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_013_3857.shp
+2026-09-21 16:41:06,884 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_014_3857.shp
+2026-09-21 16:41:10,092 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_015_3857.shp
+2026-09-21 16:41:13,221 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_016_3857.shp
+2026-09-21 16:41:16,259 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_017_3857.shp
+2026-09-21 16:41:19,878 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_018_3857.shp
+2026-09-21 16:41:22,151 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_019_3857.shp
+2026-09-21 16:41:24,732 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_020_3857.shp
+2026-09-21 16:41:27,773 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_021_3857.shp
+2026-09-21 16:41:29,267 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_022_3857.shp
+2026-09-21 16:41:32,765 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_023_3857.shp
+2026-09-21 16:41:35,617 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_024_3857.shp
+2026-09-21 16:41:36,866 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_025_3857.shp
+2026-09-21 16:41:40,170 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_026_3857.shp
+2026-09-21 16:41:41,684 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_027_3857.shp
+2026-09-21 16:41:43,803 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_028_3857.shp
+2026-09-21 16:41:46,508 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_029_3857.shp
+2026-09-21 16:41:50,894 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_030_3857.shp
+2026-09-21 16:41:54,668 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_031_3857.shp
+2026-09-21 16:41:57,981 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_032_3857.shp
+2026-09-21 16:42:01,714 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_033_3857.shp
+2026-09-21 16:42:03,882 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_034_3857.shp
+2026-09-21 16:42:08,509 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_035_3857.shp
+2026-09-21 16:42:10,082 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_036_3857.shp
+2026-09-21 16:42:12,179 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_037_3857.shp
+2026-09-21 16:42:14,647 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_038_3857.shp
+2026-09-21 16:42:16,049 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_039_3857.shp
+2026-09-21 16:42:19,881 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_040_3857.shp
+2026-09-21 16:42:23,926 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_041_3857.shp
+2026-09-21 16:42:26,634 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_042_3857.shp
+2026-09-21 16:42:28,498 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_043_3857.shp
+2026-09-21 16:42:33,860 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_044_3857.shp
+2026-09-21 16:42:35,860 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_045_3857.shp
+2026-09-21 16:42:37,455 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_046_3857.shp
+2026-09-21 16:42:39,511 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_047_3857.shp
+2026-09-21 16:42:41,891 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\America\United_States_of_America\New_York\New_York_001_048_3857.shp
+2026-09-21 16:42:44,547 - INFO - 更新完成: region=New_York, 删除=10, 新增=48, 跳过=0

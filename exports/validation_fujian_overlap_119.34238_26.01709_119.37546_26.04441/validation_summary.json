@@ -1,0 +1,26 @@
+{
+  "status": "TEMPORARY_VALIDATION_ONLY",
+  "bbox_epsg4326": [
+    119.34238,
+    26.01709,
+    119.37546,
+    26.04441
+  ],
+  "official_wfs_raw_count": 4029,
+  "exact_geometry_duplicates_removed": 0,
+  "proposed_no_boundary_filter_count": 4029,
+  "intersects_current_fujian_boundary_count": 946,
+  "outside_current_fujian_boundary_count": 3083,
+  "crosses_bbox_edge_count": 119,
+  "existing_export_count": 944,
+  "additional_features_vs_existing": 3085,
+  "existing_coverage_percent": 23.4301,
+  "source_counts": {
+    "3dglobfp": 3943,
+    "osm": 86
+  },
+  "output_crs": "EPSG:3857",
+  "output_semantics": "完整保留所有与 bbox 相交的建筑；不按福建行政边界过滤；按几何精确去重。",
+  "wfs_requests": 1,
+  "wfs_splits": 0
+}

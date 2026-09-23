@@ -1,0 +1,23 @@
+{
+  "source": "updated world_building index and repaired Fujian production SHP directory",
+  "bbox_epsg4326": [
+    119.34238,
+    26.01709,
+    119.37546,
+    26.04441
+  ],
+  "selected_shards": [
+    "fujian_001_025_3857",
+    "fujian_001_029_3857"
+  ],
+  "raw_features": 4024,
+  "exported_features": 4024,
+  "duplicates_removed": 0,
+  "invalid_geometries": 0,
+  "empty_geometries": 0,
+  "output_crs": "EPSG:3857",
+  "selection_rule": "full building footprints whose geometry intersects the requested rectangle",
+  "wfs_bbox_candidate_count": 4029,
+  "wfs_exact_intersection_count": 4024,
+  "note": "GeoServer BBOX returned 5 candidates lying 0.1-1.1 m outside the rectangle; they are excluded by exact geometry intersection."
+}

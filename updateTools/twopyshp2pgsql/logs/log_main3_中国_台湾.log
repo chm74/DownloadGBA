@@ -1,0 +1,19 @@
+2026-09-23 16:48:12,547 - INFO - 目标目录: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\台湾
+2026-09-23 16:48:12,547 - INFO - 识别区域: 亚洲 / 中国 / 台湾
+2026-09-23 16:48:12,547 - INFO - 共发现 14 个 shp 文件
+2026-09-23 16:48:12,664 - INFO - 已删除旧数据 31 条
+2026-09-23 16:48:12,665 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\台湾\taiwan_001_001_3857.shp
+2026-09-23 16:48:17,708 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\台湾\taiwan_001_002_3857.shp
+2026-09-23 16:48:21,429 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\台湾\taiwan_001_003_3857.shp
+2026-09-23 16:48:22,908 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\台湾\taiwan_001_004_3857.shp
+2026-09-23 16:48:24,156 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\台湾\taiwan_001_005_3857.shp
+2026-09-23 16:48:24,575 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\台湾\taiwan_001_006_3857.shp
+2026-09-23 16:48:26,688 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\台湾\taiwan_001_007_3857.shp
+2026-09-23 16:48:30,079 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\台湾\taiwan_001_008_3857.shp
+2026-09-23 16:48:32,047 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\台湾\taiwan_001_009_3857.shp
+2026-09-23 16:48:34,871 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\台湾\taiwan_001_010_3857.shp
+2026-09-23 16:48:37,914 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\台湾\taiwan_001_011_3857.shp
+2026-09-23 16:48:39,504 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\台湾\taiwan_001_012_3857.shp
+2026-09-23 16:48:40,882 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\台湾\taiwan_001_013_3857.shp
+2026-09-23 16:48:43,989 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\台湾\taiwan_001_014_3857.shp
+2026-09-23 16:48:46,967 - INFO - 更新完成: region=台湾, 删除=31, 新增=14, 跳过=0

@@ -1,0 +1,1259 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GBA 建筑下载状态看板</title>
+<style>
+  :root { color-scheme: light dark; --bg:#f5f6f8; --card:#fff; --text:#1f2328; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --ok:#16a34a; --warn:#d97706; --err:#dc2626; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f1115; --card:#171a21; --text:#e5e7eb; --muted:#9ca3af; --line:#2a2f3a; --accent:#60a5fa; --ok:#4ade80; --warn:#fbbf24; --err:#f87171; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font: 14px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; }
+  .wrap { max-width: 1428px; margin: 0 auto; padding: 20px 16px 48px; }
+  header { display:flex; flex-wrap:wrap; align-items:baseline; gap:10px 16px; margin-bottom:16px; }
+  h1 { font-size:20px; margin:0; }
+  .muted { color:var(--muted); font-size:12px; }
+  .badge { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; color:#fff; vertical-align:middle; }
+  .badge.running { background:var(--accent); }
+  .badge.stopped { background:var(--warn); }
+  .badge.done { background:var(--ok); }
+  .badge.unknown { background:var(--muted); }
+  .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin:0 0 16px; position:sticky; top:0; z-index:20; background:var(--bg); }
+  .tab { background:none; border:none; border-bottom:2px solid transparent; padding:8px 14px; margin-bottom:-1px; cursor:pointer; color:var(--muted); font:inherit; font-size:14px; }
+  .tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+  .panel[hidden] { display:none; }
+  .plain-list { margin:0; padding-left:18px; color:var(--muted); font-size:13px; }
+  .plain-list li { margin-bottom:6px; }
+  .plain-list code { background:rgba(127,127,127,.12); border-radius:4px; padding:1px 5px; font:12px/1.5 Consolas, monospace; }
+  .layout { display:flex; gap:16px; align-items:flex-start; }
+  .sidebar { flex:0 0 200px; }
+  .main { flex:1 1 auto; min-width:0; }
+  .cards { display:grid; grid-template-columns:1fr; gap:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .card .num { font-size:24px; font-weight:600; margin-top:4px; }
+  .card .num.ok { color:var(--ok); } .card .num.err { color:var(--err); } .card .num.run { color:var(--accent); }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  section h2 { font-size:15px; margin:0 0 12px; }
+  .task { border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:12px; }
+  .task:last-child { margin-bottom:0; }
+  .task .title { font-weight:600; word-break:break-all; }
+  .task .meta { color:var(--muted); font-size:12px; margin-top:2px; }
+  .bar { height:12px; background:var(--line); border-radius:999px; overflow:hidden; margin:10px 0 6px; }
+  .bar > i { display:block; height:100%; background:var(--accent); width:0; transition:width .4s ease; }
+  .task .stats { display:flex; flex-wrap:wrap; gap:8px 18px; font-size:13px; }
+  .log { margin-top:8px; background:rgba(127,127,127,.08); border-radius:6px; padding:8px 10px; font:12px/1.5 Consolas, monospace; white-space:pre-wrap; word-break:break-all; }
+  .stale { color:var(--err); font-weight:600; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:500; font-size:12px; }
+  tr:last-child td { border-bottom:none; }
+  td.mono { font-family:Consolas, monospace; font-size:12px; word-break:break-all; }
+  .cell-input { width:100%; min-width:110px; padding:3px 6px; font:inherit; font-size:12px; }
+  .cell-check { width:16px; height:16px; cursor:pointer; }
+  td.order-cell { white-space:nowrap; }
+  button.mini { padding:1px 7px; margin-right:2px; font-size:12px; cursor:pointer; line-height:1.4; }
+  button.mini:disabled { opacity:.35; cursor:default; }
+  input.note-input { width:100%; min-width:140px; padding:3px 6px; font:inherit; font-size:12px; border:1px solid var(--line); border-radius:4px; background:transparent; color:var(--text); }
+  input.note-input:focus { outline:1px solid var(--accent); border-color:var(--accent); }
+  .error-banner { background:rgba(220,38,38,.12); border:1px solid var(--err); color:var(--err); border-radius:8px; padding:10px 12px; margin-bottom:16px; }
+  .empty { color:var(--muted); font-size:13px; }
+  footer { color:var(--muted); font-size:12px; text-align:center; margin-top:8px; }
+  a { color:var(--accent); }
+  @media (max-width: 760px) {
+    .layout { flex-direction:column; }
+    .sidebar { flex:1 1 auto; width:100%; }
+    .cards { grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>GBA 建筑下载状态看板</h1>
+    <span id="batch-badge" class="badge unknown">加载中</span>
+    <span class="muted">数据时间：<span id="generated-at">-</span></span>
+    <span class="muted"><span id="countdown">%%REFRESH_MS%%</span> ms 后自动刷新</span>
+    <span class="muted">磁盘剩余：<span id="disk-free">-</span></span>
+  </header>
+
+  <div id="error-banner" class="error-banner" style="display:none"></div>
+
+  <nav class="tabs">
+    <button type="button" class="tab active" data-tab="download">建筑数据下载</button>
+    <button type="button" class="tab" data-tab="processing">数据处理</button>
+    <button type="button" class="tab" data-tab="dbupdated">数据库表更新记录</button>
+  </nav>
+
+  <div class="layout panel" id="panel-download">
+    <aside class="sidebar">
+      <div class="cards">
+        <div class="card"><div class="muted">总任务</div><div class="num" id="c-total">-</div></div>
+        <div class="card"><div class="muted">运行中</div><div class="num run" id="c-running">-</div></div>
+        <div class="card"><div class="muted">待执行</div><div class="num" id="c-pending">-</div></div>
+        <div class="card"><div class="muted">已完成</div><div class="num ok" id="c-ok">-</div></div>
+        <div class="card"><div class="muted">失败</div><div class="num err" id="c-failed">-</div></div>
+      </div>
+    </aside>
+
+    <main class="main">
+  <section>
+    <h2>批处理控制</h2>
+    <div class="muted" style="margin-bottom:10px;">
+      重启会停止当前批处理并按新并发参数重新启动；已完成分块全部复用，任务从断点继续（约几秒中断）。
+    </div>
+    <div class="stats">
+      <span>批处理：<b id="ctl-running">-</b></span>
+      <span>当前 tile-workers：<b id="ctl-current">-</b></span>
+      <span>runner PID：<span id="ctl-pid">-</span></span>
+      <span>runner 数量：<b id="ctl-runner-count">-</b></span>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <label class="muted">tile-workers
+        <input id="ctl-workers" type="number" min="1" max="6" step="1" value="2"
+               style="width:80px;margin-left:6px;padding:4px 6px;">
+      </label>
+      <button id="ctl-restart" style="padding:6px 14px;cursor:pointer;">保存并重启批处理</button>
+      <button id="ctl-stop" style="padding:6px 14px;cursor:pointer;color:#b91c1c;border-color:#b91c1c;">停止下载任务</button>
+      <span id="ctl-message" class="muted"></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>当前任务</h2>
+    <div id="running-list"><div class="empty">暂无运行中的任务</div></div>
+  </section>
+
+  <section>
+    <h2>队列（全部待执行任务）</h2>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+      <span id="queue-summary" class="muted">-</span>
+      <label class="muted">搜索城市
+        <input id="queue-search" type="text" placeholder="中文或英文，如 安哥拉 / Angola"
+               style="margin-left:4px;padding:4px 6px;width:200px;">
+      </label>
+      <button id="queue-search-button" style="padding:4px 10px;cursor:pointer;">搜索</button>
+      <button id="queue-search-clear" style="padding:4px 10px;cursor:pointer;">清除</button>
+      <label class="muted">每页
+        <select id="queue-page-size" style="margin-left:4px;padding:3px 6px;">
+          <option value="15">15</option>
+          <option value="30">30</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="200">200</option>
+        </select>
+      </label>
+      <button id="queue-first" style="padding:4px 10px;cursor:pointer;">首页</button>
+      <button id="queue-prev" style="padding:4px 10px;cursor:pointer;">上一页</button>
+      <span id="queue-page-label" class="muted">-</span>
+      <button id="queue-next" style="padding:4px 10px;cursor:pointer;">下一页</button>
+      <button id="queue-last" style="padding:4px 10px;cursor:pointer;">末页</button>
+      <span class="muted">｜点「排序」列按钮调整执行顺序（下次启动批处理生效）</span>
+      <span id="queue-reorder-message" class="muted"></span>
+    </div>
+    <div id="queue-table"><div class="empty">暂无待执行任务</div></div>
+  </section>
+
+  <section>
+    <h2>最近完成</h2>
+    <div class="muted" style="margin-bottom:10px;">
+      点“置顶”可将完成任务重新加入待执行队首（下次启动批处理生效）｜<span id="recent-message"></span>
+    </div>
+    <div id="recent-table"><div class="empty">暂无已完成任务</div></div>
+  </section>
+
+  <section id="failed-section" style="display:none">
+    <h2>失败任务</h2>
+    <div class="muted" style="margin-bottom:10px;">
+      点「加入队列」把失败任务重新排入待执行队列（下次启动批处理生效）｜<span id="failed-message"></span>
+    </div>
+    <div id="failed-table"></div>
+  </section>
+
+    </main>
+  </div>
+
+  <div class="panel" id="panel-processing" hidden>
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="cards">
+          <div class="card"><div class="muted">处理任务</div><div class="num" id="p-total">-</div></div>
+          <div class="card"><div class="muted">运行中</div><div class="num run" id="p-running">-</div></div>
+          <div class="card"><div class="muted">待处理</div><div class="num" id="p-pending">-</div></div>
+          <div class="card"><div class="muted">已完成</div><div class="num ok" id="p-ok">-</div></div>
+          <div class="card"><div class="muted">失败/阻塞</div><div class="num err" id="p-failed">-</div></div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div id="p-error" class="error-banner" style="display:none"></div>
+
+        <section>
+          <h2>处理控制</h2>
+          <div class="muted" style="margin-bottom:10px;">
+            后台启动处理队列（独立进程，重启看板不影响）；停止会把正在跑的任务重置为「待处理」，可随时重新开始。
+            建议先在「建筑数据下载」页签停止下载，避免内存竞争。
+          </div>
+          <div class="stats">
+            <span>处理批处理：<b id="pctl-running">-</b></span>
+            <span>执行器 PID：<span id="pctl-pid">-</span></span>
+            <span>当前任务：<span id="pctl-task">-</span></span>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <label class="muted">数量
+              <input id="pctl-limit" type="number" min="0" step="1" value="0"
+                     style="width:80px;margin-left:6px;padding:4px 6px;" title="0 表示执行全部待处理任务">
+              （0=全部）
+            </label>
+            <label class="muted">
+              <input id="pctl-wait" type="checkbox" checked> 资源不足时等待
+            </label>
+            <button id="pctl-start" style="padding:6px 14px;cursor:pointer;">开始执行</button>
+            <button id="pctl-stop" style="padding:6px 14px;cursor:pointer;color:#b91c1c;border-color:#b91c1c;">停止处理</button>
+            <button id="pctl-sync" style="padding:6px 14px;cursor:pointer;">同步队列</button>
+            <span id="pctl-message" class="muted"></span>
+          </div>
+        </section>
+
+        <section>
+          <h2>当前处理任务</h2>
+          <div id="p-running-list"><div class="empty">暂无正在处理的任务</div></div>
+        </section>
+
+        <section>
+          <h2>待处理队列</h2>
+          <div class="muted" style="margin-bottom:8px;">
+            点「排序」列的按钮可手动调整执行顺序（下次 <code>--run</code> 生效）｜<span id="p-queue-message"></span>
+          </div>
+          <div id="p-queue-table"><div class="empty">暂无待处理任务</div></div>
+        </section>
+
+        <section>
+          <h2>最近完成</h2>
+          <div id="p-recent-table"><div class="empty">暂无已完成任务</div></div>
+        </section>
+
+        <section id="p-failed-section" style="display:none">
+          <h2>失败 / 阻塞</h2>
+          <div class="muted" style="margin-bottom:10px;">
+            点「加入队列」把失败任务重新排入待处理队列（下次执行处理生效）｜<span id="p-failed-message"></span>
+          </div>
+          <div id="p-failed-table"></div>
+        </section>
+
+        <section>
+          <h2>流程说明</h2>
+          <ul class="plain-list">
+            <li>处理流程：切分（目标约 8 万要素/片）→ QGIS 有效性校验 → 清洗（空几何 / Height≤0 / 重复几何）→ 重投影 EPSG:3857</li>
+            <li>处理工具：<code>Tools/Oneshp_pipline_qgis</code>，产物为 <code>out_data/&lt;数据集&gt;_pipeline/final/*_3857.shp</code></li>
+            <li>队列命令：<code>python scripts/run_shp_process_tasks.py --sync / --dry-run / --run / --summary / --running</code></li>
+            <li>下载完成的任务会自动登记到待处理队列（<code>run_world_building_tasks.py</code> 默认开启，<code>--no-process-sync</code> 关闭）；「同步队列」按钮等价于手动执行一次 <code>--sync</code>。</li>
+            <li>页面「开始执行/停止处理」控制的执行器日志：<code>data/process_run.log</code>；处理库为 <code>data/shp_process_state.db</code></li>
+          </ul>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-db-updated" hidden>
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="cards">
+          <div class="card"><div class="muted">已处理任务</div><div class="num" id="d-total">-</div></div>
+          <div class="card"><div class="muted">已更新</div><div class="num ok" id="d-updated">-</div></div>
+          <div class="card"><div class="muted">未更新</div><div class="num err" id="d-pending">-</div></div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div id="d-error" class="error-banner" style="display:none"></div>
+
+        <section>
+          <h2>数据库表更新记录</h2>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+            <span class="muted">对已完成处理的任务手动标记是否已更新到数据库表，保存后写入 <code>data/db_update_status.json</code>。</span>
+            <button id="d-save" type="button" style="padding:4px 12px;cursor:pointer;">保存修改</button>
+            <span id="d-message" class="muted"></span>
+          </div>
+          <div id="d-table"><div class="empty">暂无已完成处理的任务</div></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <footer>只读看板 ｜ 数据源：SQLite 状态库 ｜ API：<a href="/api/status">/api/status</a></footer>
+</div>
+
+<script>
+const REFRESH_MS = %%REFRESH_MS%%;
+let countdownTimer = null;
+const controlState = { actionTokenRequired: false, inputDirty: false };
+const noteState = { editingKey: null };
+const queueState = { page: 1, pageSize: 15, total: 0, search: "" };
+
+function esc(value) {
+  return String(value === null || value === undefined ? "" : value)
+    .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+}
+
+function fmtDuration(seconds) {
+  if (seconds === null || seconds === undefined) return "-";
+  const s = Math.max(0, Math.round(seconds));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  if (h > 0) return `${h} 小时 ${m} 分`;
+  if (m > 0) return `${m} 分 ${sec} 秒`;
+  return `${sec} 秒`;
+}
+
+function fmtBytes(bytes) {
+  if (bytes === null || bytes === undefined) return "-";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = Number(bytes), index = 0;
+  while (value >= 1024 && index < units.length - 1) { value /= 1024; index += 1; }
+  return `${value.toFixed(index >= 3 ? 2 : 1)} ${units[index]}`;
+}
+
+function fmtPercent(value) {
+  if (value === null || value === undefined) return "-";
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function batchLabel(state) {
+  if (state === "running") return ["运行中", "running"];
+  if (state === "stopped") return ["批处理已停止（有待执行任务）", "stopped"];
+  if (state === "done") return ["全部完成", "done"];
+  return ["未知", "unknown"];
+}
+
+function renderRunning(items) {
+  const box = document.getElementById("running-list");
+  if (!items || items.length === 0) {
+    box.innerHTML = '<div class="empty">暂无运行中的任务</div>';
+    return;
+  }
+  box.innerHTML = items.map(item => {
+    const percent = item.progress === null ? null : item.progress;
+    let stalled = "";
+    if (item.log_stale) {
+      if (item.worker_active) {
+        stalled = ' <span style="color:var(--warn)">⏳ 合并/导出阶段（进程运行中，暂无新日志）</span>';
+      } else {
+        stalled = ' <span class="stale">⚠ 任务疑似中断（无对应 worker 进程），将按队列顺序自动重跑</span>';
+      }
+    }
+    const log = (item.last_log || []).map(line => esc(line)).join("\n");
+    return `
+      <div class="task">
+        <div class="title">${esc(item.task_id)}${stalled}</div>
+        <div class="meta">第 ${esc(item.attempts)} 次尝试 ｜ 开始于 ${esc(item.started_at || "-")} ｜ 已运行 ${fmtDuration(item.elapsed_seconds)}</div>
+        <div class="bar"><i style="width:${percent === null ? 0 : Math.min(100, percent * 100)}%"></i></div>
+        <div class="stats">
+          <span>分块：${item.tiles_done}/${item.tiles_total || "?"}（${fmtPercent(percent)}）</span>
+          <span>预计剩余：约 ${fmtDuration(item.eta_seconds)}</span>
+          <span>产物大小：${fmtBytes(item.output_size_bytes)}</span>
+          <span>SHP 分卷：${item.shp_parts}</span>
+        </div>
+        <div class="meta">目录：${esc(item.output_dir)}</div>
+        ${log ? `<div class="log">${log}</div>` : ""}
+      </div>`;
+  }).join("");
+}
+
+function renderQueue(items, total, page, pageSize, totalAll) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  let summary = `共 ${total} 条待执行`;
+  if (queueState.search) {
+    summary += `（搜索「${queueState.search}」${totalAll ? `，未过滤共 ${totalAll} 条` : ""}）`;
+  }
+  document.getElementById("queue-summary").textContent = summary;
+  document.getElementById("queue-page-label").textContent = `第 ${page}/${totalPages} 页`;
+  document.getElementById("queue-first").disabled = page <= 1;
+  document.getElementById("queue-prev").disabled = page <= 1;
+  document.getElementById("queue-next").disabled = page >= totalPages;
+  document.getElementById("queue-last").disabled = page >= totalPages;
+
+  const box = document.getElementById("queue-table");
+  if (!items || items.length === 0) {
+    box.innerHTML = '<div class="empty">暂无待执行任务</div>';
+    return;
+  }
+  box.innerHTML = `
+    <table>
+      <thead><tr><th>排序</th><th>#</th><th>任务</th><th>大洲</th><th>国家</th><th>城市</th></tr></thead>
+      <tbody>${items.map(item => {
+        const isFirst = item.order === 1;
+        const isLast = item.order >= total;
+        return `
+        <tr>
+          <td>
+            <button type="button" class="mini" data-reorder="${esc(item.task_id)}" data-direction="up" title="上移" ${isFirst ? "disabled" : ""}>↑</button>
+            <button type="button" class="mini" data-reorder="${esc(item.task_id)}" data-direction="down" title="下移" ${isLast ? "disabled" : ""}>↓</button>
+            <button type="button" class="mini" data-reorder="${esc(item.task_id)}" data-direction="top" title="置顶" ${isFirst ? "disabled" : ""}>⤒</button>
+          </td>
+          <td>${esc(item.order)}</td>
+          <td class="mono">${esc(item.task_id)}</td>
+          <td>${esc(item.continent_display || item.continent)}</td>
+          <td>${esc(item.country_display || item.country)}</td>
+          <td>${esc(item.city_display || item.city)}</td>
+        </tr>`;
+      }).join("")}
+      </tbody>
+    </table>`;
+}
+
+async function reorderDownload(taskId, direction) {
+  const message = document.getElementById("queue-reorder-message");
+  const labels = { up: "上移", down: "下移", top: "置顶" };
+  message.textContent = `${labels[direction] || direction}中…`;
+  try {
+    const response = await fetch("/api/queue/reorder", {
+      method: "POST",
+      headers: actionHeaders(),
+      body: JSON.stringify({ task_id: taskId, direction }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      message.textContent = `${labels[direction] || direction}失败：` + (data.error || response.status);
+      return;
+    }
+    message.textContent = `${labels[direction] || direction}成功（下次启动批处理生效）`;
+    await refresh();
+  } catch (error) {
+    message.textContent = "排序请求失败：" + error;
+  }
+}
+
+document.getElementById("queue-table").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-reorder]");
+  if (!button || button.disabled) return;
+  reorderDownload(button.dataset.reorder, button.dataset.direction);
+});
+
+function bindQueueNav(buttonId, targetPage) {
+  document.getElementById(buttonId).addEventListener("click", () => {
+    const totalPages = Math.max(1, Math.ceil(queueState.total / queueState.pageSize));
+    const page = typeof targetPage === "function" ? targetPage(totalPages) : targetPage;
+    queueState.page = Math.min(Math.max(page, 1), totalPages);
+    refresh();
+  });
+}
+
+document.getElementById("queue-page-size").addEventListener("change", (event) => {
+  const size = parseInt(event.target.value, 10);
+  queueState.pageSize = Number.isFinite(size) && size > 0 ? size : 15;
+  queueState.page = 1;
+  refresh();
+});
+bindQueueNav("queue-first", 1);
+bindQueueNav("queue-prev", () => queueState.page - 1);
+bindQueueNav("queue-next", () => queueState.page + 1);
+bindQueueNav("queue-last", (totalPages) => totalPages);
+
+function applyQueueSearch() {
+  queueState.search = document.getElementById("queue-search").value.trim();
+  queueState.page = 1;
+  refresh();
+}
+
+document.getElementById("queue-search-button").addEventListener("click", applyQueueSearch);
+document.getElementById("queue-search").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    applyQueueSearch();
+  }
+});
+document.getElementById("queue-search-clear").addEventListener("click", () => {
+  document.getElementById("queue-search").value = "";
+  queueState.search = "";
+  queueState.page = 1;
+  refresh();
+});
+
+const TAB_PANELS = {
+  download: "panel-download",
+  processing: "panel-processing",
+  dbupdated: "panel-db-updated",
+};
+
+function switchTab(name) {
+  const target = TAB_PANELS[name] ? name : "download";
+  document.querySelectorAll(".tab").forEach((button) => {
+    button.classList.toggle("active", button.dataset.tab === target);
+  });
+  Object.entries(TAB_PANELS).forEach(([key, panelId]) => {
+    document.getElementById(panelId).hidden = key !== target;
+  });
+  try {
+    localStorage.setItem("gba_tab", target);
+  } catch (error) {
+    /* 隐私模式下 localStorage 不可用，忽略 */
+  }
+}
+
+document.querySelectorAll(".tab").forEach((button) => {
+  button.addEventListener("click", () => switchTab(button.dataset.tab));
+});
+
+let initialTab = "download";
+try {
+  initialTab = localStorage.getItem("gba_tab") || "download";
+} catch (error) {
+  initialTab = "download";
+}
+switchTab(initialTab);
+
+function renderRecent(items) {
+  const box = document.getElementById("recent-table");
+  if (!items || items.length === 0) {
+    box.innerHTML = '<div class="empty">暂无已完成任务</div>';
+    return;
+  }
+  box.innerHTML = `
+    <table>
+      <thead><tr><th>任务</th><th>状态</th><th>要素数</th><th>耗时</th><th>完成时间</th><th>操作</th></tr></thead>
+      <tbody>${items.map(item => `
+        <tr>
+          <td class="mono">${esc(item.task_id)}</td>
+          <td>${esc(item.status)}</td>
+          <td>${esc(item.feature_count ?? "-")}</td>
+          <td>${fmtDuration(item.duration_seconds)}</td>
+          <td>${esc(item.finished_at || "-")}</td>
+          <td><button type="button" class="mini" data-requeue="${esc(item.task_id)}" data-position="top" title="重新加入待执行队首">置顶</button></td>
+        </tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+function renderFailed(items) {
+  const section = document.getElementById("failed-section");
+  const box = document.getElementById("failed-table");
+  if (!items || items.length === 0) {
+    section.style.display = "none";
+    box.innerHTML = "";
+    return;
+  }
+  section.style.display = "";
+  box.innerHTML = `
+    <table>
+      <thead><tr><th>任务</th><th>尝试次数</th><th>最后错误</th><th>时间</th><th>操作</th></tr></thead>
+      <tbody>${items.map(item => `
+        <tr>
+          <td class="mono">${esc(item.task_id)}</td>
+          <td>${esc(item.attempts)}</td>
+          <td>${esc(item.last_error)}</td>
+          <td>${esc(item.finished_at || "-")}</td>
+          <td>
+            <button type="button" class="mini" data-requeue="${esc(item.task_id)}" data-position="tail" title="追加到队尾">加入队列</button>
+            <button type="button" class="mini" data-requeue="${esc(item.task_id)}" data-position="top" title="置顶到队首">置顶</button>
+          </td>
+        </tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+async function requeueDownload(taskId, position, button, messageId = "failed-message") {
+  const message = document.getElementById(messageId);
+  const labels = { tail: "加入队尾", top: "置顶" };
+  const label = labels[position] || position;
+  message.textContent = `${label}中…`;
+  if (button) button.disabled = true;
+  try {
+    const response = await fetch("/api/queue/requeue", {
+      method: "POST",
+      headers: actionHeaders(),
+      body: JSON.stringify({ task_id: taskId, position }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      message.textContent = `${label}失败：` + (data.error || response.status);
+      return;
+    }
+    message.textContent = `${label}成功，已入队（当前待执行 ${data.pending_total} 条，下次启动批处理生效）`;
+    await refresh();
+  } catch (error) {
+    message.textContent = "入队请求失败：" + error;
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+document.getElementById("recent-table").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-requeue]");
+  if (!button || button.disabled) return;
+  if (!window.confirm(`确认将完成任务“${button.dataset.requeue}”重新加入下载队列并置顶？`)) {
+    return;
+  }
+  requeueDownload(button.dataset.requeue, "top", button, "recent-message");
+});
+
+document.getElementById("failed-table").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-requeue]");
+  if (!button || button.disabled) return;
+  requeueDownload(button.dataset.requeue, button.dataset.position || "tail", button);
+});
+
+function fmtNumber(value) {
+  if (value === null || value === undefined) return "-";
+  return Number(value).toLocaleString("zh-CN");
+}
+
+function renderProcessingRunning(items) {
+  const box = document.getElementById("p-running-list");
+  if (!items || items.length === 0) {
+    box.innerHTML = '<div class="empty">暂无正在处理的任务</div>';
+    return;
+  }
+  box.innerHTML = items.map(item => {
+    const percent = item.progress === null || item.progress === undefined ? null : item.progress;
+    const stalled = item.log_stale ? ' <span class="stale">⚠ 超过 10 分钟无进度更新，可能卡住</span>' : "";
+    const log = (item.last_log || []).map(line => esc(line)).join("\n");
+    const detail = item.stage_detail ? `<div class="meta">${esc(item.stage_detail)}</div>` : "";
+    return `
+      <div class="task">
+        <div class="title">${esc(item.display_name || item.dataset_key)}${stalled}</div>
+        <div class="meta">命名前缀：<b>${esc(item.process_name_prefix || "-")}</b> ｜ 阶段：${esc(item.stage_label || "-")} ｜ 第 ${esc(item.attempts)} 次尝试 ｜ 开始于 ${esc(item.started_at || "-")} ｜ 已运行 ${fmtDuration(item.elapsed_seconds)}</div>
+        <div class="bar"><i style="width:${percent === null ? 0 : Math.min(100, percent * 100)}%"></i></div>
+        <div class="stats">
+          <span>分片：${item.tiles_done}/${item.tiles_total || "?"}（${fmtPercent(percent)}）</span>
+          <span>预计剩余：约 ${fmtDuration(item.eta_seconds)}</span>
+          <span>源要素：${fmtNumber(item.feature_count)}</span>
+          <span>产物大小：${fmtBytes(item.output_size_bytes)}</span>
+        </div>
+        ${detail}
+        <div class="meta">来源：${esc(item.source_dir || "-")}</div>
+        <div class="meta">输出：${esc(item.output_dir || "-")}</div>
+        ${log ? `<div class="log">${log}</div>` : ""}
+      </div>`;
+  }).join("");
+}
+
+function renderProcessingQueue(processing) {
+  const box = document.getElementById("p-queue-table");
+  if (noteState.editingKey && box.querySelector("input[data-note-key]")) {
+    return;
+  }
+  const items = processing.queue || [];
+  if (items.length === 0) {
+    box.innerHTML = '<div class="empty">暂无待处理任务</div>';
+    return;
+  }
+  box.innerHTML = `
+    <table>
+      <thead><tr><th>排序</th><th>#</th><th>数据集</th><th>命名前缀</th><th>来源目录</th><th>要素数</th><th>SHP</th><th>状态</th><th>备注</th></tr></thead>
+      <tbody>${items.map((item, index) => {
+        const isFirst = index === 0;
+        const isLast = index === items.length - 1;
+        const key = esc(item.dataset_key);
+        const note = item.note || "";
+        return `
+        <tr>
+          <td class="order-cell">
+            <button type="button" class="mini" data-reorder="${key}" data-direction="up" title="上移" ${isFirst ? "disabled" : ""}>↑</button>
+            <button type="button" class="mini" data-reorder="${key}" data-direction="down" title="下移" ${isLast ? "disabled" : ""}>↓</button>
+            <button type="button" class="mini" data-reorder="${key}" data-direction="top" title="置顶" ${isFirst ? "disabled" : ""}>⤒</button>
+          </td>
+          <td>${esc(item.order ?? index + 1)}</td>
+          <td class="mono">${esc(item.display_name || item.dataset_key)}</td>
+          <td class="mono">${esc(item.process_name_prefix || "-")}</td>
+          <td class="mono">${esc(item.source_dir || "-")}</td>
+          <td>${fmtNumber(item.feature_count)}</td>
+          <td>${esc(item.shp_count ?? "-")}</td>
+          <td>待处理</td>
+          <td><input class="note-input" type="text" maxlength="200" placeholder="添加备注"
+                     data-note-key="${key}" data-saved="${esc(note)}" value="${esc(note)}"></td>
+        </tr>`;
+      }).join("")}
+      </tbody>
+    </table>`;
+}
+
+async function saveProcessNote(input) {
+  const message = document.getElementById("p-queue-message");
+  const key = input.dataset.noteKey;
+  const value = (input.value || "").trim();
+  if (value === (input.dataset.saved || "")) {
+    input.value = value;
+    return;
+  }
+  try {
+    const response = await fetch("/api/process/note", {
+      method: "POST",
+      headers: actionHeaders(),
+      body: JSON.stringify({ dataset_key: key, note: value }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      input.value = input.dataset.original ?? input.dataset.saved ?? "";
+      if (message) message.textContent = "备注保存失败：" + (data.error || response.status);
+      return;
+    }
+    input.value = data.note || "";
+    input.dataset.saved = data.note || "";
+    if (message) message.textContent = "备注已保存";
+  } catch (error) {
+    input.value = input.dataset.original ?? input.dataset.saved ?? "";
+    if (message) message.textContent = "备注保存请求失败：" + error;
+  }
+}
+
+document.getElementById("p-queue-table").addEventListener("focusin", (event) => {
+  const input = event.target.closest("input[data-note-key]");
+  if (!input) return;
+  noteState.editingKey = input.dataset.noteKey;
+  input.dataset.original = input.dataset.saved || input.value;
+});
+
+document.getElementById("p-queue-table").addEventListener("focusout", (event) => {
+  const input = event.target.closest("input[data-note-key]");
+  if (!input) return;
+  noteState.editingKey = null;
+  saveProcessNote(input);
+});
+
+document.getElementById("p-queue-table").addEventListener("keydown", (event) => {
+  const input = event.target.closest("input[data-note-key]");
+  if (!input) return;
+  if (event.key === "Enter") {
+    event.preventDefault();
+    input.blur();
+  } else if (event.key === "Escape") {
+    input.value = input.dataset.original || input.dataset.saved || "";
+    input.blur();
+  }
+});
+
+async function reorderProcessing(datasetKey, direction) {
+  const message = document.getElementById("p-queue-message");
+  if (message) message.textContent = "正在调整顺序…";
+  try {
+    const response = await fetch("/api/process/reorder", {
+      method: "POST",
+      headers: actionHeaders(),
+      body: JSON.stringify({ dataset_key: datasetKey, direction }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      if (message) message.textContent = "调整失败：" + (data.error || response.status);
+      return;
+    }
+    if (message) {
+      const labels = { up: "上移", down: "下移", top: "置顶" };
+      message.textContent = `已${labels[direction] || "调整"}：${datasetKey}`;
+    }
+    await refresh();
+  } catch (error) {
+    if (message) message.textContent = "调整请求失败：" + error;
+  }
+}
+
+document.getElementById("p-queue-table").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-reorder]");
+  if (!button || button.disabled) return;
+  reorderProcessing(button.dataset.reorder, button.dataset.direction);
+});
+
+function renderProcessingRecent(items) {
+  const box = document.getElementById("p-recent-table");
+  if (!items || items.length === 0) {
+    box.innerHTML = '<div class="empty">暂无已完成任务</div>';
+    return;
+  }
+  box.innerHTML = `
+    <table>
+      <thead><tr><th>数据集</th><th>命名前缀</th><th>分片数</th><th>要素数</th><th>耗时</th><th>完成时间</th><th>输出目录</th></tr></thead>
+      <tbody>${items.map(item => `
+        <tr>
+          <td class="mono">${esc(item.dataset_key)}</td>
+          <td class="mono">${esc(item.process_name_prefix || "-")}</td>
+          <td>${esc(item.tile_count ?? "-")}</td>
+          <td>${fmtNumber(item.feature_count)}</td>
+          <td>${fmtDuration(item.duration_seconds)}</td>
+          <td>${esc(item.finished_at || "-")}</td>
+          <td class="mono">${esc(item.output_dir || "-")}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+function renderProcessingFailed(processing) {
+  const section = document.getElementById("p-failed-section");
+  const box = document.getElementById("p-failed-table");
+  const failed = processing.failed || [];
+  const blocked = processing.blocked || [];
+  if (failed.length === 0 && blocked.length === 0) {
+    section.style.display = "none";
+    box.innerHTML = "";
+    return;
+  }
+  section.style.display = "";
+  let html = "";
+  if (failed.length > 0) {
+    html += `
+      <table>
+        <thead><tr><th>失败任务</th><th>尝试次数</th><th>最后错误</th><th>时间</th><th>操作</th></tr></thead>
+        <tbody>${failed.map(item => `
+          <tr>
+            <td class="mono">${esc(item.dataset_key)}</td>
+            <td>${esc(item.attempts)}</td>
+            <td>${esc(item.last_error)}</td>
+            <td>${esc(item.finished_at || item.updated_at || "-")}</td>
+            <td>
+              <button type="button" class="mini" data-prequeue="${esc(item.dataset_key)}" data-position="tail" title="追加到待处理队尾">加入队列</button>
+              <button type="button" class="mini" data-prequeue="${esc(item.dataset_key)}" data-position="top" title="置顶到待处理队首">置顶</button>
+            </td>
+          </tr>`).join("")}
+        </tbody>
+      </table>`;
+  }
+  if (blocked.length > 0) {
+    html += `
+      <table style="margin-top:${failed.length > 0 ? "12px" : "0"}">
+        <thead><tr><th>阻塞任务</th><th>来源目录</th><th>原因</th></tr></thead>
+        <tbody>${blocked.map(item => `
+          <tr>
+            <td class="mono">${esc(item.dataset_key)}</td>
+            <td class="mono">${esc(item.source_dir || "-")}</td>
+            <td>${esc(item.reason)}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>`;
+  }
+  box.innerHTML = html;
+}
+
+async function requeueProcessing(datasetKey, position, button) {
+  const message = document.getElementById("p-failed-message");
+  const labels = { tail: "加入队尾", top: "置顶" };
+  const label = labels[position] || position;
+  message.textContent = `${label}中…`;
+  if (button) button.disabled = true;
+  try {
+    const response = await fetch("/api/process/requeue", {
+      method: "POST",
+      headers: actionHeaders(),
+      body: JSON.stringify({ dataset_key: datasetKey, position }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      message.textContent = `${label}失败：` + (data.error || response.status);
+      return;
+    }
+    message.textContent = `${label}成功，已加入待处理队列（当前待处理 ${data.pending_total} 条，下次执行处理生效）`;
+    await refresh();
+  } catch (error) {
+    message.textContent = "入队请求失败：" + error;
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+document.getElementById("p-failed-table").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-prequeue]");
+  if (!button || button.disabled) return;
+  requeueProcessing(button.dataset.prequeue, button.dataset.position || "tail", button);
+});
+
+function renderProcessing(processing) {
+  if (!processing) return;
+  const banner = document.getElementById("p-error");
+  if (processing.error) {
+    banner.textContent = processing.error;
+    banner.style.display = "";
+  } else {
+    banner.style.display = "none";
+  }
+  const counts = processing.counts || {};
+  document.getElementById("p-total").textContent = processing.total ?? 0;
+  document.getElementById("p-running").textContent = counts.RUNNING ?? 0;
+  document.getElementById("p-pending").textContent = counts.PENDING ?? 0;
+  document.getElementById("p-ok").textContent = counts.OK ?? 0;
+  document.getElementById("p-failed").textContent = (counts.FAILED ?? 0) + (counts.BLOCKED_NO_SHP ?? 0);
+  renderProcessingRunning(processing.running);
+  renderProcessingQueue(processing);
+  renderProcessingRecent(processing.recent_done);
+  renderProcessingFailed(processing);
+}
+
+const dbUpdateState = { edits: {} };
+
+function dbUpdateStamp() {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+    + `T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+}
+
+function renderDbUpdated(snapshot) {
+  const banner = document.getElementById("d-error");
+  if (snapshot.error) {
+    banner.textContent = snapshot.error;
+    banner.style.display = "";
+  } else {
+    banner.style.display = "none";
+  }
+  const counts = snapshot.counts || {};
+  document.getElementById("d-total").textContent = counts.total ?? 0;
+  document.getElementById("d-updated").textContent = counts.updated ?? 0;
+  document.getElementById("d-pending").textContent = counts.pending ?? 0;
+
+  if (Object.keys(dbUpdateState.edits).length > 0) return;
+  const box = document.getElementById("d-table");
+  const rows = snapshot.rows || [];
+  if (rows.length === 0) {
+    box.innerHTML = '<div class="empty">暂无已完成处理的任务</div>';
+    return;
+  }
+  box.innerHTML = `
+    <table>
+      <thead><tr><th>数据集</th><th>命名前缀</th><th>分片数</th><th>要素数</th><th>处理完成时间</th><th>输出目录</th><th>已更新</th><th>更新时间</th><th>备注</th></tr></thead>
+      <tbody>${rows.map(item => `
+        <tr data-dkey="${esc(item.dataset_key)}">
+          <td class="mono">${esc(item.display_name || item.dataset_key)}</td>
+          <td class="mono">${esc(item.process_name_prefix || "-")}</td>
+          <td>${esc(item.tile_count ?? "-")}</td>
+          <td>${fmtNumber(item.feature_count)}</td>
+          <td>${esc(item.finished_at || "-")}</td>
+          <td class="mono">${esc(item.output_dir || "-")}</td>
+          <td style="text-align:center;"><input type="checkbox" class="cell-check" data-field="updated" ${item.updated ? "checked" : ""}></td>
+          <td><input type="text" class="cell-input" data-field="updated_at" value="${esc(item.updated_at || "")}" placeholder="YYYY-MM-DDTHH:MM:SS"></td>
+          <td><input type="text" class="cell-input" data-field="note" value="${esc(item.note || "")}" placeholder="备注"></td>
+        </tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+function collectDbUpdateRow(rowElement) {
+  return {
+    updated: rowElement.querySelector('input[data-field="updated"]').checked,
+    updated_at: rowElement.querySelector('input[data-field="updated_at"]').value.trim(),
+    note: rowElement.querySelector('input[data-field="note"]').value.trim(),
+  };
+}
+
+function markDbUpdateMessage(text) {
+  document.getElementById("d-message").textContent = text;
+}
+
+document.getElementById("d-table").addEventListener("change", (event) => {
+  const input = event.target.closest('input[data-field="updated"]');
+  if (!input) return;
+  const rowElement = input.closest("tr");
+  const stampInput = rowElement.querySelector('input[data-field="updated_at"]');
+  if (input.checked && !stampInput.value.trim()) {
+    stampInput.value = dbUpdateStamp();
+  }
+  dbUpdateState.edits[rowElement.dataset.dkey] = collectDbUpdateRow(rowElement);
+  markDbUpdateMessage(`有 ${Object.keys(dbUpdateState.edits).length} 条未保存修改`);
+});
+
+document.getElementById("d-table").addEventListener("input", (event) => {
+  const input = event.target.closest('input[data-field="updated_at"], input[data-field="note"]');
+  if (!input) return;
+  const rowElement = input.closest("tr");
+  dbUpdateState.edits[rowElement.dataset.dkey] = collectDbUpdateRow(rowElement);
+  markDbUpdateMessage(`有 ${Object.keys(dbUpdateState.edits).length} 条未保存修改`);
+});
+
+async function saveDbUpdated() {
+  const entries = Object.entries(dbUpdateState.edits);
+  if (entries.length === 0) {
+    markDbUpdateMessage("没有需要保存的修改");
+    return;
+  }
+  markDbUpdateMessage("正在保存…");
+  try {
+    const response = await fetch("/api/db_updated", {
+      method: "POST",
+      headers: actionHeaders(),
+      body: JSON.stringify({
+        rows: entries.map(([datasetKey, value]) => ({ dataset_key: datasetKey, ...value })),
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      markDbUpdateMessage("保存失败：" + (data.error || response.status));
+      return;
+    }
+    dbUpdateState.edits = {};
+    markDbUpdateMessage(`已保存 ${data.saved ?? entries.length} 条`);
+    await refreshDbUpdated();
+  } catch (error) {
+    markDbUpdateMessage("保存请求失败：" + error);
+  }
+}
+
+document.getElementById("d-save").addEventListener("click", saveDbUpdated);
+
+async function refreshDbUpdated() {
+  try {
+    const response = await fetch("/api/db_updated", { cache: "no-store" });
+    const data = await response.json();
+    renderDbUpdated(data);
+  } catch (error) {
+    const banner = document.getElementById("d-error");
+    banner.textContent = "获取数据库更新看板失败：" + error;
+    banner.style.display = "";
+  }
+}
+
+function resetCountdown() {
+  if (countdownTimer) clearInterval(countdownTimer);
+  let remaining = REFRESH_MS;
+  const label = document.getElementById("countdown");
+  label.textContent = Math.round(remaining / 1000) + " 秒";
+  countdownTimer = setInterval(() => {
+    remaining -= 1000;
+    if (remaining <= 0) { clearInterval(countdownTimer); remaining = REFRESH_MS; }
+    label.textContent = Math.round(Math.max(remaining, 0) / 1000) + " 秒";
+  }, 1000);
+}
+
+function actionHeaders() {
+  const headers = { "Content-Type": "application/json" };
+  if (controlState.actionTokenRequired) {
+    let token = localStorage.getItem("gba_action_token") || "";
+    if (!token) {
+      token = window.prompt("请输入操作令牌（--action-token）:") || "";
+      if (token) localStorage.setItem("gba_action_token", token);
+    }
+    headers["X-Action-Token"] = token;
+  }
+  return headers;
+}
+
+async function refreshControl() {
+  try {
+    const response = await fetch("/api/control", { cache: "no-store" });
+    const data = await response.json();
+    controlState.actionTokenRequired = !!data.action_token_required;
+    document.getElementById("ctl-running").textContent = data.running ? "运行中" : "未运行";
+    document.getElementById("ctl-current").textContent = data.tile_workers ?? "-";
+    document.getElementById("ctl-pid").textContent = data.runner_pid ?? "-";
+    const runnerCount = data.runner_count ?? 0;
+    const runnerCountEl = document.getElementById("ctl-runner-count");
+    runnerCountEl.textContent = runnerCount;
+    runnerCountEl.style.color = runnerCount > 1 ? "var(--err)" : "";
+    if (runnerCount > 1) {
+      document.getElementById("ctl-message").textContent =
+        "检测到多个 runner 进程，建议点击「保存并重启批处理」清理";
+    }
+    if (!controlState.inputDirty) {
+      document.getElementById("ctl-workers").value = data.tile_workers || 2;
+    }
+  } catch (error) {
+    document.getElementById("ctl-running").textContent = "查询失败";
+  }
+}
+
+document.getElementById("ctl-workers").addEventListener("input", () => {
+  controlState.inputDirty = true;
+});
+
+document.getElementById("ctl-restart").addEventListener("click", async () => {
+  const message = document.getElementById("ctl-message");
+  const workers = parseInt(document.getElementById("ctl-workers").value, 10);
+  if (!Number.isFinite(workers) || workers < 1 || workers > 6) {
+    message.textContent = "tile-workers 必须是 1~6 的整数";
+    return;
+  }
+  if (!window.confirm(`确认重启批处理并使用 tile-workers=${workers}？\n已完成分块会复用，任务从断点继续。`)) {
+    return;
+  }
+  message.textContent = "正在重启…";
+  try {
+    const response = await fetch("/api/restart", {
+      method: "POST",
+      headers: actionHeaders(),
+      body: JSON.stringify({ tile_workers: workers }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      message.textContent = "重启失败：" + (data.error || response.status);
+      return;
+    }
+    message.textContent = `已重启：runner PID=${data.runner_pid}，tile-workers=${data.tile_workers}`;
+    controlState.inputDirty = false;
+    await refreshControl();
+  } catch (error) {
+    message.textContent = "重启请求失败：" + error;
+  }
+});
+
+document.getElementById("ctl-stop").addEventListener("click", async () => {
+  const message = document.getElementById("ctl-message");
+  if (!window.confirm("确认停止当前下载任务？\n已完成分块会保留，之后可用「保存并重启批处理」恢复续跑。")) {
+    return;
+  }
+  message.textContent = "正在停止…";
+  try {
+    const response = await fetch("/api/stop", {
+      method: "POST",
+      headers: actionHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      message.textContent = "停止失败：" + (data.error || response.status);
+      return;
+    }
+    const pids = (data.stopped_pids || []).join(", ");
+    message.textContent = pids ? `已停止下载任务（PID: ${pids}）` : "当前没有正在运行的任务";
+    await refreshControl();
+  } catch (error) {
+    message.textContent = "停止请求失败：" + error;
+  }
+});
+
+async function refreshProcessControl() {
+  try {
+    const response = await fetch("/api/process/control", { cache: "no-store" });
+    const data = await response.json();
+    document.getElementById("pctl-running").textContent = data.running ? "运行中" : "未运行";
+    document.getElementById("pctl-pid").textContent = data.runner_pid ?? "-";
+    const task = data.current_task;
+    document.getElementById("pctl-task").textContent = task
+      ? `${task.dataset_key}（${task.stage_label || "-"} ${task.tiles_done ?? 0}/${task.tiles_total ?? "?"}）`
+      : (data.running ? "等待资源/准备中…" : "-");
+    document.getElementById("pctl-start").disabled = !!data.running;
+    document.getElementById("pctl-stop").disabled = !data.running;
+  } catch (error) {
+    document.getElementById("pctl-running").textContent = "查询失败";
+  }
+}
+
+document.getElementById("pctl-start").addEventListener("click", async () => {
+  const message = document.getElementById("pctl-message");
+  const rawLimit = parseInt(document.getElementById("pctl-limit").value, 10);
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 0;
+  const waitResources = document.getElementById("pctl-wait").checked;
+  const scope = limit === 0 ? "全部待处理任务" : `前 ${limit} 个待处理任务`;
+  if (!window.confirm(`确认开始执行处理队列？\n范围：${scope}${waitResources ? "（资源不足时自动等待）" : ""}`)) {
+    return;
+  }
+  message.textContent = "正在启动…";
+  try {
+    const response = await fetch("/api/process/start", {
+      method: "POST",
+      headers: actionHeaders(),
+      body: JSON.stringify({ limit, wait_resources: waitResources }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      message.textContent = "启动失败：" + (data.error || response.status);
+      return;
+    }
+    message.textContent = `已启动处理队列（执行器 PID=${data.runner_pid}）`;
+    await refreshProcessControl();
+  } catch (error) {
+    message.textContent = "启动请求失败：" + error;
+  }
+});
+
+document.getElementById("pctl-stop").addEventListener("click", async () => {
+  const message = document.getElementById("pctl-message");
+  if (!window.confirm("确认停止处理队列？\n正在执行的任务会被中断并重置为「待处理」，之后可重新开始续跑。")) {
+    return;
+  }
+  message.textContent = "正在停止…";
+  try {
+    const response = await fetch("/api/process/stop", {
+      method: "POST",
+      headers: actionHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      message.textContent = "停止失败：" + (data.error || response.status);
+      return;
+    }
+    const pids = (data.stopped_pids || []).join(", ");
+    message.textContent = pids
+      ? `已停止（PID: ${pids}），重置 ${data.reset_tasks ?? 0} 个任务`
+      : "当前没有正在运行的处理任务";
+    await refreshProcessControl();
+  } catch (error) {
+    message.textContent = "停止请求失败：" + error;
+  }
+});
+
+document.getElementById("pctl-sync").addEventListener("click", async () => {
+  const message = document.getElementById("pctl-message");
+  message.textContent = "正在扫描下载完成的数据…";
+  try {
+    const response = await fetch("/api/process/sync", {
+      method: "POST",
+      headers: actionHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      message.textContent = "同步失败：" + (data.error || response.status);
+      return;
+    }
+    message.textContent = `同步完成：新增 ${data.added}，更新 ${data.updated}`;
+    await refresh();
+  } catch (error) {
+    message.textContent = "同步请求失败：" + error;
+  }
+});
+
+async function refresh() {
+  try {
+    const offset = (queueState.page - 1) * queueState.pageSize;
+    const response = await fetch(
+      `/api/status?queue_offset=${offset}&queue_limit=${queueState.pageSize}&queue_search=${encodeURIComponent(queueState.search)}`,
+      { cache: "no-store" },
+    );
+    const data = await response.json();
+    const [label, cls] = batchLabel(data.batch_state);
+    const badge = document.getElementById("batch-badge");
+    badge.textContent = label;
+    badge.className = `badge ${cls}`;
+    document.getElementById("generated-at").textContent = data.generated_at || "-";
+    document.getElementById("disk-free").textContent = fmtBytes(data.disk_free_bytes);
+
+    const counts = data.counts || {};
+    document.getElementById("c-total").textContent = data.total ?? "-";
+    document.getElementById("c-running").textContent = counts.RUNNING ?? 0;
+    document.getElementById("c-pending").textContent = counts.PENDING ?? 0;
+    document.getElementById("c-ok").textContent = (counts.OK ?? 0) + (counts.OK_EMPTY ?? 0);
+    document.getElementById("c-failed").textContent = (counts.FAILED ?? 0) + (counts.SKIPPED ?? 0);
+
+    const banner = document.getElementById("error-banner");
+    if (data.error) {
+      banner.textContent = data.error;
+      banner.style.display = "";
+    } else {
+      banner.style.display = "none";
+    }
+
+    const queueTotal = data.queue_total ?? 0;
+    queueState.total = queueTotal;
+    const queueTotalPages = Math.max(1, Math.ceil(queueTotal / queueState.pageSize));
+    if (queueState.page > queueTotalPages) {
+      queueState.page = queueTotalPages;
+      refresh();
+      return;
+    }
+
+    renderRunning(data.running);
+    renderQueue(data.queue, queueTotal, queueState.page, queueState.pageSize, data.queue_total_all ?? queueTotal);
+    renderRecent(data.recent_done);
+    renderFailed(data.failed);
+    renderProcessing(data.processing);
+    await refreshDbUpdated();
+    refreshControl();
+    refreshProcessControl();
+  } catch (error) {
+    const banner = document.getElementById("error-banner");
+    banner.textContent = "获取状态失败：" + error;
+    banner.style.display = "";
+  } finally {
+    resetCountdown();
+  }
+}
+
+refresh();
+setInterval(refresh, REFRESH_MS);
+</script>
+</body>
+</html>

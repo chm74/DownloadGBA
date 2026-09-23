@@ -1,0 +1,18 @@
+[project]
+name = "pyshp2pgsql"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "psycopg2-binary>=2.9.0",
+    " Fiona>=1.9.0",
+    "Shapely>=2.0.0",
+    "pandas>=2.0.0",
+    "geopandas>=0.13.0",
+    "sqlalchemy>=2.0.0",
+    "tqdm>=4.65.0",
+    "pyproj>=3.5.0",
+    "python-dotenv>=1.0.0",
+    "rarfile>=4.2",
+]

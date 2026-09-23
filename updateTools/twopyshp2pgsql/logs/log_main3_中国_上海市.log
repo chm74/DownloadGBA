@@ -1,0 +1,42 @@
+2026-09-17 15:30:37,355 - INFO - 目标目录: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市
+2026-09-17 15:30:37,356 - INFO - 识别区域: 亚洲 / 中国 / 上海市
+2026-09-17 15:30:37,356 - INFO - 共发现 37 个 shp 文件
+2026-09-17 15:30:37,404 - INFO - 已删除旧数据 35 条
+2026-09-17 15:30:37,404 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_001_3857.shp
+2026-09-17 15:30:38,481 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_002_3857.shp
+2026-09-17 15:30:40,104 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_003_3857.shp
+2026-09-17 15:30:41,451 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_004_3857.shp
+2026-09-17 15:30:41,910 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_005_3857.shp
+2026-09-17 15:30:42,992 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_006_3857.shp
+2026-09-17 15:30:43,404 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_007_3857.shp
+2026-09-17 15:30:44,167 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_008_3857.shp
+2026-09-17 15:30:44,226 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_009_3857.shp
+2026-09-17 15:30:44,734 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_010_3857.shp
+2026-09-17 15:30:45,261 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_011_3857.shp
+2026-09-17 15:30:46,643 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_012_3857.shp
+2026-09-17 15:30:47,119 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_013_3857.shp
+2026-09-17 15:30:47,551 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_014_3857.shp
+2026-09-17 15:30:48,681 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_015_3857.shp
+2026-09-17 15:30:49,252 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_016_3857.shp
+2026-09-17 15:30:49,695 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_017_3857.shp
+2026-09-17 15:30:50,121 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_018_3857.shp
+2026-09-17 15:30:51,038 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_019_3857.shp
+2026-09-17 15:30:51,495 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_020_3857.shp
+2026-09-17 15:30:52,076 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_021_3857.shp
+2026-09-17 15:30:52,701 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_022_3857.shp
+2026-09-17 15:30:53,424 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_023_3857.shp
+2026-09-17 15:30:55,142 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_024_3857.shp
+2026-09-17 15:30:56,098 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_025_3857.shp
+2026-09-17 15:30:57,141 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_026_3857.shp
+2026-09-17 15:30:57,994 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_027_3857.shp
+2026-09-17 15:30:58,838 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_028_3857.shp
+2026-09-17 15:30:59,428 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_029_3857.shp
+2026-09-17 15:31:00,805 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_030_3857.shp
+2026-09-17 15:31:01,602 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_031_3857.shp
+2026-09-17 15:31:02,844 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_032_3857.shp
+2026-09-17 15:31:03,653 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_033_3857.shp
+2026-09-17 15:31:04,139 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_034_3857.shp
+2026-09-17 15:31:04,611 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_035_3857.shp
+2026-09-17 15:31:05,599 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_036_3857.shp
+2026-09-17 15:31:06,755 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\上海市\shanghai_001_037_3857.shp
+2026-09-17 15:31:06,995 - INFO - 更新完成: region=上海市, 删除=35, 新增=37, 跳过=0
