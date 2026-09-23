@@ -1,0 +1,27 @@
+2026-09-23 17:50:55,905 - ERROR - 执行失败: continent=Europe, country=United_Kingdom, region=London
+Traceback (most recent call last):
+  File "F:\DownloadGBA\updateTools\twopyshp2pgsql\main3_region.py", line 264, in refresh_targets
+    refresh_region_data(root=root, target=target, logger=logger)
+  File "F:\DownloadGBA\updateTools\twopyshp2pgsql\main3_region.py", line 215, in refresh_region_data
+    continent, country, region, region_dir = resolve_target_region_dir(root, target)
+                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\DownloadGBA\updateTools\twopyshp2pgsql\main3_region.py", line 151, in resolve_target_region_dir
+    raise FileNotFoundError(
+FileNotFoundError: 未找到目标区域目录: continent=Europe, country=United_Kingdom, region=London
+2026-09-23 17:52:35,792 - INFO - 目标目录: \\172.16.0.116\BuildingData\AutoGenerte\Europe\United_Kingdom\London
+2026-09-23 17:52:35,792 - INFO - 识别区域: Europe / United_Kingdom / London
+2026-09-23 17:52:35,792 - INFO - 共发现 12 个 shp 文件
+2026-09-23 17:52:35,827 - INFO - 已删除旧数据 0 条
+2026-09-23 17:52:35,827 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\Europe\United_Kingdom\London\London_001_001_3857.shp
+2026-09-23 17:52:36,947 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\Europe\United_Kingdom\London\London_001_002_3857.shp
+2026-09-23 17:52:38,013 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\Europe\United_Kingdom\London\London_001_003_3857.shp
+2026-09-23 17:52:39,660 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\Europe\United_Kingdom\London\London_001_004_3857.shp
+2026-09-23 17:52:40,675 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\Europe\United_Kingdom\London\London_001_005_3857.shp
+2026-09-23 17:52:42,808 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\Europe\United_Kingdom\London\London_001_006_3857.shp
+2026-09-23 17:52:43,686 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\Europe\United_Kingdom\London\London_001_007_3857.shp
+2026-09-23 17:52:45,896 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\Europe\United_Kingdom\London\London_001_008_3857.shp
+2026-09-23 17:52:48,483 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\Europe\United_Kingdom\London\London_001_009_3857.shp
+2026-09-23 17:52:49,709 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\Europe\United_Kingdom\London\London_001_010_3857.shp
+2026-09-23 17:52:51,582 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\Europe\United_Kingdom\London\London_001_011_3857.shp
+2026-09-23 17:52:52,513 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\Europe\United_Kingdom\London\London_001_012_3857.shp
+2026-09-23 17:52:53,571 - INFO - 更新完成: region=London, 删除=0, 新增=12, 跳过=0

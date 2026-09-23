@@ -1,7 +1,7 @@
 & "F:\DownloadGBA\updateTools\twopyshp2pgsql\.venv\Scripts\python.exe" `
   "F:\DownloadGBA\updateTools\twopyshp2pgsql\main3_region.py" `
-  --continent "亚洲" `
-  --country "中国" `
-  --region "台湾" `
+  --continent "Europe" `
+  --country "United_Kingdom" `
+  --region "London" `
   --root "\\172.16.0.116\BuildingData\AutoGenerte" `
   --log-dir "F:\DownloadGBA\updateTools\twopyshp2pgsql\logs"

@@ -1,0 +1,4 @@
+[SYNC] manifest=F:\DownloadGBA\data\world_building_download_tasks.csv tasks=259 added=0 updated=0 reset=0
+[SELECT] 251 个任务待执行（状态过滤=['PENDING', 'RUNNING']）
+--- [1/251] 亚洲|中国|云南省 ---
+[RUN] 亚洲|中国|云南省 -> F:\DownloadGBA\data\亚洲\中国\云南省

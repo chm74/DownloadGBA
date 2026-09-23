@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-09-22T16:31:02",
+  "updated_at": "2026-09-23T17:56:18",
   "rows": {
     "亚洲|中国|广西壮族自治区": {
       "updated": true,
@@ -75,6 +75,11 @@
     "亚洲|中国|福建省": {
       "updated": true,
       "updated_at": "2026-09-22T16:31:01",
+      "note": ""
+    },
+    "Europe|United_Kingdom|London": {
+      "updated": true,
+      "updated_at": "2026-09-23T17:56:16",
       "note": ""
     }
   }
