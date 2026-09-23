@@ -1,0 +1,19 @@
+
+===== pilot start 2026-09-16T19:55:28 =====
+[SYNC] process_db=E:\LoD1\data\shp_process_state.db 发现=1 新增=0 更新=1
+[PLAN 1/1] 亚洲|中国|广西壮族自治区  features=5129083  shp=1  source=data/亚洲/中国/广西壮族自治区
+[DONE] 亚洲|中国|广西壮族自治区 status=OK tiles=123 features=5128734
+[PROCESS] total=14 ok=1 pending=13 running=0 failed=0 blocked=0
+[PENDING] EXT|data/Europe/San_Marino/San_Marino  features=7347  source=data/Europe/San_Marino/San_Marino
+[PENDING] EXT|data/mongolia_gba_wfs  features=698709  source=data/mongolia_gba_wfs
+[PENDING] EXT|data/shenzhen_gba_wfs  features=221621  source=data/shenzhen_gba_wfs
+[PENDING] 亚洲|中国|上海市  features=1567600  source=data/亚洲/中国/上海市
+[PENDING] 亚洲|中国|云南省  features=8712955  source=data/亚洲/中国/云南省
+[PENDING] 亚洲|中国|宁夏回族自治区  features=2065106  source=data/亚洲/中国/宁夏回族自治区
+[PENDING] 亚洲|中国|新疆维吾尔自治区  features=2888518  source=data/亚洲/中国/新疆维吾尔自治区
+[PENDING] 亚洲|中国|江苏省  features=10308392  source=data/亚洲/中国/江苏省
+[PENDING] 亚洲|中国|江西省  features=4640173  source=data/亚洲/中国/江西省
+[PENDING] 亚洲|中国|海南省  features=888688  source=data/亚洲/中国/海南省
+[PENDING] 亚洲|中国|重庆市  features=4543091  source=data/亚洲/中国/重庆市
+[PENDING] 亚洲|中国|陕西省  features=4326792  source=data/亚洲/中国/陕西省
+[PENDING] 亚洲|中国|黑龙江省  features=5337577  source=data/亚洲/中国/黑龙江省

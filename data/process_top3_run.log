@@ -1,0 +1,24 @@
+
+===== process top3 start 2026-09-17T15:09:35 =====
+[SYNC] process_db=E:\LoD1\data\shp_process_state.db 发现=18 新增=0 更新=18
+[PLAN 1/3] 亚洲|中国|上海市  prefix=shanghai  features=1567600  shp=1  source=data/亚洲/中国/上海市
+[DONE] 亚洲|中国|上海市 status=OK tiles=37 features=1567574
+[PLAN 2/3] 亚洲|中国|云南省  prefix=yunnan  features=8712955  shp=1  source=data/亚洲/中国/云南省
+[DONE] 亚洲|中国|云南省 status=OK tiles=197 features=8683861
+[PLAN 3/3] 亚洲|中国|宁夏回族自治区  prefix=ningxia  features=2065106  shp=1  source=data/亚洲/中国/宁夏回族自治区
+[DONE] 亚洲|中国|宁夏回族自治区 status=OK tiles=45 features=2065106
+[PROCESS] total=18 ok=4 pending=14 running=0 failed=0 blocked=0
+[PENDING] 亚洲|中国|新疆维吾尔自治区  prefix=xinjiang  features=2888518  source=data/亚洲/中国/新疆维吾尔自治区
+[PENDING] 亚洲|中国|江苏省  prefix=jiangsu  features=10308392  source=data/亚洲/中国/江苏省
+[PENDING] 亚洲|中国|江西省  prefix=jiangxi  features=4640173  source=data/亚洲/中国/江西省
+[PENDING] 亚洲|中国|海南省  prefix=hainan  features=888688  source=data/亚洲/中国/海南省
+[PENDING] Africa|Angola|Angola  prefix=Angola  features=12665670  source=data/Africa/Angola/Angola
+[PENDING] Africa|Algeria|Algeria  prefix=Algeria  features=16393569  source=data/Africa/Algeria/Algeria
+[PENDING] Africa|Benin|Benin  prefix=Benin  features=5963291  source=data/Africa/Benin/Benin
+[PENDING] Africa|Botswana|Botswana  prefix=Botswana  features=2606146  source=data/Africa/Botswana/Botswana
+[PENDING] EXT|data/Europe/San_Marino/San_Marino  prefix=San_Marino  features=7347  source=data/Europe/San_Marino/San_Marino
+[PENDING] EXT|data/mongolia_gba_wfs  prefix=mongolia  features=698709  source=data/mongolia_gba_wfs
+[PENDING] EXT|data/shenzhen_gba_wfs  prefix=shenzhen  features=221621  source=data/shenzhen_gba_wfs
+[PENDING] 亚洲|中国|重庆市  prefix=chongqing  features=4543091  source=data/亚洲/中国/重庆市
+[PENDING] 亚洲|中国|陕西省  prefix=shaanxi  features=4326792  source=data/亚洲/中国/陕西省
+[PENDING] 亚洲|中国|黑龙江省  prefix=heilongjiang  features=5337577  source=data/亚洲/中国/黑龙江省

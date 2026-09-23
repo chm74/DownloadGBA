@@ -1,0 +1,7 @@
+continent,country,city,kind,value,note
+亚洲,中国,香港澳门,bbox,"113.52,22.10,114.44,22.57",香港+澳门合并范围（近似，可改为 boundary 指向本地边界文件）
+亚洲,中国,台湾,bbox,"119.30,21.80,122.10,25.40",台湾及澎湖范围（近似，可改为 boundary 指向本地边界文件）
+Asia,Indonesia,Indonesia_west,bbox,"95.00,-11.10,115.00,6.20",印尼西段近似范围（需人工确认，可改为 boundary 或在 value 填 query 的 JSON）
+Asia,Indonesia,Indonesia_mid,bbox,"115.00,-11.10,127.00,2.00",印尼中段近似范围（需人工确认，可改为 boundary 或在 value 填 query 的 JSON）
+Asia,Indonesia,Indonesia_east,bbox,"127.00,-11.10,141.20,2.00",印尼东段近似范围（需人工确认，可改为 boundary 或在 value 填 query 的 JSON）
+Europe,United_Kingdom,London,query,"{""city"": ""London"", ""country"": ""United Kingdom""}",Nominatim 大伦敦范围

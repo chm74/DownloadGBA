@@ -1,0 +1,4 @@
+状态看板已启动: http://127.0.0.1:8765/  (监听 0.0.0.0:8765)
+状态库: F:\DownloadGBA\data\world_building_download_tasks_state.db
+处理队列库: F:\DownloadGBA\data\shp_process_state.db
+数据库已更新看板数据: F:\DownloadGBA\data\db_update_status.json

@@ -1,0 +1,47 @@
+2026-09-16T19:36:05 chain watcher started; pilot_key=亚洲|中国|广西壮族自治区
+2026-09-16T19:36:05 poll status=('RUNNING', 13) algeria_workers=['4572'] terminal=False
+2026-09-16T19:36:36 poll status=('RUNNING', 13) algeria_workers=['4572'] terminal=False
+2026-09-16T19:37:06 poll status=('RUNNING', 13) algeria_workers=['4572'] terminal=False
+2026-09-16T19:37:37 poll status=('RUNNING', 13) algeria_workers=['4572'] terminal=False
+2026-09-16T19:38:07 poll status=('RUNNING', 13) algeria_workers=['4572'] terminal=False
+2026-09-16T19:38:38 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:39:08 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:39:38 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:40:09 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:40:39 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:41:10 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:41:40 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:42:10 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:42:41 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:43:11 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:43:42 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:44:12 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:44:43 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:45:13 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:45:43 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:46:14 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:46:44 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:47:15 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:47:45 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:48:15 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:48:46 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:49:16 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:49:47 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:50:17 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:50:48 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:51:18 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:51:48 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:52:19 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:52:49 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:53:20 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:53:50 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:54:20 poll status=('RUNNING', 13) algeria_workers=[] terminal=False
+2026-09-16T19:54:51 poll status=('OK', 13) algeria_workers=[] terminal=True
+2026-09-16T19:55:21 poll status=('OK', 13) algeria_workers=[] terminal=True
+2026-09-16T19:55:21 algeria finished status=OK; stopping download batch
+2026-09-16T19:55:23 stopped pids=['18360', '13076']
+2026-09-16T19:55:28 starting guangxi pilot
+2026-09-16T20:19:30 pilot finished exit_code=0 status=('OK', 123, 5128734)
+2026-09-16T20:19:30 restarting download batch
+2026-09-16T20:19:30 downloads restarted pid=17396
+2026-09-16T20:19:30 chain watcher done

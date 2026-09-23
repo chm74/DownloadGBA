@@ -1,0 +1,18 @@
+[SYNC] process_db=F:\DownloadGBA\data\shp_process_state.db 发现=18 新增=0 更新=18
+[PLAN 1/1] 亚洲|中国|台湾  prefix=taiwan  features=1687082  shp=1  source=data/亚洲/中国/台湾
+[DONE] 亚洲|中国|台湾 status=OK tiles=14 features=1687018
+[PROCESS] total=36 ok=22 pending=14 running=0 failed=0 blocked=0
+[PENDING] Africa|Benin|Benin  prefix=Benin  features=5963291  source=data/Africa/Benin/Benin
+[PENDING] EXT|data/Africa/Angola/Angola  prefix=Angola  features=12665670  source=data/Africa/Angola/Angola
+[PENDING] Africa|Botswana|Botswana  prefix=Botswana  features=2606146  source=data/Africa/Botswana/Botswana
+[PENDING] Africa|Algeria|Algeria  prefix=Algeria  features=16393569  source=data/Africa/Algeria/Algeria
+[PENDING] 亚洲|中国|安徽省  prefix=anhui  features=7583811  source=data/亚洲/中国/安徽省
+[PENDING] 亚洲|中国|广东省  prefix=guangdong  features=7393387  source=data/亚洲/中国/广东省
+[PENDING] 亚洲|中国|香港澳门  prefix=HK  features=264039  source=data/亚洲/中国/香港澳门
+[PENDING] 亚洲|中国|山东省  prefix=shandong  features=14417894  source=data/亚洲/中国/山东省
+[PENDING] 亚洲|中国|吉林省  prefix=jilin  features=4006200  source=data/亚洲/中国/吉林省
+[PENDING] Africa|Gabon|Gabon  prefix=Gabon  features=820790  source=data/Africa/Gabon/Gabon
+[PENDING] Africa|Ghana|Ghana  prefix=Ghana  features=13090614  source=data/Africa/Ghana/Ghana
+[PENDING] Africa|Guinea|Guinea  prefix=Guinea  features=5700251  source=data/Africa/Guinea/Guinea
+[PENDING] Africa|GuineaBissau|GuineaBissau  prefix=GuineaBissau  features=455383  source=data/Africa/GuineaBissau/GuineaBissau
+[PENDING] Africa|Israel|Israel  prefix=Israel  features=1434914  source=data/Africa/Israel/Israel

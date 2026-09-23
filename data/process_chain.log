@@ -1,0 +1,7 @@
+2026-09-17T15:09:29 chain start: pause downloads, then process top 3 pending
+2026-09-17T15:09:30 stopped download pids=[]
+2026-09-17T16:09:49 processing finished exit_code=0
+2026-09-17T16:09:49 queue after processing: \u4e9a\u6d32|\u4e2d\u56fd|\u4e0a\u6d77\u5e02=OK tiles=37 features=1567574 | \u4e9a\u6d32|\u4e2d\u56fd|\u4e91\u5357\u7701=OK tiles=197 features=8683861 | \u4e9a\u6d32|\u4e2d\u56fd|\u5b81\u590f\u56de\u65cf\u81ea\u6cbb\u533a=OK tiles=45 features=2065106 | \u4e9a\u6d32|\u4e2d\u56fd|\u65b0\u7586\u7ef4\u543e\u5c14\u81ea\u6cbb\u533a=PENDING tiles=None features=2888518
+2026-09-17T16:09:49 restarting download batch
+2026-09-17T16:09:49 downloads restarted pid=8080
+2026-09-17T16:09:49 chain done

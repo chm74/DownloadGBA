@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "updated_at": "2026-09-22T16:31:02",
+  "rows": {
+    "亚洲|中国|广西壮族自治区": {
+      "updated": true,
+      "updated_at": "2026-09-17T15:22:05",
+      "note": ""
+    },
+    "亚洲|中国|上海市": {
+      "updated": true,
+      "updated_at": "2026-09-17T15:24:59",
+      "note": ""
+    },
+    "亚洲|中国|宁夏回族自治区": {
+      "updated": true,
+      "updated_at": "2026-09-17T18:11:54",
+      "note": ""
+    },
+    "亚洲|中国|云南省": {
+      "updated": true,
+      "updated_at": "2026-09-17T18:55:09",
+      "note": ""
+    },
+    "亚洲|中国|新疆维吾尔自治区": {
+      "updated": true,
+      "updated_at": "2026-09-18T14:00:43",
+      "note": ""
+    },
+    "亚洲|中国|江苏省": {
+      "updated": true,
+      "updated_at": "2026-09-18T14:00:44",
+      "note": ""
+    },
+    "Asia|United_Arab_Emirates|United_Arab_Emirates": {
+      "updated": true,
+      "updated_at": "2026-09-18T18:40:37",
+      "note": "迪拜-阿联酋   哈利法塔"
+    },
+    "EXT|data/mongolia_gba_wfs": {
+      "updated": false,
+      "updated_at": "2026-09-21T12:00:00",
+      "note": "手动从处理队列移出，看实际情况进行更新"
+    },
+    "Asia|Malaysia|Malaysia": {
+      "updated": true,
+      "updated_at": "2026-09-21T16:11:11",
+      "note": "吉隆坡-马来西亚  双子塔或独立广场"
+    },
+    "America|United_States_of_America|New_York": {
+      "updated": true,
+      "updated_at": "2026-09-22T09:41:35",
+      "note": "纽约  曼哈顿下城金融区"
+    },
+    "Asia|Bahrain|Bahrain": {
+      "updated": true,
+      "updated_at": "2026-09-22T10:02:29",
+      "note": "巴林  林世界贸易中心(BWTC)"
+    },
+    "亚洲|中国|重庆市": {
+      "updated": false,
+      "updated_at": "",
+      "note": "手动移入；原处理进程已中断，产物未核验"
+    },
+    "亚洲|中国|陕西省": {
+      "updated": true,
+      "updated_at": "2026-09-22T15:34:13",
+      "note": "手动移入；产物未核验"
+    },
+    "亚洲|中国|黑龙江省": {
+      "updated": true,
+      "updated_at": "2026-09-22T15:27:16",
+      "note": "已更新 手动移入；产物未核验"
+    },
+    "亚洲|中国|福建省": {
+      "updated": true,
+      "updated_at": "2026-09-22T16:31:01",
+      "note": ""
+    }
+  }
+}

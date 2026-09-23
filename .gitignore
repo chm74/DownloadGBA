@@ -1,4 +1,8 @@
 /exports/
-/data/
+
+/data/*/
+!/data/boundaries/
+!/data/boundaries/**
+
 /Tools/Oneshp_pipline_qgis/out_data/
 /repair_staging/
