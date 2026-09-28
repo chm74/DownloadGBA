@@ -1347,6 +1347,35 @@ def stop_batch_action(config: dict) -> dict:
         }
 
 
+def stop_current_task_action(config: dict, task_id: str) -> dict:
+    with CONTROL_LOCK:
+        store = lib.StateStore(Path(config["state_db"]))
+        try:
+            row = store.get(task_id)
+        finally:
+            store.close()
+        if row is None:
+            raise KeyError(f"任务不存在: {task_id}")
+        if row["status"] != lib.STATUS_RUNNING:
+            raise ValueError(f"只有运行中的任务可以停止并重新入队，当前状态: {row['status']}")
+
+        detected, stopped = _stop_all_batch_processes()
+        remaining = detect_batch()
+        if remaining.get("runner") or remaining.get("workers"):
+            raise RuntimeError("下载进程未完全停止，任务状态保持 RUNNING")
+
+        queue = lib.stop_running_task_to_tail(Path(config["state_db"]), task_id)
+        return {
+            "ok": True,
+            "task_id": task_id,
+            "position": "tail",
+            "stopped_pids": stopped,
+            "runner_pid": detected["runner"]["pid"] if detected.get("runner") else None,
+            "queue": queue,
+            "pending_total": len(queue),
+        }
+
+
 def restart_batch(config: dict, tile_workers: int) -> dict:
     with CONTROL_LOCK:
         detected, stopped = _stop_all_batch_processes()
@@ -1460,6 +1489,7 @@ class StatusHandler(BaseHTTPRequestHandler):
             "/api/stop",
             "/api/queue/reorder",
             "/api/queue/requeue",
+            "/api/queue/stop-current",
             "/api/process/reorder",
             "/api/process/requeue",
             "/api/process/note",
@@ -1516,6 +1546,48 @@ class StatusHandler(BaseHTTPRequestHandler):
         if path == "/api/stop":
             try:
                 result = stop_batch_action(config)
+            except Exception as exc:  # noqa: BLE001
+                self._send(
+                    500,
+                    json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+                return
+            self._send(200, json.dumps(result, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+            return
+
+        if path == "/api/queue/stop-current":
+            task_id = str(payload.get("task_id") or "").strip()
+            if not task_id:
+                self._send(
+                    400,
+                    json.dumps({"ok": False, "error": "task_id 不能为空"}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+                return
+            try:
+                result = stop_current_task_action(config, task_id)
+            except KeyError as exc:
+                self._send(
+                    404,
+                    json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+                return
+            except ValueError as exc:
+                self._send(
+                    400,
+                    json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+                return
+            except RuntimeError as exc:
+                self._send(
+                    409,
+                    json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+                return
             except Exception as exc:  # noqa: BLE001
                 self._send(
                     500,

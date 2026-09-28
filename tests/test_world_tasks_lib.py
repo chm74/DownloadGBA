@@ -155,6 +155,9 @@ class PathAndCommandTests(unittest.TestCase):
         self.assertIn("--boundary", command)
         self.assertIn("--split-threshold", command)
         self.assertIn("--min-grid-size", command)
+        self.assertIn("--boundary-filter", command)
+        self.assertIn("representative-point", command)
+        self.assertIn("--boundary-buffer-meters", command)
         self.assertIn("20000", joined)
 
     def test_build_worker_command_standard_has_no_adaptive_flags(self):
@@ -331,6 +334,48 @@ class MarkerTests(unittest.TestCase):
             merge_output = task_dir / "merge.gpkg"
             merge_output.write_bytes(b"x")
             self.assertFalse(lib.marker_is_valid(None, repo_root, task_dir, merge_output))
+
+    def test_marker_delivery_filter_must_match_current_options(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            task_dir = repo_root / "task"
+            task_dir.mkdir()
+            merge_output = task_dir / "merge.gpkg"
+            merge_output.write_bytes(b"x")
+            marker = {
+                "status": lib.STATUS_OK,
+                "download_dir": "task",
+                "merge_output": "task/merge.gpkg",
+                "merge_size_bytes": 1,
+                "params": {
+                    "boundary_filter": "representative-point",
+                    "boundary_buffer_meters": 0.0,
+                },
+            }
+
+            expected = {
+                "boundary_filter": "representative-point",
+                "boundary_buffer_meters": 0.0,
+            }
+            self.assertTrue(
+                lib.marker_is_valid(
+                    marker,
+                    repo_root,
+                    task_dir,
+                    merge_output,
+                    expected_delivery_params=expected,
+                )
+            )
+            marker["params"]["boundary_filter"] = "none"
+            self.assertFalse(
+                lib.marker_is_valid(
+                    marker,
+                    repo_root,
+                    task_dir,
+                    merge_output,
+                    expected_delivery_params=expected,
+                )
+            )
 
 
 class NationalGridProgressTests(unittest.TestCase):
@@ -647,6 +692,52 @@ class LocalBoundaryTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     store.requeue_task(task.task_id, "sideways")
                 self.assertEqual(store.get(task.task_id)["status"], lib.STATUS_FAILED)
+            finally:
+                store.close()
+
+    def test_stop_running_task_requeues_to_tail_and_clears_runtime_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = lib.StateStore(Path(tmp) / "state.db")
+            try:
+                tasks = [
+                    make_task(country="Algeria", city="Algeria"),
+                    make_task(country="Angola", city="Angola", download_dir="data/Africa/Angola/Angola"),
+                    make_task(country="Benin", city="Benin", download_dir="data/Africa/Benin/Benin"),
+                ]
+                store.sync_manifest(tasks)
+                store.set_status(
+                    tasks[0].task_id,
+                    lib.STATUS_RUNNING,
+                    attempts=2,
+                    feature_count=123,
+                    started_at="2026-01-01T00:00:00",
+                    last_error="interrupted",
+                )
+
+                queue = store.stop_running_task_to_tail(tasks[0].task_id)
+
+                self.assertEqual(queue, [tasks[1].task_id, tasks[2].task_id, tasks[0].task_id])
+                row = store.get(tasks[0].task_id)
+                self.assertEqual(row["status"], lib.STATUS_PENDING)
+                self.assertEqual(row["attempts"], 0)
+                self.assertIsNone(row["feature_count"])
+                self.assertIsNone(row["started_at"])
+                self.assertIsNone(row["last_error"])
+                self.assertEqual(store.pending_tasks()[-1]["task_id"], tasks[0].task_id)
+                self.assertEqual(store.recent_events(tasks[0].task_id)[0]["event"], "STOP_REQUEUE")
+            finally:
+                store.close()
+
+    def test_stop_running_task_rejects_non_running_and_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = lib.StateStore(Path(tmp) / "state.db")
+            try:
+                task = make_task()
+                store.sync_manifest([task])
+                with self.assertRaises(ValueError):
+                    store.stop_running_task_to_tail(task.task_id)
+                with self.assertRaises(KeyError):
+                    store.stop_running_task_to_tail("Africa|Nowhere|Nowhere")
             finally:
                 store.close()
 

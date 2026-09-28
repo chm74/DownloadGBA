@@ -154,6 +154,18 @@ def parse_args() -> argparse.Namespace:
         help="Final merged output format. shp is convenient but may hit DBF size limits on large provinces.",
     )
     parser.add_argument(
+        "--boundary-filter",
+        choices=["none", "representative-point"],
+        default="representative-point",
+        help="Filter final provincial output by building representative point (default) or retain full-grid coverage.",
+    )
+    parser.add_argument(
+        "--boundary-buffer-meters",
+        type=float,
+        default=0.0,
+        help="Optional outward boundary buffer in meters before filtering (default 0).",
+    )
+    parser.add_argument(
         "--skip-existing-merge",
         action="store_true",
         help="Skip a province when the final merged output file already exists.",
@@ -273,6 +285,10 @@ def build_command(
         args.tile_format,
         "--merge-output",
         str(merge_output),
+        "--boundary-filter",
+        args.boundary_filter,
+        "--boundary-buffer-meters",
+        str(max(float(args.boundary_buffer_meters), 0.0)),
     ]
     if args.max_pages > 0:
         command.extend(["--max-pages", str(args.max_pages)])

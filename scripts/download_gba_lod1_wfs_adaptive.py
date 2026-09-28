@@ -34,6 +34,8 @@ def run_boundary_mode_adaptive(
     boundary_source: str | None = None,
     source_mode: str = "boundary",
     tile_workers: int = 1,
+    boundary_filter: str = "representative-point",
+    boundary_buffer_meters: float = 0.0,
 ) -> None:
     print(
         "Adaptive fetch: 切分逻辑已内置于 WFS 客户端（单请求跨度上限 0.09°，"
@@ -50,6 +52,8 @@ def run_boundary_mode_adaptive(
         boundary_source=boundary_source,
         source_mode=source_mode,
         tile_workers=tile_workers,
+        boundary_filter=boundary_filter,
+        boundary_buffer_meters=boundary_buffer_meters,
     )
 
 
@@ -66,6 +70,8 @@ def run_place_mode(
     min_grid_size: float,
     probe_page_size: int,
     tile_workers: int = 1,
+    boundary_filter: str = "representative-point",
+    boundary_buffer_meters: float = 0.0,
 ) -> None:
     standard_run_place_mode(
         place,
@@ -76,6 +82,8 @@ def run_place_mode(
         tile_format,
         merge_output,
         tile_workers=tile_workers,
+        boundary_filter=boundary_filter,
+        boundary_buffer_meters=boundary_buffer_meters,
     )
 
 
@@ -98,6 +106,18 @@ def main() -> None:
     parser.add_argument("--min-grid-size", type=float, default=0.05, help="Minimum adaptive child tile size in degrees.")
     parser.add_argument("--probe-page-size", type=int, default=1, help="Compatibility option; no separate probe is used.")
     parser.add_argument("--tile-workers", type=int, default=1, help="Concurrent tile workers for place/boundary mode (default 1).")
+    parser.add_argument(
+        "--boundary-filter",
+        choices=["none", "representative-point"],
+        default="representative-point",
+        help="Filter merged place/boundary output by building representative point (default) or keep full-grid coverage.",
+    )
+    parser.add_argument(
+        "--boundary-buffer-meters",
+        type=float,
+        default=0.0,
+        help="Optional outward boundary buffer in meters before representative-point filtering (default 0).",
+    )
     args = parser.parse_args()
 
     if args.bbox:
@@ -122,6 +142,8 @@ def main() -> None:
             args.min_grid_size,
             args.probe_page_size,
             tile_workers=args.tile_workers,
+            boundary_filter=args.boundary_filter,
+            boundary_buffer_meters=args.boundary_buffer_meters,
         )
         return
 
@@ -144,6 +166,8 @@ def main() -> None:
             args.min_grid_size,
             args.probe_page_size,
             tile_workers=args.tile_workers,
+            boundary_filter=args.boundary_filter,
+            boundary_buffer_meters=args.boundary_buffer_meters,
         )
         return
 

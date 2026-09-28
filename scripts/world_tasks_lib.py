@@ -81,6 +81,8 @@ DOWNLOAD_OPTION_FIELDS = (
     "failure_split_retries",
     "min_grid_size",
     "probe_page_size",
+    "boundary_filter",
+    "boundary_buffer_meters",
 )
 
 
@@ -101,6 +103,8 @@ class DownloadOptions:
     failure_split_retries: int = 5
     min_grid_size: float = 0.05
     probe_page_size: int = 1
+    boundary_filter: str = "representative-point"
+    boundary_buffer_meters: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -484,6 +488,10 @@ def build_worker_command(
         options.tile_format,
         "--merge-output",
         str(merge_output),
+        "--boundary-filter",
+        options.boundary_filter,
+        "--boundary-buffer-meters",
+        str(options.boundary_buffer_meters),
     ]
     if options.max_pages > 0:
         command.extend(["--max-pages", str(options.max_pages)])
@@ -586,6 +594,7 @@ def marker_is_valid(
     repo_root: Path,
     task_dir: Path,
     merge_output: Path,
+    expected_delivery_params: dict | None = None,
 ) -> bool:
     if not isinstance(marker, dict):
         return False
@@ -610,6 +619,13 @@ def marker_is_valid(
     recorded_size = marker.get("merge_size_bytes")
     if isinstance(recorded_size, int) and recorded_size != merge_file.stat().st_size:
         return False
+    if expected_delivery_params:
+        recorded_params = marker.get("params")
+        if not isinstance(recorded_params, dict):
+            return False
+        for key, value in expected_delivery_params.items():
+            if recorded_params.get(key) != value:
+                return False
     return True
 
 
@@ -1076,6 +1092,51 @@ class StateStore:
         self.add_event(task_id, "REQUEUE", f"position={position}")
         return ordered
 
+    def stop_running_task_to_tail(self, task_id: str) -> list[str]:
+        try:
+            self.conn.execute("BEGIN IMMEDIATE")
+            cursor = self.conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,))
+            row = cursor.fetchone()
+            if row is None:
+                raise KeyError(f"任务不存在: {task_id}")
+            if row["status"] != STATUS_RUNNING:
+                raise ValueError(f"只有运行中的任务可以停止并重新入队，当前状态: {row['status']}")
+
+            pending = [
+                item["task_id"]
+                for item in self.conn.execute(
+                    "SELECT task_id FROM tasks WHERE status = ? "
+                    "ORDER BY queue_order IS NULL, queue_order, manifest_order, task_id",
+                    (STATUS_PENDING,),
+                ).fetchall()
+            ]
+            ordered = [*pending, task_id]
+            now = utc_now()
+            self.conn.execute(
+                """
+                UPDATE tasks
+                SET status = ?, attempts = 0, exit_code = NULL, feature_count = NULL,
+                    last_error = NULL, started_at = NULL, finished_at = NULL,
+                    duration_seconds = NULL, updated_at = ?
+                WHERE task_id = ?
+                """,
+                (STATUS_PENDING, now, task_id),
+            )
+            for position, pending_task_id in enumerate(ordered, start=1):
+                self.conn.execute(
+                    "UPDATE tasks SET queue_order = ?, updated_at = ? WHERE task_id = ?",
+                    (position, now, pending_task_id),
+                )
+            self.conn.execute(
+                "INSERT INTO task_events (task_id, event, detail, created_at) VALUES (?, ?, ?, ?)",
+                (task_id, "STOP_REQUEUE", "position=tail", now),
+            )
+            self.conn.commit()
+            return ordered
+        except Exception:
+            self.conn.rollback()
+            raise
+
     def add_event(self, task_id: str, event: str, detail: str = "") -> None:
         self.conn.execute(
             "INSERT INTO task_events (task_id, event, detail, created_at) VALUES (?, ?, ?, ?)",
@@ -1103,5 +1164,13 @@ def requeue_task(state_db: Path, task_id: str, position: str = "tail") -> list[s
     store = StateStore(state_db)
     try:
         return store.requeue_task(task_id, position)
+    finally:
+        store.close()
+
+
+def stop_running_task_to_tail(state_db: Path, task_id: str) -> list[str]:
+    store = StateStore(state_db)
+    try:
+        return store.stop_running_task_to_tail(task_id)
     finally:
         store.close()

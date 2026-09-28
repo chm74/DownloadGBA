@@ -302,7 +302,57 @@ def write_grid_manifest(
     return target
 
 
-def merge_outputs(tile_paths: list[Path], output_path: Path) -> None:
+BOUNDARY_FILTER_NONE = "none"
+BOUNDARY_FILTER_REPRESENTATIVE_POINT = "representative-point"
+BOUNDARY_FILTER_CHOICES = (BOUNDARY_FILTER_NONE, BOUNDARY_FILTER_REPRESENTATIVE_POINT)
+
+
+def prepare_boundary_filter_geometry(
+    boundary: gpd.GeoDataFrame,
+    buffer_meters: float = 0.0,
+):
+    if boundary is None or boundary.empty:
+        raise ValueError("启用行政边界过滤时，boundary 不能为空")
+    if buffer_meters < 0:
+        raise ValueError("boundary_buffer_meters 不能小于 0")
+
+    normalized = boundary.set_crs(4326) if boundary.crs is None else boundary.to_crs(4326)
+    if buffer_meters <= 0:
+        return normalized.union_all() if hasattr(normalized, "union_all") else normalized.unary_union
+
+    projected_crs = normalized.estimate_utm_crs()
+    if projected_crs is None:
+        projected_crs = "EPSG:3857"
+    projected = normalized.to_crs(projected_crs)
+    projected_geometry = projected.union_all() if hasattr(projected, "union_all") else projected.unary_union
+    buffered = gpd.GeoSeries([projected_geometry.buffer(buffer_meters)], crs=projected_crs)
+    return buffered.to_crs(4326).iloc[0]
+
+
+def filter_features_to_boundary(gdf: gpd.GeoDataFrame, boundary_geometry) -> gpd.GeoDataFrame:
+    if gdf.empty:
+        return gdf.copy()
+    valid = gdf.geometry.notna() & ~gdf.geometry.is_empty
+    keep = pd.Series(False, index=gdf.index, dtype=bool)
+    if valid.any():
+        representative_points = gdf.loc[valid].geometry.representative_point()
+        keep.loc[valid] = representative_points.covered_by(boundary_geometry).to_numpy()
+    return gdf.loc[keep].copy()
+
+
+def merge_outputs(
+    tile_paths: list[Path],
+    output_path: Path,
+    boundary: gpd.GeoDataFrame | None = None,
+    boundary_filter: str = BOUNDARY_FILTER_NONE,
+    boundary_buffer_meters: float = 0.0,
+) -> None:
+    if boundary_filter not in BOUNDARY_FILTER_CHOICES:
+        raise ValueError(f"不支持的 boundary_filter: {boundary_filter}")
+    boundary_geometry = None
+    if boundary_filter == BOUNDARY_FILTER_REPRESENTATIVE_POINT:
+        boundary_geometry = prepare_boundary_filter_geometry(boundary, boundary_buffer_meters)
+
     if not tile_paths:
         empty = gpd.GeoDataFrame(columns=["geometry"], geometry="geometry", crs=4326)
         save_gdf(empty, output_path)
@@ -315,22 +365,38 @@ def merge_outputs(tile_paths: list[Path], output_path: Path) -> None:
 
     frames = []
     total_features = 0
+    kept_features = 0
+    if boundary_geometry is not None:
+        log_line(
+            f"[FILTER] 行政边界过滤已启用: mode={boundary_filter} "
+            f"buffer_meters={boundary_buffer_meters:g}"
+        )
     for index, path in enumerate(tile_paths, start=1):
         frame = gpd.read_file(path).to_crs(4326)
-        frames.append(frame)
         total_features += len(frame)
+        if boundary_geometry is not None:
+            frame = filter_features_to_boundary(frame, boundary_geometry)
+        kept_features += len(frame)
+        frames.append(frame)
         if index % 25 == 0 or index == total_tiles:
             elapsed = time.monotonic() - started
             log_line(
-                f"[MERGE] 已读取 {index}/{total_tiles} 个分块，要素累计={total_features:,}，"
+                f"[MERGE] 已读取 {index}/{total_tiles} 个分块，原始要素累计={total_features:,}，"
+                f"保留={kept_features:,}，"
                 f"用时={elapsed:.0f}s"
             )
 
     merged = gpd.GeoDataFrame(pd.concat(frames, ignore_index=True), crs=4326)
+    if boundary_geometry is not None:
+        removed_by_boundary = total_features - kept_features
+        log_line(
+            f"[FILTER] 行政边界过滤完成: 原始={total_features:,} "
+            f"保留={kept_features:,} 移除={removed_by_boundary:,}"
+        )
     log_line(f"[MERGE] 拼接完成: 要素={len(merged):,}，开始按几何去重...")
     merged["_GEOM_KEY"] = merged.geometry.to_wkb(hex=True)
     merged = merged.drop_duplicates(subset=["_GEOM_KEY"], keep="first").drop(columns=["_GEOM_KEY"]).copy()
-    removed = total_features - len(merged)
+    removed = kept_features - len(merged)
     log_line(f"[MERGE] 去重完成: 去除重复={removed:,}，写出 {len(merged):,} 个要素 -> {output_path}")
     save_gdf(merged, output_path)
     elapsed = time.monotonic() - started
@@ -357,11 +423,16 @@ def run_boundary_mode(
     boundary_source: str | None = None,
     source_mode: str = "boundary",
     tile_workers: int = 1,
+    boundary_filter: str = BOUNDARY_FILTER_REPRESENTATIVE_POINT,
+    boundary_buffer_meters: float = 0.0,
 ) -> None:
     print_download_source(source_mode, boundary_source)
     log_line(f"Coverage semantics: full-grid ({DATA_SEMANTICS_VERSION})")
-    log_line("Boundary usage: grid selection only")
-    log_line("Feature boundary filtering: disabled")
+    log_line("Boundary usage: grid selection for raw tiles; filtering for merged output")
+    log_line(
+        f"Feature boundary filtering: {boundary_filter} "
+        f"(buffer={boundary_buffer_meters:g}m; raw tiles remain full-grid)"
+    )
     log_line(f"Grid algorithm: {GRID_ALGORITHM_VERSION}")
     grid = build_grid(boundary, grid_size)
     grid_path = output_dir / "gba_wfs_grid.gpkg"
@@ -451,7 +522,13 @@ def run_boundary_mode(
     tile_paths = [results[row["GRID_ID"]] for _, row in grid.iterrows() if row["GRID_ID"] in results]
 
     if merge_output is not None:
-        merge_outputs(tile_paths, merge_output)
+        merge_outputs(
+            tile_paths,
+            merge_output,
+            boundary=boundary,
+            boundary_filter=boundary_filter,
+            boundary_buffer_meters=boundary_buffer_meters,
+        )
         log_line(
             f"Merged {len(tile_paths)} tile outputs to {merge_output}; "
             f"complete={len(results)} empty={len(empty_results)} expected={len(grid)}"
@@ -467,6 +544,8 @@ def run_place_mode(
     tile_format: str,
     merge_output: Path | None,
     tile_workers: int = 1,
+    boundary_filter: str = BOUNDARY_FILTER_REPRESENTATIVE_POINT,
+    boundary_buffer_meters: float = 0.0,
 ) -> None:
     boundary = load_place_boundary(place)
     boundary_path = output_dir / "place_boundary.gpkg"
@@ -483,6 +562,8 @@ def run_place_mode(
         boundary_source=f"OSM Nominatim place query: {place}",
         source_mode="place",
         tile_workers=tile_workers,
+        boundary_filter=boundary_filter,
+        boundary_buffer_meters=boundary_buffer_meters,
     )
 
 
@@ -499,6 +580,18 @@ def main() -> None:
     parser.add_argument("--tile-format", choices=["gpkg", "shp"], default="gpkg", help="Per-tile output format for place/boundary mode.")
     parser.add_argument("--merge-output", help="Optional merged output file for place/boundary mode (.gpkg or .shp).")
     parser.add_argument("--tile-workers", type=int, default=1, help="Concurrent tile workers for place/boundary mode (default 1).")
+    parser.add_argument(
+        "--boundary-filter",
+        choices=BOUNDARY_FILTER_CHOICES,
+        default=BOUNDARY_FILTER_REPRESENTATIVE_POINT,
+        help="Filter merged place/boundary output by building representative point (default) or keep full-grid coverage.",
+    )
+    parser.add_argument(
+        "--boundary-buffer-meters",
+        type=float,
+        default=0.0,
+        help="Optional outward boundary buffer in meters before representative-point filtering (default 0).",
+    )
     args = parser.parse_args()
 
     if args.bbox:
@@ -519,6 +612,8 @@ def main() -> None:
             args.tile_format,
             Path(args.merge_output) if args.merge_output else None,
             tile_workers=args.tile_workers,
+            boundary_filter=args.boundary_filter,
+            boundary_buffer_meters=args.boundary_buffer_meters,
         )
         return
 
@@ -535,6 +630,8 @@ def main() -> None:
             args.tile_format,
             Path(args.merge_output) if args.merge_output else None,
             tile_workers=args.tile_workers,
+            boundary_filter=args.boundary_filter,
+            boundary_buffer_meters=args.boundary_buffer_meters,
         )
         return
 

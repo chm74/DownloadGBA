@@ -357,9 +357,44 @@ function renderRunning(items) {
         </div>
         <div class="meta">目录：${esc(item.output_dir)}</div>
         ${log ? `<div class="log">${log}</div>` : ""}
+        <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <button type="button" class="mini" data-stop-current="${esc(item.task_id)}" style="color:#b91c1c;border-color:#b91c1c;">停止当前任务并加入队尾</button>
+          <span class="meta stop-current-message"></span>
+        </div>
       </div>`;
   }).join("");
 }
+
+document.getElementById("running-list").addEventListener("click", async event => {
+  const button = event.target.closest("[data-stop-current]");
+  if (!button) return;
+  const taskId = button.dataset.stopCurrent;
+  if (!window.confirm(`确认停止当前任务“${taskId}”并重新加入待执行队尾？\n已完成分块会保留，整个下载批处理将停止。`)) {
+    return;
+  }
+  const message = button.parentElement.querySelector(".stop-current-message");
+  button.disabled = true;
+  message.textContent = "正在停止并重新入队…";
+  try {
+    const response = await fetch("/api/queue/stop-current", {
+      method: "POST",
+      headers: actionHeaders(),
+      body: JSON.stringify({ task_id: taskId }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      message.textContent = "操作失败：" + (data.error || response.status);
+      button.disabled = false;
+      return;
+    }
+    message.textContent = `已停止并加入队尾（当前共 ${data.pending_total} 条待执行）`;
+    await refresh();
+    await refreshControl();
+  } catch (error) {
+    message.textContent = "请求失败：" + error;
+    button.disabled = false;
+  }
+});
 
 function renderQueue(items, total, page, pageSize, totalAll) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));

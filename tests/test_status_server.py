@@ -768,6 +768,91 @@ class ControlTests(unittest.TestCase):
                 server.shutdown()
                 server.server_close()
 
+    def test_stop_current_task_action_stops_processes_then_requeues_to_tail(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            state_db = build_repo_fixture(repo_root)
+            config = {"repo_root": repo_root, "state_db": state_db}
+            stopped = {
+                "runner": {"pid": 100},
+                "workers": [{"pid": 200}],
+            }
+            no_processes = {"runner": None, "runners": [], "workers": []}
+
+            with patch.object(
+                status_server,
+                "_stop_all_batch_processes",
+                return_value=(stopped, [100, 200]),
+            ):
+                with patch.object(status_server, "detect_batch", return_value=no_processes):
+                    result = status_server.stop_current_task_action(
+                        config,
+                        "Africa|Algeria|Algeria",
+                    )
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["task_id"], "Africa|Algeria|Algeria")
+            self.assertEqual(result["position"], "tail")
+            self.assertEqual(result["stopped_pids"], [100, 200])
+            self.assertEqual(result["queue"][-1], "Africa|Algeria|Algeria")
+            store = lib.StateStore(state_db)
+            try:
+                self.assertEqual(store.get("Africa|Algeria|Algeria")["status"], lib.STATUS_PENDING)
+            finally:
+                store.close()
+
+    def test_stop_current_task_action_keeps_running_state_when_processes_survive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            state_db = build_repo_fixture(repo_root)
+            config = {"repo_root": repo_root, "state_db": state_db}
+            still_running = {"runner": {"pid": 100}, "workers": []}
+
+            with patch.object(
+                status_server,
+                "_stop_all_batch_processes",
+                return_value=({"runner": {"pid": 100}, "workers": []}, []),
+            ):
+                with patch.object(status_server, "detect_batch", return_value=still_running):
+                    with self.assertRaises(RuntimeError):
+                        status_server.stop_current_task_action(config, "Africa|Algeria|Algeria")
+
+            store = lib.StateStore(state_db)
+            try:
+                self.assertEqual(store.get("Africa|Algeria|Algeria")["status"], lib.STATUS_RUNNING)
+            finally:
+                store.close()
+
+    def test_stop_current_task_endpoint_calls_action(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                result = {
+                    "ok": True,
+                    "task_id": "Africa|Algeria|Algeria",
+                    "position": "tail",
+                    "stopped_pids": [1, 2],
+                    "queue": ["Africa|Angola|Angola", "Africa|Algeria|Algeria"],
+                    "pending_total": 2,
+                }
+                with patch.object(status_server, "stop_current_task_action", return_value=result) as action:
+                    request = urllib.request.Request(
+                        f"http://127.0.0.1:{port}/api/queue/stop-current",
+                        data=json.dumps({"task_id": "Africa|Algeria|Algeria"}).encode("utf-8"),
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with urllib.request.urlopen(request, timeout=10) as response:
+                        payload = json.loads(response.read().decode("utf-8"))
+                self.assertTrue(payload["ok"])
+                self.assertEqual(payload["position"], "tail")
+                action.assert_called_once_with(server.config, "Africa|Algeria|Algeria")
+            finally:
+                server.shutdown()
+                server.server_close()
+
     def test_process_reorder_endpoint(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)
