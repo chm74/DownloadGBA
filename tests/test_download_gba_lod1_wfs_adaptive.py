@@ -65,6 +65,8 @@ class DownloadGbaLod1WfsAdaptiveTests(unittest.TestCase):
             0.05,
             1,
             tile_workers=1,
+            boundary_filter="representative-point",
+            boundary_buffer_meters=0.0,
         )
 
     def test_boundary_mode_delegates_to_shared_standard_worker(self):
@@ -93,6 +95,8 @@ class DownloadGbaLod1WfsAdaptiveTests(unittest.TestCase):
         self.assertEqual(args[1], Path("out"))
         self.assertEqual(kwargs.get("boundary_source"), "test")
         self.assertEqual(kwargs.get("source_mode"), "boundary")
+        self.assertEqual(kwargs.get("boundary_filter"), "representative-point")
+        self.assertEqual(kwargs.get("boundary_buffer_meters"), 0.0)
 
     def test_bbox_mode_delegates_to_standard_worker(self):
         module = load_module()

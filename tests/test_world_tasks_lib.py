@@ -155,6 +155,9 @@ class PathAndCommandTests(unittest.TestCase):
         self.assertIn("--boundary", command)
         self.assertIn("--split-threshold", command)
         self.assertIn("--min-grid-size", command)
+        self.assertIn("--boundary-filter", command)
+        self.assertIn("representative-point", command)
+        self.assertIn("--boundary-buffer-meters", command)
         self.assertIn("20000", joined)
 
     def test_build_worker_command_standard_has_no_adaptive_flags(self):
@@ -331,6 +334,48 @@ class MarkerTests(unittest.TestCase):
             merge_output = task_dir / "merge.gpkg"
             merge_output.write_bytes(b"x")
             self.assertFalse(lib.marker_is_valid(None, repo_root, task_dir, merge_output))
+
+    def test_marker_delivery_filter_must_match_current_options(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            task_dir = repo_root / "task"
+            task_dir.mkdir()
+            merge_output = task_dir / "merge.gpkg"
+            merge_output.write_bytes(b"x")
+            marker = {
+                "status": lib.STATUS_OK,
+                "download_dir": "task",
+                "merge_output": "task/merge.gpkg",
+                "merge_size_bytes": 1,
+                "params": {
+                    "boundary_filter": "representative-point",
+                    "boundary_buffer_meters": 0.0,
+                },
+            }
+
+            expected = {
+                "boundary_filter": "representative-point",
+                "boundary_buffer_meters": 0.0,
+            }
+            self.assertTrue(
+                lib.marker_is_valid(
+                    marker,
+                    repo_root,
+                    task_dir,
+                    merge_output,
+                    expected_delivery_params=expected,
+                )
+            )
+            marker["params"]["boundary_filter"] = "none"
+            self.assertFalse(
+                lib.marker_is_valid(
+                    marker,
+                    repo_root,
+                    task_dir,
+                    merge_output,
+                    expected_delivery_params=expected,
+                )
+            )
 
 
 class NationalGridProgressTests(unittest.TestCase):

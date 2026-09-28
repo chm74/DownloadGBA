@@ -92,6 +92,7 @@ Remove-Item Env:PGPASSWORD
 - 按边界自动生成格网并分块抓取
 - 支持复用已存在分块结果，便于断点续跑
 - 支持把多个分块合并为最终成果文件
+- `--place` / `--boundary` 的最终合并成果默认按建筑内部代表点过滤到行政边界；原始分块仍保留完整格网
 
 #### 主要输入
 
@@ -133,6 +134,10 @@ Remove-Item Env:PGPASSWORD
   分块输出格式，可选 `gpkg` 或 `shp`，默认 `gpkg`。
 - `--merge-output`
   可选，指定最终合并输出文件。
+- `--boundary-filter`
+  最终合并成果的行政边界过滤方式，可选 `representative-point`（默认）或 `none`。代表点模式保留整栋建筑，不切割建筑面。
+- `--boundary-buffer-meters`
+  过滤前对行政边界向外缓冲的米数，默认 `0`；边界精度不足时可按需设置小幅缓冲。
 
 #### 示例
 
@@ -312,6 +317,8 @@ python scripts/download_gba_lod1_wfs_adaptive.py ^
   分块格式，默认 `gpkg`。
 - `--merge-format`
   最终合并格式，可选 `shp` 或 `gpkg`，默认 `shp`。
+- `--boundary-filter` / `--boundary-buffer-meters`
+  省级最终成果默认按建筑内部代表点过滤到省界；可关闭过滤或设置小幅边界缓冲，原始格网不受影响。
 - `--skip-existing-merge`
   如果最终成果已存在则跳过该省份。
 - `--summary-file`
@@ -389,6 +396,8 @@ python scripts/run_gba_province_batch.py ^
 - `--tile-workers`
   单任务内并发抓取的格网数，默认 1；受源站限流（约 60 请求/分钟）约束，推荐 2，调到 3 以上不会更快。
   客户端内置全局节流（默认 1.05 秒/请求，可用 `GBA_WFS_MIN_INTERVAL` 调整），遇到 429 自动等待重试。
+- `--boundary-filter` / `--boundary-buffer-meters`
+  最终成果默认按建筑内部代表点归属行政边界，消除省份/城市成果的阶梯状格网外轮廓；完整格网仍保存在 `tiles_national_v1`，可用 `--boundary-filter none` 保留旧的全格网合并语义。
 - `--task-attempts` / `--sleep-seconds` / `--stop-on-error`
   单任务尝试次数、任务间隔、失败即停。
 

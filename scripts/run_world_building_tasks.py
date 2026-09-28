@@ -47,6 +47,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--page-size", type=int, default=5000, help="WFS 分页大小。")
     parser.add_argument("--tile-format", choices=["gpkg", "shp"], default="gpkg", help="中间分块格式。")
     parser.add_argument("--merge-format", choices=["gpkg", "shp"], default="gpkg", help="最终合并格式。")
+    parser.add_argument(
+        "--boundary-filter",
+        choices=["none", "representative-point"],
+        default="representative-point",
+        help="最终成果的行政边界过滤方式；默认按建筑内部代表点归属。",
+    )
+    parser.add_argument(
+        "--boundary-buffer-meters",
+        type=float,
+        default=0.0,
+        help="行政边界过滤前向外缓冲的米数，默认 0。",
+    )
     parser.add_argument("--max-pages", type=int, default=0, help="冒烟测试用的分页上限，0 表示不限制。")
     parser.add_argument(
         "--tile-workers",
@@ -127,6 +139,8 @@ def build_options(args: argparse.Namespace) -> lib.DownloadOptions:
         failure_split_retries=args.failure_split_retries,
         min_grid_size=args.min_grid_size,
         probe_page_size=args.probe_page_size,
+        boundary_filter=args.boundary_filter,
+        boundary_buffer_meters=max(float(args.boundary_buffer_meters), 0.0),
     )
 
 
@@ -499,7 +513,17 @@ def verify_success_tasks(
         task_dir = lib.resolve_task_dir(repo_root, row["download_dir"])
         merge_output = lib.merge_output_path(task_dir, task, options.merge_format)
         marker = lib.read_marker(task_dir)
-        if lib.marker_is_valid(marker, repo_root, task_dir, merge_output):
+        expected_delivery_params = {
+            "boundary_filter": options.boundary_filter,
+            "boundary_buffer_meters": options.boundary_buffer_meters,
+        }
+        if lib.marker_is_valid(
+            marker,
+            repo_root,
+            task_dir,
+            merge_output,
+            expected_delivery_params=expected_delivery_params,
+        ):
             continue
         broken.append(row["task_id"])
         if not dry_run:

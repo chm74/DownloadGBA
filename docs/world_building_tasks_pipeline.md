@@ -4,7 +4,7 @@
 
 - 数据源：`GlobalBuildingAtlas LoD1 WFS`，服务地址 `https://tubvsig-so2sat-vm1.srv.mwn.de/geoserver/ows`，图层 `global3D:lod1_global`，输出统一为 `EPSG:4326`。
 - 下载脚本：
-  - `scripts/download_gba_lod1_wfs.py`：按 `--bbox` / `--place` / `--boundary` 抓取，分格网、分页、分块复用、合并去重。
+  - `scripts/download_gba_lod1_wfs.py`：按 `--bbox` / `--place` / `--boundary` 抓取，分格网、分页、分块复用、合并去重；`--place` / `--boundary` 的合并成果默认按建筑内部代表点过滤到行政边界。
   - `scripts/download_gba_lod1_wfs_adaptive.py`：在标准脚本上增加超大格网四分裂、探测失败切分、下载失败切分能力。
 - 任务来源：`scripts/export_world_building_tasks.py` 读取 PostgreSQL `world_building`，按 `continent,country,city` 分组去重，导出 `data/world_building_download_tasks.csv`（5 列：continent、country、city、download_dir、process_name_prefix）。第五列取 `shp_name` 在第一个下划线前的部分。
 - 既有批处理：`scripts/run_gba_province_batch.py` 面向内置省份清单，与本任务清单互不影响。
@@ -37,7 +37,7 @@ data/<continent>/<country>/<city>/         （标准下载目录 + _TASK_DONE.js
 | world_tasks_lib.py | 纯函数与存储层：清单解析、地名归一化、覆盖表、SQLite、标记校验、命令拼装 |
 | SQLite 状态库 | 任务级状态机与事件审计，支撑断点续跑、只跑失败项、统计 |
 | 覆盖表 CSV | 对无法自动解析或需要固定范围的任务给出 bbox / 本地边界 / 查询 / 跳过 |
-| 下载引擎 | 行政边界只选择全国标准格网；抓取完整格网、写完成标记并合并去重 |
+| 下载引擎 | 行政边界选择全国标准格网；抓取和缓存完整格网，合并时按建筑内部代表点过滤到行政边界并去重 |
 
 ## 3. 具体整改内容（已实施）
 
@@ -52,7 +52,7 @@ data/<continent>/<country>/<city>/         （标准下载目录 + _TASK_DONE.js
 | `docs/world_building_tasks_pipeline.md` | 新增 | 本文档 |
 | `scripts/gba_grid.py` | 新增 | 以 `(-180,-90)` 为固定原点生成全国统一标准格网与稳定编号 |
 | `scripts/gba_contract.py` | 新增 | 统一维护 `national-grid-v1`、`coverage-v2` 和目录命名 |
-| `scripts/download_gba_lod1_wfs.py` | 修改 | 完整格网下载、取消建筑行政边界过滤、瓦片校验与安全续传 |
+| `scripts/download_gba_lod1_wfs.py` | 修改 | 完整格网下载与缓存、合并成果行政边界过滤、瓦片校验与安全续传 |
 | 下载任务和状态页面 | 修改 | 按 `grid_manifest.json` 与 `done.json` 统计进度并阻止缺格网任务成功 |
 
 ## 4. 下载目录规范
@@ -68,7 +68,7 @@ data/<continent>/<country>/<city>/
         GBA_050_I0598_J0232.gpkg        # 完整 0.5° 标准格网
         GBA_050_I0598_J0232.done.json   # 校验完成后原子写入的完成标记
         .partial/                       # 下载中间文件，停止后不会被复用
-    <city>_buildings_height_gba.gpkg    # 合并成果（用于校验与续跑）
+    <city>_buildings_height_gba.gpkg    # 按行政边界过滤后的合并成果（用于校验与续跑）
     <city>_buildings_height_gba.shp     # 交付用 SHP（超出分卷阈值时自动拆分）
     <city>_buildings_height_gba_partN.shp  # 超大任务的 SHP 分卷
     run.log / run.err.log               # 下载日志
@@ -78,7 +78,8 @@ data/<continent>/<country>/<city>/
 规则：
 
 - `download_dir` 必须是仓库根内的相对路径；`\` 自动转换为 `/`；禁止 `..`。
-- 标准格网固定以 `(-180,-90)` 为原点；行政边界只决定选择哪些格网，不缩小请求范围、不删除边界外建筑。
+- 标准格网固定以 `(-180,-90)` 为原点；行政边界只决定原始下载格网，不缩小请求范围，`tiles_national_v1` 始终保留完整格网。
+- `--place` / `--boundary` 的最终合并成果默认使用 `--boundary-filter representative-point`，按建筑内部代表点归属行政区并保留整栋建筑；可用 `--boundary-filter none` 恢复全格网合并结果，或用 `--boundary-buffer-meters` 设置小幅外扩。
 - 瓦片只有在数据文件和 `done.json` 的数量、CRS、大小、SHA256 全部一致时才可复用；空格网也写 `EMPTY` 标记。
 - 旧的顶层 `GBA_0001.gpkg` 不会混入 `national-grid-v1` 合并；迁移按省重置任务，不会自动重跑全国。
 - 若清单中 `download_dir` 为空，执行器按 `data/<continent>/<country>/<city>` 生成。

@@ -81,6 +81,8 @@ DOWNLOAD_OPTION_FIELDS = (
     "failure_split_retries",
     "min_grid_size",
     "probe_page_size",
+    "boundary_filter",
+    "boundary_buffer_meters",
 )
 
 
@@ -101,6 +103,8 @@ class DownloadOptions:
     failure_split_retries: int = 5
     min_grid_size: float = 0.05
     probe_page_size: int = 1
+    boundary_filter: str = "representative-point"
+    boundary_buffer_meters: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -484,6 +488,10 @@ def build_worker_command(
         options.tile_format,
         "--merge-output",
         str(merge_output),
+        "--boundary-filter",
+        options.boundary_filter,
+        "--boundary-buffer-meters",
+        str(options.boundary_buffer_meters),
     ]
     if options.max_pages > 0:
         command.extend(["--max-pages", str(options.max_pages)])
@@ -586,6 +594,7 @@ def marker_is_valid(
     repo_root: Path,
     task_dir: Path,
     merge_output: Path,
+    expected_delivery_params: dict | None = None,
 ) -> bool:
     if not isinstance(marker, dict):
         return False
@@ -610,6 +619,13 @@ def marker_is_valid(
     recorded_size = marker.get("merge_size_bytes")
     if isinstance(recorded_size, int) and recorded_size != merge_file.stat().st_size:
         return False
+    if expected_delivery_params:
+        recorded_params = marker.get("params")
+        if not isinstance(recorded_params, dict):
+            return False
+        for key, value in expected_delivery_params.items():
+            if recorded_params.get(key) != value:
+                return False
     return True
 
 

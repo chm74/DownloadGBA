@@ -53,6 +53,8 @@ class DownloadGbaLod1WfsMainTests(unittest.TestCase):
             "gpkg",
             Path("data/erdenet_gba_wfs/erdenet_buildings_height_gba.shp"),
             tile_workers=1,
+            boundary_filter="representative-point",
+            boundary_buffer_meters=0.0,
         )
 
 
@@ -87,7 +89,13 @@ class BoundaryModeTests(unittest.TestCase):
             tile = output_dir / "tiles_national_v1" / "GBA_100_I0180_J0090.gpkg"
             self.assertTrue((output_dir / "gba_wfs_grid.gpkg").exists())
             self.assertTrue(tile.exists())
-            merge.assert_called_once_with([tile], output_dir / "merged.gpkg")
+            merge.assert_called_once_with(
+                [tile],
+                output_dir / "merged.gpkg",
+                boundary=boundary,
+                boundary_filter="representative-point",
+                boundary_buffer_meters=0.0,
+            )
 
     def test_boundary_selects_a_full_canonical_cell_without_filtering_features(self):
         module = load_module()
@@ -360,6 +368,61 @@ class MergeOutputsTests(unittest.TestCase):
 
             merged = gpd.read_file(output)
             self.assertEqual(len(merged), 3)
+
+    def test_merge_outputs_filters_by_representative_point_without_changing_tiles(self):
+        module = load_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            tile = base / "tile.gpkg"
+            original = gpd.GeoDataFrame(
+                [
+                    {"GBA_ID": "inside", "geometry": box(0.1, 0.1, 0.2, 0.2)},
+                    {"GBA_ID": "crossing", "geometry": box(0.8, 0.8, 1.1, 1.1)},
+                    {"GBA_ID": "outside", "geometry": box(1.1, 1.1, 1.2, 1.2)},
+                ],
+                geometry="geometry",
+                crs=4326,
+            )
+            original.to_file(tile, driver="GPKG")
+            boundary = gpd.GeoDataFrame(
+                [{"geometry": box(0, 0, 1, 1)}],
+                geometry="geometry",
+                crs=4326,
+            )
+            output = base / "filtered.gpkg"
+
+            module.merge_outputs(
+                [tile],
+                output,
+                boundary=boundary,
+                boundary_filter="representative-point",
+            )
+
+            merged = gpd.read_file(output)
+            raw = gpd.read_file(tile)
+            self.assertEqual(set(merged["GBA_ID"]), {"inside", "crossing"})
+            self.assertEqual(set(raw["GBA_ID"]), {"inside", "crossing", "outside"})
+
+    def test_merge_outputs_can_keep_full_grid_coverage(self):
+        module = load_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            tile = base / "tile.gpkg"
+            gpd.GeoDataFrame(
+                [{"GBA_ID": "outside", "geometry": box(1.1, 1.1, 1.2, 1.2)}],
+                geometry="geometry",
+                crs=4326,
+            ).to_file(tile, driver="GPKG")
+            boundary = gpd.GeoDataFrame(
+                [{"geometry": box(0, 0, 1, 1)}],
+                geometry="geometry",
+                crs=4326,
+            )
+            output = base / "unfiltered.gpkg"
+
+            module.merge_outputs([tile], output, boundary=boundary, boundary_filter="none")
+
+            self.assertEqual(gpd.read_file(output)["GBA_ID"].tolist(), ["outside"])
 
     def test_merge_outputs_handles_empty_tile_list(self):
         module = load_module()
