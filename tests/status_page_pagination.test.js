@@ -33,7 +33,7 @@ test("an older refresh cannot replace a newer completed-task page", async () => 
     setInterval() { return 1; },
     clearInterval() {},
     fetch(url) {
-      return new Promise(resolve => requests.push({ url, resolve }));
+      return new Promise((resolve, reject) => requests.push({ url, resolve, reject }));
     },
   });
   vm.runInContext(script, context);
@@ -77,4 +77,11 @@ test("an older refresh cannot replace a newer completed-task page", async () => 
   assert.equal(document.getElementById("p-recent-page-label").textContent, "第 2/2 页");
   assert.match(document.getElementById("p-recent-table").innerHTML, /page-two/);
   assert.doesNotMatch(document.getElementById("p-recent-table").innerHTML, /page-one/);
+
+  vm.runInContext("refresh(); refresh();", context);
+  requests[3].resolve({ json: async () => snapshot(10, "new-page") });
+  await new Promise(setImmediate);
+  requests[2].reject(new Error("old request failed"));
+  await new Promise(setImmediate);
+  assert.equal(document.getElementById("error-banner").style.display, "none");
 });

@@ -1324,6 +1324,7 @@ async function refresh() {
     refreshControl();
     refreshProcessControl();
   } catch (error) {
+    if (sequence !== refreshSequence) return;
     const banner = document.getElementById("error-banner");
     banner.textContent = "获取状态失败：" + error;
     banner.style.display = "";
