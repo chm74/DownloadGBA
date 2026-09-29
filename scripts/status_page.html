@@ -231,6 +231,14 @@
 
         <section>
           <h2>最近完成</h2>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+            <span id="p-recent-summary" class="muted">-</span>
+            <button id="p-recent-first" type="button" style="padding:4px 10px;cursor:pointer;">首页</button>
+            <button id="p-recent-prev" type="button" style="padding:4px 10px;cursor:pointer;">上一页</button>
+            <span id="p-recent-page-label" class="muted">-</span>
+            <button id="p-recent-next" type="button" style="padding:4px 10px;cursor:pointer;">下一页</button>
+            <button id="p-recent-last" type="button" style="padding:4px 10px;cursor:pointer;">末页</button>
+          </div>
           <div id="p-recent-table"><div class="empty">暂无已完成任务</div></div>
         </section>
 
@@ -291,6 +299,7 @@ let countdownTimer = null;
 const controlState = { actionTokenRequired: false, inputDirty: false };
 const noteState = { editingKey: null };
 const queueState = { page: 1, pageSize: 15, total: 0, search: "" };
+const processingRecentState = { page: 1, pageSize: 10, total: 0 };
 
 function esc(value) {
   return String(value === null || value === undefined ? "" : value)
@@ -789,7 +798,15 @@ document.getElementById("p-queue-table").addEventListener("click", (event) => {
   reorderProcessing(button.dataset.reorder, button.dataset.direction);
 });
 
-function renderProcessingRecent(items) {
+function renderProcessingRecent(processing) {
+  const items = processing.recent_done || [];
+  const totalPages = Math.max(1, Math.ceil(processingRecentState.total / processingRecentState.pageSize));
+  document.getElementById("p-recent-summary").textContent = `共 ${processingRecentState.total} 条，每页 ${processingRecentState.pageSize} 条`;
+  document.getElementById("p-recent-page-label").textContent = `第 ${processingRecentState.page}/${totalPages} 页`;
+  document.getElementById("p-recent-first").disabled = processingRecentState.page <= 1;
+  document.getElementById("p-recent-prev").disabled = processingRecentState.page <= 1;
+  document.getElementById("p-recent-next").disabled = processingRecentState.page >= totalPages;
+  document.getElementById("p-recent-last").disabled = processingRecentState.page >= totalPages;
   const box = document.getElementById("p-recent-table");
   if (!items || items.length === 0) {
     box.innerHTML = '<div class="empty">暂无已完成任务</div>';
@@ -811,6 +828,20 @@ function renderProcessingRecent(items) {
       </tbody>
     </table>`;
 }
+
+function bindProcessingRecentNav(buttonId, targetPage) {
+  document.getElementById(buttonId).addEventListener("click", () => {
+    const totalPages = Math.max(1, Math.ceil(processingRecentState.total / processingRecentState.pageSize));
+    const page = typeof targetPage === "function" ? targetPage(totalPages) : targetPage;
+    processingRecentState.page = Math.min(Math.max(page, 1), totalPages);
+    refresh();
+  });
+}
+
+bindProcessingRecentNav("p-recent-first", 1);
+bindProcessingRecentNav("p-recent-prev", () => processingRecentState.page - 1);
+bindProcessingRecentNav("p-recent-next", () => processingRecentState.page + 1);
+bindProcessingRecentNav("p-recent-last", (totalPages) => totalPages);
 
 function renderProcessingFailed(processing) {
   const section = document.getElementById("p-failed-section");
@@ -907,7 +938,7 @@ function renderProcessing(processing) {
   document.getElementById("p-failed").textContent = (counts.FAILED ?? 0) + (counts.BLOCKED_NO_SHP ?? 0);
   renderProcessingRunning(processing.running);
   renderProcessingQueue(processing);
-  renderProcessingRecent(processing.recent_done);
+  renderProcessingRecent(processing);
   renderProcessingFailed(processing);
 }
 
@@ -1234,8 +1265,9 @@ document.getElementById("pctl-sync").addEventListener("click", async () => {
 async function refresh() {
   try {
     const offset = (queueState.page - 1) * queueState.pageSize;
+    const processRecentOffset = (processingRecentState.page - 1) * processingRecentState.pageSize;
     const response = await fetch(
-      `/api/status?queue_offset=${offset}&queue_limit=${queueState.pageSize}&queue_search=${encodeURIComponent(queueState.search)}`,
+      `/api/status?queue_offset=${offset}&queue_limit=${queueState.pageSize}&queue_search=${encodeURIComponent(queueState.search)}&process_recent_offset=${processRecentOffset}`,
       { cache: "no-store" },
     );
     const data = await response.json();
@@ -1270,11 +1302,21 @@ async function refresh() {
       return;
     }
 
+    const processing = data.processing || {};
+    processingRecentState.total = processing.recent_total ?? 0;
+    processingRecentState.pageSize = Math.max(1, processing.recent_limit ?? 10);
+    const processRecentTotalPages = Math.max(1, Math.ceil(processingRecentState.total / processingRecentState.pageSize));
+    if (processingRecentState.page > processRecentTotalPages) {
+      processingRecentState.page = processRecentTotalPages;
+      refresh();
+      return;
+    }
+
     renderRunning(data.running);
     renderQueue(data.queue, queueTotal, queueState.page, queueState.pageSize, data.queue_total_all ?? queueTotal);
     renderRecent(data.recent_done);
     renderFailed(data.failed);
-    renderProcessing(data.processing);
+    renderProcessing(processing);
     await refreshDbUpdated();
     refreshControl();
     refreshProcessControl();

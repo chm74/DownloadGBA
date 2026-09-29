@@ -577,6 +577,7 @@ def build_processing_snapshot(
     stale_minutes: float = DEFAULT_STALE_MINUTES,
     log_tail_lines: int = 3,
     recent_limit: int = DEFAULT_RECENT_LIMIT,
+    recent_offset: int = 0,
 ) -> dict:
     repo_root = Path(repo_root)
     process_db = Path(process_db)
@@ -591,6 +592,9 @@ def build_processing_snapshot(
         "queue": [],
         "queue_total": 0,
         "recent_done": [],
+        "recent_total": 0,
+        "recent_limit": max(recent_limit, 0),
+        "recent_offset": max(recent_offset, 0),
         "failed": [],
         "blocked": [],
     }
@@ -611,6 +615,7 @@ def build_processing_snapshot(
         }
         snapshot["counts"] = counts
         snapshot["total"] = sum(counts.values())
+        snapshot["recent_total"] = counts.get("OK", 0)
         if counts.get("RUNNING", 0) > 0:
             snapshot["batch_state"] = "running"
         elif counts.get("PENDING", 0) > 0:
@@ -666,8 +671,9 @@ def build_processing_snapshot(
                 "output_dir": row["output_dir"],
             }
             for row in connection.execute(
-                "SELECT * FROM process_tasks WHERE status = ? ORDER BY finished_at DESC LIMIT ?",
-                ("OK", max(recent_limit, 0)),
+                "SELECT * FROM process_tasks WHERE status = ? "
+                "ORDER BY finished_at DESC, dataset_key DESC LIMIT ? OFFSET ?",
+                ("OK", snapshot["recent_limit"], snapshot["recent_offset"]),
             )
         ]
 
@@ -1432,6 +1438,7 @@ class StatusHandler(BaseHTTPRequestHandler):
             query = parse_qs(urlparse(self.path).query)
             queue_offset = parse_int_query(query, "queue_offset", 0, 0, 10_000_000)
             queue_limit = parse_int_query(query, "queue_limit", config["queue_limit"], 1, 500)
+            process_recent_offset = parse_int_query(query, "process_recent_offset", 0, 0, 10_000_000)
             queue_search = (query.get("queue_search") or [""])[0]
             worker_lines = [
                 str(item.get("command_line") or "")
@@ -1455,6 +1462,7 @@ class StatusHandler(BaseHTTPRequestHandler):
                 stale_minutes=config["stale_minutes"],
                 log_tail_lines=config["log_tail_lines"],
                 recent_limit=config["recent_limit"],
+                recent_offset=process_recent_offset,
             )
             body = json.dumps(snapshot, ensure_ascii=False).encode("utf-8")
             self._send(200, body, "application/json; charset=utf-8")

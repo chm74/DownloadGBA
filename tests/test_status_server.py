@@ -413,6 +413,46 @@ class SnapshotTests(unittest.TestCase):
             self.assertIsNotNone(snapshot["error"])
             self.assertEqual(snapshot["total"], 0)
 
+    def test_processing_recent_done_pages_keep_newest_first(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            process_db = build_process_fixture(repo_root)
+            store = run_shp_process_tasks.ProcessStore(process_db)
+            try:
+                for index in range(11):
+                    key = f"Recent|Area|City{index:02d}"
+                    store.upsert_source({
+                        "dataset_key": key,
+                        "task_id": key,
+                        "display_name": key,
+                        "source_dir": f"data/recent/{index:02d}",
+                        "shp_files": [f"data/recent/{index:02d}.shp"],
+                        "feature_count": index,
+                    })
+                    store.set_status(
+                        key,
+                        run_shp_process_tasks.PROCESS_OK,
+                        finished_at=f"2026-01-02T00:00:{index:02d}",
+                    )
+            finally:
+                store.close()
+
+            first = status_server.build_processing_snapshot(repo_root, process_db)
+            second = status_server.build_processing_snapshot(repo_root, process_db, recent_offset=10)
+            self.assertEqual(first["recent_total"], 12)
+            self.assertEqual(first["recent_limit"], 10)
+            self.assertEqual(first["recent_offset"], 0)
+            self.assertEqual(
+                [item["dataset_key"] for item in first["recent_done"]],
+                [f"Recent|Area|City{index:02d}" for index in range(10, 0, -1)],
+            )
+            self.assertEqual(second["recent_total"], 12)
+            self.assertEqual(second["recent_offset"], 10)
+            self.assertEqual(
+                [item["dataset_key"] for item in second["recent_done"]],
+                ["Recent|Area|City00", "Europe|San_Marino|San_Marino"],
+            )
+
     def test_render_page_replaces_refresh(self):
         with tempfile.TemporaryDirectory() as tmp:
             page = Path(tmp) / "page.html"
@@ -425,6 +465,15 @@ class SnapshotTests(unittest.TestCase):
             repo_root = Path(tmp)
             state_db = build_repo_fixture(repo_root)
             process_db = build_process_fixture(repo_root)
+            store = run_shp_process_tasks.ProcessStore(process_db)
+            try:
+                store.set_status(
+                    "Asia|China|Shanghai",
+                    run_shp_process_tasks.PROCESS_OK,
+                    finished_at="2026-01-02T00:00:00",
+                )
+            finally:
+                store.close()
             page = repo_root / "page.html"
             page.write_text("<html>%%REFRESH_MS%%</html>", encoding="utf-8")
 
@@ -453,6 +502,18 @@ class SnapshotTests(unittest.TestCase):
                 self.assertEqual(payload["counts"].get(lib.STATUS_PENDING), 2)
                 self.assertEqual(payload["processing"]["counts"].get(run_shp_process_tasks.PROCESS_RUNNING), 1)
                 self.assertEqual(payload["processing"]["total"], 6)
+
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{port}/api/status?process_recent_offset=1",
+                    timeout=10,
+                ) as response:
+                    recent_page = json.loads(response.read().decode("utf-8"))["processing"]
+                self.assertEqual(recent_page["recent_total"], 2)
+                self.assertEqual(recent_page["recent_offset"], 1)
+                self.assertEqual(
+                    [item["dataset_key"] for item in recent_page["recent_done"]],
+                    ["Europe|San_Marino|San_Marino"],
+                )
 
                 with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=10) as response:
                     body = response.read().decode("utf-8")
