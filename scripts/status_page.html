@@ -296,6 +296,7 @@
 <script>
 const REFRESH_MS = %%REFRESH_MS%%;
 let countdownTimer = null;
+let refreshSequence = 0;
 const controlState = { actionTokenRequired: false, inputDirty: false };
 const noteState = { editingKey: null };
 const queueState = { page: 1, pageSize: 15, total: 0, search: "" };
@@ -1263,6 +1264,7 @@ document.getElementById("pctl-sync").addEventListener("click", async () => {
 });
 
 async function refresh() {
+  const sequence = ++refreshSequence;
   try {
     const offset = (queueState.page - 1) * queueState.pageSize;
     const processRecentOffset = (processingRecentState.page - 1) * processingRecentState.pageSize;
@@ -1271,6 +1273,7 @@ async function refresh() {
       { cache: "no-store" },
     );
     const data = await response.json();
+    if (sequence !== refreshSequence) return;
     const [label, cls] = batchLabel(data.batch_state);
     const badge = document.getElementById("batch-badge");
     badge.textContent = label;
@@ -1325,7 +1328,7 @@ async function refresh() {
     banner.textContent = "获取状态失败：" + error;
     banner.style.display = "";
   } finally {
-    resetCountdown();
+    if (sequence === refreshSequence) resetCountdown();
   }
 }
 

@@ -453,6 +453,18 @@ class SnapshotTests(unittest.TestCase):
                 ["Recent|Area|City00", "Europe|San_Marino|San_Marino"],
             )
 
+    def test_processing_recent_done_zero_limit_uses_one_record_per_page(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            process_db = build_process_fixture(repo_root)
+            snapshot = status_server.build_processing_snapshot(repo_root, process_db, recent_limit=0)
+            self.assertEqual(snapshot["recent_total"], 1)
+            self.assertEqual(snapshot["recent_limit"], 1)
+            self.assertEqual(
+                [item["dataset_key"] for item in snapshot["recent_done"]],
+                ["Europe|San_Marino|San_Marino"],
+            )
+
     def test_render_page_replaces_refresh(self):
         with tempfile.TemporaryDirectory() as tmp:
             page = Path(tmp) / "page.html"

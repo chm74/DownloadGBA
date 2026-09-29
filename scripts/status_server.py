@@ -593,7 +593,7 @@ def build_processing_snapshot(
         "queue_total": 0,
         "recent_done": [],
         "recent_total": 0,
-        "recent_limit": max(recent_limit, 0),
+        "recent_limit": max(recent_limit, 1),
         "recent_offset": max(recent_offset, 0),
         "failed": [],
         "blocked": [],
