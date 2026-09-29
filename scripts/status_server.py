@@ -669,6 +669,10 @@ def build_processing_snapshot(
                 "duration_seconds": row["duration_seconds"],
                 "finished_at": row["finished_at"],
                 "output_dir": row["output_dir"],
+                "input_dir": row["input_dir"] or (
+                    Path(row["output_dir"]).with_name(Path(row["output_dir"]).name + "_input").as_posix()
+                    if row["output_dir"] else None
+                ),
             }
             for row in connection.execute(
                 "SELECT * FROM process_tasks WHERE status = ? "
@@ -1500,6 +1504,7 @@ class StatusHandler(BaseHTTPRequestHandler):
             "/api/queue/stop-current",
             "/api/process/reorder",
             "/api/process/requeue",
+            "/api/process/requeue-completed",
             "/api/process/note",
             "/api/process/sync",
             "/api/process/start",
@@ -1723,6 +1728,44 @@ class StatusHandler(BaseHTTPRequestHandler):
                 ensure_ascii=False,
             )
             self._send(200, body.encode("utf-8"), "application/json; charset=utf-8")
+            return
+
+        if path == "/api/process/requeue-completed":
+            try:
+                dataset_key = str(payload.get("dataset_key") or "").strip()
+                if not dataset_key:
+                    raise ValueError("dataset_key 不能为空")
+                if payload.get("confirm_delete") is not True:
+                    raise ValueError("必须确认删除处理产物")
+                expected_output_dir = str(payload.get("expected_output_dir") or "")
+                expected_input_dir = str(payload.get("expected_input_dir") or "")
+                if not expected_output_dir or not expected_input_dir:
+                    raise ValueError("缺少已确认的删除目录，请刷新页面后重试")
+                with CONTROL_LOCK:
+                    result = process_queue.requeue_completed_task(
+                        Path(config["repo_root"]), Path(config["process_db"]),
+                        Path(config["state_db"]), dataset_key,
+                        expected_output_dir, expected_input_dir,
+                    )
+            except KeyError as exc:
+                status, error = 404, str(exc)
+            except ValueError as exc:
+                status, error = 400, str(exc)
+            except Exception as exc:  # noqa: BLE001
+                status, error = 500, str(exc)
+            else:
+                cleanup_error = result.get("cleanup_error")
+                body = json.dumps({
+                    "ok": not cleanup_error,
+                    "dataset_key": dataset_key,
+                    "queue": result["queue"],
+                    "pending_total": len(result["queue"]),
+                    "error": f"任务已置顶，但旧产物清理未完成：{cleanup_error}" if cleanup_error else None,
+                }, ensure_ascii=False)
+                self._send(200, body.encode("utf-8"), "application/json; charset=utf-8")
+                return
+            self._send(status, json.dumps({"ok": False, "error": error}, ensure_ascii=False).encode("utf-8"),
+                       "application/json; charset=utf-8")
             return
 
         if path == "/api/process/note":

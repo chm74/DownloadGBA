@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-09-23T17:56:18",
+  "updated_at": "2026-09-29T14:42:20",
   "rows": {
     "亚洲|中国|广西壮族自治区": {
       "updated": true,
@@ -70,7 +70,7 @@
     "亚洲|中国|黑龙江省": {
       "updated": true,
       "updated_at": "2026-09-22T15:27:16",
-      "note": "已更新 手动移入；产物未核验"
+      "note": "已更新"
     },
     "亚洲|中国|福建省": {
       "updated": true,
@@ -80,6 +80,26 @@
     "Europe|United_Kingdom|London": {
       "updated": true,
       "updated_at": "2026-09-23T17:56:16",
+      "note": ""
+    },
+    "亚洲|中国|广东省": {
+      "updated": true,
+      "updated_at": "2026-09-28T15:29:32",
+      "note": ""
+    },
+    "亚洲|中国|吉林省": {
+      "updated": true,
+      "updated_at": "2026-09-29T14:15:38",
+      "note": ""
+    },
+    "亚洲|中国|台湾": {
+      "updated": true,
+      "updated_at": "2026-09-29T14:34:23",
+      "note": ""
+    },
+    "亚洲|中国|香港澳门": {
+      "updated": true,
+      "updated_at": "2026-09-29T14:42:19",
       "note": ""
     }
   }

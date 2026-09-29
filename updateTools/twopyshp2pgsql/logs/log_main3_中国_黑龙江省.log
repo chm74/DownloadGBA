@@ -51,3 +51,58 @@
 2026-09-22 15:06:03,853 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_047_3857.shp
 2026-09-22 15:06:07,373 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_048_3857.shp
 2026-09-22 15:06:10,263 - INFO - 更新完成: region=黑龙江省, 删除=212, 新增=48, 跳过=0
+2026-09-29 14:39:01,510 - INFO - 目标目录: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省
+2026-09-29 14:39:01,568 - INFO - 识别区域: 亚洲 / 中国 / 黑龙江省
+2026-09-29 14:39:01,568 - INFO - 共发现 50 个 shp 文件
+2026-09-29 14:39:01,605 - INFO - 已删除旧数据 48 条
+2026-09-29 14:39:01,605 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_001_3857.shp
+2026-09-29 14:39:04,742 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_002_3857.shp
+2026-09-29 14:39:10,060 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_003_3857.shp
+2026-09-29 14:39:14,152 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_004_3857.shp
+2026-09-29 14:39:20,153 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_005_3857.shp
+2026-09-29 14:39:22,430 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_006_3857.shp
+2026-09-29 14:39:25,363 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_007_3857.shp
+2026-09-29 14:39:29,326 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_008_3857.shp
+2026-09-29 14:39:35,818 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_009_3857.shp
+2026-09-29 14:39:41,805 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_010_3857.shp
+2026-09-29 14:39:43,633 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_011_3857.shp
+2026-09-29 14:39:46,809 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_012_3857.shp
+2026-09-29 14:39:52,547 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_013_3857.shp
+2026-09-29 14:39:55,939 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_014_3857.shp
+2026-09-29 14:40:01,058 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_015_3857.shp
+2026-09-29 14:40:03,468 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_016_3857.shp
+2026-09-29 14:40:06,458 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_017_3857.shp
+2026-09-29 14:40:08,179 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_018_3857.shp
+2026-09-29 14:40:11,501 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_019_3857.shp
+2026-09-29 14:40:16,470 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_020_3857.shp
+2026-09-29 14:40:20,714 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_021_3857.shp
+2026-09-29 14:40:24,554 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_022_3857.shp
+2026-09-29 14:40:29,201 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_023_3857.shp
+2026-09-29 14:40:32,330 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_024_3857.shp
+2026-09-29 14:40:36,764 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_025_3857.shp
+2026-09-29 14:40:40,535 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_026_3857.shp
+2026-09-29 14:40:47,577 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_027_3857.shp
+2026-09-29 14:40:50,293 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_028_3857.shp
+2026-09-29 14:40:52,956 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_029_3857.shp
+2026-09-29 14:40:57,333 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_030_3857.shp
+2026-09-29 14:40:59,811 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_031_3857.shp
+2026-09-29 14:41:02,328 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_032_3857.shp
+2026-09-29 14:41:05,599 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_033_3857.shp
+2026-09-29 14:41:08,509 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_034_3857.shp
+2026-09-29 14:41:14,867 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_035_3857.shp
+2026-09-29 14:41:19,562 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_036_3857.shp
+2026-09-29 14:41:21,639 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_037_3857.shp
+2026-09-29 14:41:24,890 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_038_3857.shp
+2026-09-29 14:41:28,690 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_039_3857.shp
+2026-09-29 14:41:32,753 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_040_3857.shp
+2026-09-29 14:41:35,809 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_041_3857.shp
+2026-09-29 14:41:39,834 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_042_3857.shp
+2026-09-29 14:41:44,647 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_043_3857.shp
+2026-09-29 14:41:49,665 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_044_3857.shp
+2026-09-29 14:41:56,127 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_045_3857.shp
+2026-09-29 14:42:00,742 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_046_3857.shp
+2026-09-29 14:42:09,402 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_047_3857.shp
+2026-09-29 14:42:18,148 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_048_3857.shp
+2026-09-29 14:42:27,291 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_049_3857.shp
+2026-09-29 14:42:33,061 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\黑龙江省\heilongjiang_001_050_3857.shp
+2026-09-29 14:42:40,544 - INFO - 更新完成: region=黑龙江省, 删除=48, 新增=50, 跳过=0

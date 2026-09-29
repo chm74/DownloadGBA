@@ -1564,6 +1564,50 @@ class ControlTests(unittest.TestCase):
                 server.shutdown()
                 server.server_close()
 
+    def test_completed_process_requeue_endpoint_requires_confirmation_and_updates_lists(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            download_db = build_repo_fixture(root)
+            process_db = build_process_fixture(root)
+            key = "Europe|San_Marino|San_Marino"
+            output_dir = root / "Tools/Oneshp_pipline_qgis/out_data/San_Marino_pipeline"
+            output_dir.mkdir(parents=True)
+            (output_dir / "result.shp").write_bytes(b"output")
+            server = self._make_server(root)
+            try:
+                url = f"http://127.0.0.1:{server.server_address[1]}/api/process/requeue-completed"
+                with urllib.request.urlopen(f"http://127.0.0.1:{server.server_address[1]}/api/status") as response:
+                    recent = json.loads(response.read().decode("utf-8"))["processing"]["recent_done"]
+                self.assertEqual(recent[0]["input_dir"],
+                                 "Tools/Oneshp_pipline_qgis/out_data/San_Marino_pipeline_input")
+                def post(payload):
+                    request = urllib.request.Request(
+                        url, data=json.dumps(payload).encode("utf-8"),
+                        headers={"Content-Type": "application/json"}, method="POST",
+                    )
+                    return urllib.request.urlopen(request, timeout=10)
+                with self.assertRaises(urllib.error.HTTPError) as context:
+                    post({"dataset_key": key})
+                self.assertEqual(context.exception.code, 400)
+                self.assertTrue(output_dir.exists())
+                with self.assertRaises(urllib.error.HTTPError) as context:
+                    post({"dataset_key": key, "confirm_delete": True})
+                self.assertEqual(context.exception.code, 400)
+                with post({"dataset_key": key, "confirm_delete": True,
+                           "expected_output_dir": "Tools/Oneshp_pipline_qgis/out_data/San_Marino_pipeline",
+                           "expected_input_dir": "Tools/Oneshp_pipline_qgis/out_data/San_Marino_pipeline_input"}) as response:
+                    result = json.loads(response.read().decode("utf-8"))
+                self.assertTrue(result["ok"])
+                self.assertEqual(result["queue"][0], key)
+                self.assertFalse(output_dir.exists())
+                with urllib.request.urlopen(f"http://127.0.0.1:{server.server_address[1]}/api/status") as response:
+                    snapshot = json.loads(response.read().decode("utf-8"))["processing"]
+                self.assertNotIn(key, [row["dataset_key"] for row in snapshot["recent_done"]])
+                self.assertEqual(snapshot["queue"][0]["dataset_key"], key)
+            finally:
+                server.shutdown()
+                server.server_close()
+
     def test_process_note_endpoint(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)

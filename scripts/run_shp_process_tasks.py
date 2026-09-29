@@ -1,6 +1,7 @@
 import argparse
 import csv
 import ctypes
+import hashlib
 import json
 import os
 import re
@@ -9,6 +10,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -91,7 +93,10 @@ class ProcessStore:
                 duration_seconds INTEGER,
                 updated_at TEXT NOT NULL,
                 queue_order INTEGER,
-                note TEXT
+                note TEXT,
+                source_fingerprint TEXT,
+                source_updated_at TEXT,
+                download_finished_at TEXT
             );
             CREATE TABLE IF NOT EXISTS process_events (
                 event_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,6 +120,12 @@ class ProcessStore:
             self.conn.execute("ALTER TABLE process_tasks ADD COLUMN queue_order INTEGER")
         if "note" not in columns:
             self.conn.execute("ALTER TABLE process_tasks ADD COLUMN note TEXT")
+        if "source_fingerprint" not in columns:
+            self.conn.execute("ALTER TABLE process_tasks ADD COLUMN source_fingerprint TEXT")
+        if "source_updated_at" not in columns:
+            self.conn.execute("ALTER TABLE process_tasks ADD COLUMN source_updated_at TEXT")
+        if "download_finished_at" not in columns:
+            self.conn.execute("ALTER TABLE process_tasks ADD COLUMN download_finished_at TEXT")
 
     def close(self) -> None:
         self.conn.close()
@@ -155,8 +166,9 @@ class ProcessStore:
                 """
                 INSERT INTO process_tasks (
                     dataset_key, task_id, display_name, process_name_prefix, source_dir,
-                    status, feature_count, shp_files, last_error, updated_at, queue_order
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    status, feature_count, shp_files, last_error, updated_at, queue_order,
+                    source_fingerprint, source_updated_at, download_finished_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     key,
@@ -170,6 +182,9 @@ class ProcessStore:
                     source.get("last_error"),
                     now,
                     next_order,
+                    source.get("source_fingerprint"),
+                    source.get("source_updated_at"),
+                    source.get("download_finished_at"),
                 ),
             )
             self.add_event(key, "PROCESS_SYNC", source["source_dir"])
@@ -179,7 +194,8 @@ class ProcessStore:
                 """
                 UPDATE process_tasks
                 SET task_id = ?, display_name = ?, process_name_prefix = ?, source_dir = ?,
-                    feature_count = ?, shp_files = ?, updated_at = ?
+                    feature_count = ?, shp_files = ?, source_fingerprint = ?,
+                    source_updated_at = ?, download_finished_at = ?, updated_at = ?
                 WHERE dataset_key = ?
                 """,
                 (
@@ -189,11 +205,29 @@ class ProcessStore:
                     source["source_dir"],
                     source.get("feature_count"),
                     shp_files,
+                    source.get("source_fingerprint"),
+                    source.get("source_updated_at"),
+                    source.get("download_finished_at"),
                     now,
                     key,
                 ),
             )
-            if row["status"] == PROCESS_BLOCKED and source["shp_files"]:
+            change_reason = source_change_reason(row, source)
+            if change_reason:
+                self.conn.execute(
+                    """
+                    UPDATE process_tasks
+                    SET status = ?, attempts = 0, tile_count = NULL, stage = NULL,
+                        stage_detail = NULL, tiles_done = NULL, tiles_total = NULL,
+                        last_log = NULL, last_error = NULL, log_file = NULL,
+                        started_at = NULL, finished_at = NULL, duration_seconds = NULL,
+                        updated_at = ?
+                    WHERE dataset_key = ?
+                    """,
+                    (PROCESS_PENDING, now, key),
+                )
+                self.add_event(key, "PROCESS_SOURCE_CHANGED", change_reason)
+            elif row["status"] == PROCESS_BLOCKED and source["shp_files"]:
                 self.conn.execute(
                     "UPDATE process_tasks SET status = ?, last_error = NULL, updated_at = ? WHERE dataset_key = ?",
                     (PROCESS_PENDING, now, key),
@@ -393,6 +427,127 @@ def requeue_task(process_db: Path, dataset_key: str, position: str = "tail") -> 
         store.close()
 
 
+def requeue_completed_task(
+    repo_root: Path, process_db: Path, download_db: Path, dataset_key: str,
+    expected_output_dir: str | None = None, expected_input_dir: str | None = None,
+) -> dict:
+    """Discard one completed processing run and put its source first in the pending queue."""
+    repo_root = Path(repo_root).resolve()
+    output_root = (repo_root / DEFAULT_OUTPUT_ROOT).resolve()
+    store = ProcessStore(process_db)
+    download_conn = None
+    staged: list[tuple[Path, Path]] = []
+    committed = False
+    try:
+        store.conn.execute("BEGIN IMMEDIATE")
+        row = store.get(dataset_key)
+        if row is None:
+            raise KeyError(f"未找到处理任务: {dataset_key}")
+        if row["status"] != PROCESS_OK:
+            raise ValueError(f"只有已完成任务可以置顶重做，当前状态: {row['status']}")
+        recorded_output_name = Path(row.get("output_dir") or "").name
+        prefix = (row.get("process_name_prefix") or
+                  (recorded_output_name[:-len("_pipeline")] if recorded_output_name.endswith("_pipeline") else "") or
+                  dataset_slug(dataset_key))
+        if not prefix or Path(prefix).name != prefix or prefix in (".", "..") or "\\" in prefix:
+            raise ValueError("无效的处理目录前缀")
+
+        def checked_dir(recorded: str, expected_name: str, label: str) -> Path:
+            path = Path(recorded)
+            if not path.is_absolute():
+                path = repo_root / path
+            if path.name.casefold() != expected_name.casefold() or path.parent.resolve() != output_root:
+                raise ValueError(f"{label}不在预期的处理输出目录内: {recorded}")
+            if path.is_symlink():
+                raise ValueError(f"{label}是符号链接，拒绝删除: {recorded}")
+            if path.exists() and not path.is_dir():
+                raise ValueError(f"{label}不是目录，拒绝删除: {recorded}")
+            return path
+
+        if not row.get("output_dir"):
+            raise ValueError("任务未记录输出目录，拒绝删除")
+        output_dir = checked_dir(row["output_dir"], f"{prefix}_pipeline", "输出目录")
+        input_recorded = row.get("input_dir") or Path(row["output_dir"]).with_name(f"{prefix}_pipeline_input").as_posix()
+        if expected_output_dir is not None and row["output_dir"] != expected_output_dir:
+            raise ValueError("输出目录已变化，请刷新页面后再确认")
+        if expected_input_dir is not None and input_recorded != expected_input_dir:
+            raise ValueError("输入副本目录已变化，请刷新页面后再确认")
+        input_dir = checked_dir(input_recorded, f"{prefix}_pipeline_input", "输入副本目录")
+        for other in store.all_tasks():
+            if other["dataset_key"] == dataset_key:
+                continue
+            if (other.get("process_name_prefix") or "").casefold() == prefix.casefold():
+                raise ValueError(f"处理目录与另一任务共享: {other['dataset_key']}")
+            for field, target in (("output_dir", output_dir), ("input_dir", input_dir)):
+                recorded = other.get(field)
+                if recorded and (repo_root / recorded).resolve() == target.resolve():
+                    raise ValueError(f"处理目录与另一任务共享: {other['dataset_key']}")
+
+        marker_path = output_dir / PROCESS_MARKER_NAME
+        if marker_path.exists():
+            marker = json.loads(marker_path.read_text(encoding="utf-8"))
+            if marker.get("dataset_key") != dataset_key:
+                raise ValueError("输出目录完成标记与任务不匹配，拒绝删除")
+
+        if Path(download_db).exists():
+            download_conn = sqlite3.connect(str(download_db))
+            download_conn.execute("BEGIN IMMEDIATE")
+
+        for target in (output_dir, input_dir):
+            if target.exists():
+                staged_path = output_root / f".{target.name}.delete-{uuid.uuid4().hex}"
+                target.rename(staged_path)
+                staged.append((target, staged_path))
+
+        ordered = [dataset_key, *[item["dataset_key"] for item in store.pending_tasks()]]
+        now = lib.utc_now()
+        store.conn.execute(
+            """UPDATE process_tasks SET status = ?, attempts = 0, input_dir = NULL,
+               output_dir = NULL, log_file = NULL, stage = NULL, stage_detail = NULL,
+               tiles_done = NULL, tiles_total = NULL, last_log = NULL, last_error = NULL,
+               tile_count = NULL, feature_count = NULL, started_at = NULL,
+               finished_at = NULL, duration_seconds = NULL, updated_at = ?
+               WHERE dataset_key = ?""",
+            (PROCESS_PENDING, now, dataset_key),
+        )
+        store.conn.executemany(
+            "UPDATE process_tasks SET queue_order = ?, updated_at = ? WHERE dataset_key = ?",
+            [(index, now, key) for index, key in enumerate(ordered, start=1)],
+        )
+        store.conn.execute(
+            "INSERT INTO process_events (dataset_key, event, detail, created_at) VALUES (?, ?, ?, ?)",
+            (dataset_key, "PROCESS_REDO_TOP", f"deleted={output_dir}; input={input_dir}", now),
+        )
+        if download_conn is not None and row.get("task_id"):
+            download_conn.execute(
+                "UPDATE tasks SET processed_3857_dir = NULL, updated_at = ? WHERE task_id = ?",
+                (now, row["task_id"]),
+            )
+            download_conn.commit()
+        store.conn.commit()
+        committed = True
+    except Exception:
+        store.conn.rollback()
+        if download_conn is not None:
+            download_conn.rollback()
+        if not committed:
+            for original, staged_path in reversed(staged):
+                staged_path.rename(original)
+        raise
+    finally:
+        if download_conn is not None:
+            download_conn.close()
+        store.close()
+
+    cleanup_errors = []
+    for _, staged_path in staged:
+        try:
+            shutil.rmtree(staged_path)
+        except OSError as exc:
+            cleanup_errors.append(f"{staged_path}: {exc}")
+    return {"queue": ordered, "cleanup_error": "；".join(cleanup_errors) or None}
+
+
 def reset_running_in_db(process_db: Path) -> int:
     store = ProcessStore(process_db)
     try:
@@ -515,8 +670,59 @@ def read_download_candidates(repo_root: Path, download_db: Path) -> list[dict]:
             task_dir = lib.resolve_task_dir(repo_root, directory)
         except ValueError:
             continue
-        candidates.append({"task_id": row["task_id"], "dir": task_dir, "from_existing": bool(existing)})
+        candidates.append(
+            {
+                "task_id": row["task_id"],
+                "dir": task_dir,
+                "from_existing": bool(existing),
+                "download_finished_at": row["finished_at"],
+            }
+        )
     return candidates
+
+
+def source_file_fingerprint(repo_root: Path, shp_files: list[Path]) -> tuple[str | None, str | None]:
+    records: list[tuple[str, int, int]] = []
+    latest_mtime = 0.0
+    for shp in sorted((Path(path) for path in shp_files), key=lambda path: str(path).lower()):
+        for suffix in (".shp", *SIDECAR_SUFFIXES):
+            component = shp.with_suffix(suffix)
+            if not component.is_file():
+                continue
+            stat = component.stat()
+            records.append((lib.repo_relative(repo_root, component), stat.st_size, stat.st_mtime_ns))
+            latest_mtime = max(latest_mtime, stat.st_mtime)
+    if not records:
+        return None, None
+    payload = json.dumps(records, ensure_ascii=False, separators=(",", ":"))
+    fingerprint = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    updated_at = datetime.fromtimestamp(latest_mtime).isoformat(timespec="seconds")
+    return fingerprint, updated_at
+
+
+def _timestamp_is_later(candidate: str | None, reference: str | None) -> bool:
+    if not candidate or not reference:
+        return False
+    try:
+        return datetime.fromisoformat(candidate) > datetime.fromisoformat(reference)
+    except ValueError:
+        return candidate > reference
+
+
+def source_change_reason(row: dict, source: dict) -> str | None:
+    if row.get("status") != PROCESS_OK:
+        return None
+    process_finished_at = row.get("finished_at")
+    download_finished_at = source.get("download_finished_at")
+    if _timestamp_is_later(download_finished_at, process_finished_at):
+        return f"下载完成时间更新: {download_finished_at} > {process_finished_at}"
+    old_fingerprint = row.get("source_fingerprint")
+    new_fingerprint = source.get("source_fingerprint")
+    if old_fingerprint and new_fingerprint and old_fingerprint != new_fingerprint:
+        return "源 SHP 文件指纹已变化"
+    if not old_fingerprint and _timestamp_is_later(source.get("source_updated_at"), process_finished_at):
+        return "首次记录源 SHP 指纹，且源文件晚于处理完成时间"
+    return None
 
 
 def discover_sources(
@@ -530,7 +736,12 @@ def discover_sources(
     repo_root = Path(repo_root)
     sources: dict[str, dict] = {}
 
-    def register(directory: Path, task_id: str | None, from_existing: bool) -> None:
+    def register(
+        directory: Path,
+        task_id: str | None,
+        from_existing: bool,
+        download_finished_at: str | None = None,
+    ) -> None:
         directory = Path(directory).resolve()
         if is_skipped_dir(directory) or not directory.is_dir():
             return
@@ -547,6 +758,7 @@ def discover_sources(
             {"dataset_key": key, "task_id": task_id, "shp_files": [shp.name for shp in shps]},
             prefix_map,
         )
+        source_fingerprint, source_updated_at = source_file_fingerprint(repo_root, shps)
         if not shps:
             merged = sorted(directory.glob("*_buildings_height_gba.gpkg"))
             if merged:
@@ -560,6 +772,9 @@ def discover_sources(
                     "feature_count": None,
                     "status": PROCESS_BLOCKED,
                     "last_error": "只有合并 gpkg，缺少交付 SHP；先运行 run_world_building_tasks.py --export-shp-only",
+                    "source_fingerprint": source_fingerprint,
+                    "source_updated_at": source_updated_at,
+                    "download_finished_at": download_finished_at,
                 }
             return
         sources[key] = {
@@ -571,14 +786,27 @@ def discover_sources(
             "shp_files": [lib.repo_relative(repo_root, shp) for shp in shps],
             "feature_count": count_shp_features(shps),
             "status": PROCESS_PENDING,
+            "source_fingerprint": source_fingerprint,
+            "source_updated_at": source_updated_at,
+            "download_finished_at": download_finished_at,
         }
 
     for candidate in read_download_candidates(repo_root, download_db):
         if candidate["from_existing"]:
-            register(candidate["dir"], candidate["task_id"], True)
+            register(
+                candidate["dir"],
+                candidate["task_id"],
+                True,
+                candidate.get("download_finished_at"),
+            )
     for candidate in read_download_candidates(repo_root, download_db):
         if not candidate["from_existing"]:
-            register(candidate["dir"], candidate["task_id"], False)
+            register(
+                candidate["dir"],
+                candidate["task_id"],
+                False,
+                candidate.get("download_finished_at"),
+            )
 
     if scan_enabled and Path(scan_root).is_dir():
         seen_dirs = {str((repo_root / source["source_dir"]).resolve()) for source in sources.values()}

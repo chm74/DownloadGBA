@@ -233,6 +233,7 @@
           <h2>最近完成</h2>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
             <span id="p-recent-summary" class="muted">-</span>
+            <span id="p-recent-message" class="muted"></span>
             <button id="p-recent-first" type="button" style="padding:4px 10px;cursor:pointer;">首页</button>
             <button id="p-recent-prev" type="button" style="padding:4px 10px;cursor:pointer;">上一页</button>
             <span id="p-recent-page-label" class="muted">-</span>
@@ -815,7 +816,7 @@ function renderProcessingRecent(processing) {
   }
   box.innerHTML = `
     <table>
-      <thead><tr><th>数据集</th><th>命名前缀</th><th>分片数</th><th>要素数</th><th>耗时</th><th>完成时间</th><th>输出目录</th></tr></thead>
+      <thead><tr><th>数据集</th><th>命名前缀</th><th>分片数</th><th>要素数</th><th>耗时</th><th>完成时间</th><th>输出目录</th><th>操作</th></tr></thead>
       <tbody>${items.map(item => `
         <tr>
           <td class="mono">${esc(item.dataset_key)}</td>
@@ -825,10 +826,49 @@ function renderProcessingRecent(processing) {
           <td>${fmtDuration(item.duration_seconds)}</td>
           <td>${esc(item.finished_at || "-")}</td>
           <td class="mono">${esc(item.output_dir || "-")}</td>
+          <td><button type="button" class="mini" data-prequeue-completed="${esc(item.dataset_key)}" data-output-dir="${esc(item.output_dir || "")}" data-input-dir="${esc(item.input_dir || "")}" title="删除处理产物并重新加入待处理队首">置顶</button></td>
         </tr>`).join("")}
       </tbody>
     </table>`;
 }
+
+async function requeueCompletedProcessing(datasetKey, button) {
+  const outputDir = button.dataset.outputDir || "未记录";
+  const inputDir = button.dataset.inputDir || "未记录或不存在";
+  if (!window.confirm(`确认将“${datasetKey}”重新加入待处理队首？\n将永久删除处理输出：${outputDir}\n以及处理输入副本：${inputDir}\n原始下载数据保留。删除后无法恢复。`)) return;
+  const message = document.getElementById("p-recent-message");
+  button.disabled = true;
+  message.textContent = "正在删除处理产物并置顶…";
+  try {
+    const response = await fetch("/api/process/requeue-completed", {
+      method: "POST",
+      headers: actionHeaders(),
+      body: JSON.stringify({
+        dataset_key: datasetKey, confirm_delete: true,
+        expected_output_dir: button.dataset.outputDir,
+        expected_input_dir: button.dataset.inputDir,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      message.textContent = (data.queue ? "" : "置顶失败：") + (data.error || response.status);
+      if (data.queue) refresh();
+      return;
+    }
+    message.textContent = `已删除处理产物并加入待处理队首（待处理 ${data.pending_total} 条，下次执行处理生效）`;
+    refresh();
+  } catch (error) {
+    message.textContent = "置顶请求失败：" + error;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+document.getElementById("p-recent-table").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-prequeue-completed]");
+  if (!button || button.disabled) return;
+  requeueCompletedProcessing(button.dataset.prequeueCompleted, button);
+});
 
 function bindProcessingRecentNav(buttonId, targetPage) {
   document.getElementById(buttonId).addEventListener("click", () => {

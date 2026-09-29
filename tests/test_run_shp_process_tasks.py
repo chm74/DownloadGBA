@@ -142,6 +142,108 @@ class SyncTests(unittest.TestCase):
             finally:
                 store.close()
 
+    def test_sync_requeues_completed_task_when_download_finished_after_processing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            download_db, data_root = build_repo_fixture(repo_root)
+            process_db = repo_root / "process.db"
+            runner.sync_process_tasks(repo_root, process_db, download_db, data_root, [], [])
+
+            key = "Asia|China|Guangxi"
+            process_store = runner.ProcessStore(process_db)
+            try:
+                original_order = process_store.get(key)["queue_order"]
+                process_store.set_note(key, "保留这条备注")
+                process_store.set_status(
+                    key,
+                    runner.PROCESS_OK,
+                    attempts=3,
+                    tile_count=12,
+                    stage="VERIFY",
+                    stage_detail="旧处理已经完成",
+                    tiles_done=12,
+                    tiles_total=12,
+                    last_log="old log",
+                    last_error="old error",
+                    log_file="old.log",
+                    started_at="2098-01-01T00:00:00",
+                    finished_at="2099-01-01T00:00:00",
+                    duration_seconds=600,
+                )
+            finally:
+                process_store.close()
+
+            download_store = lib.StateStore(download_db)
+            try:
+                download_store.set_status(
+                    key,
+                    lib.STATUS_OK,
+                    feature_count=2,
+                    finished_at="2100-01-01T00:00:00",
+                )
+            finally:
+                download_store.close()
+
+            runner.sync_process_tasks(repo_root, process_db, download_db, data_root, [], [])
+
+            process_store = runner.ProcessStore(process_db)
+            try:
+                row = process_store.get(key)
+                self.assertEqual(row["status"], runner.PROCESS_PENDING)
+                self.assertEqual(row["queue_order"], original_order)
+                self.assertEqual(row["note"], "保留这条备注")
+                self.assertEqual(row["attempts"], 0)
+                for field in (
+                    "tile_count",
+                    "stage",
+                    "stage_detail",
+                    "tiles_done",
+                    "tiles_total",
+                    "last_log",
+                    "last_error",
+                    "log_file",
+                    "started_at",
+                    "finished_at",
+                    "duration_seconds",
+                ):
+                    self.assertIsNone(row[field], field)
+                self.assertTrue(row["source_fingerprint"])
+                self.assertEqual(row["download_finished_at"], "2100-01-01T00:00:00")
+            finally:
+                process_store.close()
+
+    def test_sync_requeues_completed_task_when_source_fingerprint_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            download_db, data_root = build_repo_fixture(repo_root)
+            process_db = repo_root / "process.db"
+            runner.sync_process_tasks(repo_root, process_db, download_db, data_root, [], [])
+
+            key = "Asia|China|Guangxi"
+            process_store = runner.ProcessStore(process_db)
+            try:
+                before = process_store.get(key)
+                self.assertTrue(before["source_fingerprint"])
+                process_store.set_status(
+                    key,
+                    runner.PROCESS_OK,
+                    finished_at="2100-01-01T00:00:00",
+                )
+            finally:
+                process_store.close()
+
+            cpg_path = data_root / "Asia" / "Guangxi" / "guangxi_buildings_height_gba.cpg"
+            cpg_path.write_text("UTF-8\n", encoding="ascii")
+            runner.sync_process_tasks(repo_root, process_db, download_db, data_root, [], [])
+
+            process_store = runner.ProcessStore(process_db)
+            try:
+                after = process_store.get(key)
+                self.assertEqual(after["status"], runner.PROCESS_PENDING)
+                self.assertNotEqual(after["source_fingerprint"], before["source_fingerprint"])
+            finally:
+                process_store.close()
+
     def test_sync_only_filter(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)
@@ -724,6 +826,128 @@ class ProcessRequeueTests(unittest.TestCase):
 
                 queue = runner.requeue_task(process_db, key, "top")
                 self.assertEqual(queue[0], key)
+                self.assertEqual(store.get(key)["status"], runner.PROCESS_PENDING)
+            finally:
+                store.close()
+
+    def test_requeue_completed_deletes_generated_dirs_and_clears_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            download_db, data_root = build_repo_fixture(root)
+            process_db = root / "process.db"
+            runner.sync_process_tasks(root, process_db, download_db, data_root, [], [])
+            key = "Europe|San_Marino|San_Marino"
+            output_rel = "Tools/Oneshp_pipline_qgis/out_data/San_Marino_pipeline"
+            input_rel = "Tools/Oneshp_pipline_qgis/out_data/San_Marino_pipeline_input"
+            output_dir, input_dir = root / output_rel, root / input_rel
+            output_dir.mkdir(parents=True)
+            input_dir.mkdir(parents=True)
+            (output_dir / "result.shp").write_bytes(b"output")
+            (input_dir / "source.shp").write_bytes(b"copy")
+            store = runner.ProcessStore(process_db)
+            try:
+                store.set_status(key, runner.PROCESS_OK, attempts=2, tile_count=1,
+                                 feature_count=123, output_dir=output_rel, input_dir=input_rel,
+                                 finished_at="2026-01-01T00:00:00")
+                store.set_note(key, "keep")
+            finally:
+                store.close()
+            download_store = lib.StateStore(download_db)
+            try:
+                download_store.set_processed_3857(key, output_rel)
+            finally:
+                download_store.close()
+
+            result = runner.requeue_completed_task(root, process_db, download_db, key)
+
+            self.assertEqual(result["queue"][0], key)
+            self.assertFalse(output_dir.exists())
+            self.assertFalse(input_dir.exists())
+            self.assertTrue((root / "data/Europe/San_Marino/San_Marino_buildings_height_gba.shp").exists())
+            store = runner.ProcessStore(process_db)
+            try:
+                row = store.get(key)
+                self.assertEqual(row["status"], runner.PROCESS_PENDING)
+                self.assertEqual(row["note"], "keep")
+                self.assertEqual(row["attempts"], 0)
+                for field in ("input_dir", "output_dir", "tile_count", "feature_count", "finished_at", "log_file"):
+                    self.assertIsNone(row[field], field)
+            finally:
+                store.close()
+            download_store = lib.StateStore(download_db)
+            try:
+                self.assertIsNone(download_store.get(key)["processed_3857_dir"])
+            finally:
+                download_store.close()
+
+    def test_requeue_completed_rejects_shared_and_outside_output_dirs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            download_db, data_root = build_repo_fixture(root)
+            process_db = root / "process.db"
+            runner.sync_process_tasks(root, process_db, download_db, data_root, [], [])
+            key = "Europe|San_Marino|San_Marino"
+            output_rel = "Tools/Oneshp_pipline_qgis/out_data/San_Marino_pipeline"
+            output_dir = root / output_rel
+            output_dir.mkdir(parents=True)
+            (output_dir / "result.shp").write_bytes(b"output")
+            store = runner.ProcessStore(process_db)
+            try:
+                store.set_status(key, runner.PROCESS_OK, output_dir=output_rel)
+                store.upsert_source({"dataset_key": "alias", "source_dir": "data/alias", "shp_files": [],
+                                     "process_name_prefix": "San_Marino"})
+            finally:
+                store.close()
+            with self.assertRaisesRegex(ValueError, "共享"):
+                runner.requeue_completed_task(root, process_db, download_db, key)
+            self.assertTrue(output_dir.exists())
+            store = runner.ProcessStore(process_db)
+            try:
+                store.conn.execute("DELETE FROM process_tasks WHERE dataset_key = 'alias'")
+                store.conn.commit()
+            finally:
+                store.close()
+            with self.assertRaisesRegex(ValueError, "已变化"):
+                runner.requeue_completed_task(
+                    root, process_db, download_db, key,
+                    expected_output_dir="Tools/Oneshp_pipline_qgis/out_data/other_pipeline",
+                )
+            self.assertTrue(output_dir.exists())
+            store = runner.ProcessStore(process_db)
+            try:
+                store.set_status(key, runner.PROCESS_OK, output_dir="data/unsafe_pipeline")
+            finally:
+                store.close()
+            outside_dir = root / "data/unsafe_pipeline"
+            outside_dir.mkdir(parents=True)
+            (outside_dir / "keep.txt").write_text("keep")
+            with self.assertRaisesRegex(ValueError, "输出目录"):
+                runner.requeue_completed_task(root, process_db, download_db, key)
+            self.assertTrue((outside_dir / "keep.txt").exists())
+
+    def test_requeue_completed_reports_cleanup_failure_after_isolating_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            download_db, data_root = build_repo_fixture(root)
+            process_db = root / "process.db"
+            runner.sync_process_tasks(root, process_db, download_db, data_root, [], [])
+            key = "Europe|San_Marino|San_Marino"
+            output_rel = "Tools/Oneshp_pipline_qgis/out_data/San_Marino_pipeline"
+            output_dir = root / output_rel
+            output_dir.mkdir(parents=True)
+            (output_dir / "result.shp").write_bytes(b"output")
+            store = runner.ProcessStore(process_db)
+            try:
+                store.set_status(key, runner.PROCESS_OK, output_dir=output_rel)
+            finally:
+                store.close()
+            with patch.object(runner.shutil, "rmtree", side_effect=OSError("locked")):
+                result = runner.requeue_completed_task(root, process_db, download_db, key)
+            self.assertIn("locked", result["cleanup_error"])
+            self.assertFalse(output_dir.exists())
+            self.assertEqual(len(list(output_dir.parent.glob(".San_Marino_pipeline.delete-*"))), 1)
+            store = runner.ProcessStore(process_db)
+            try:
                 self.assertEqual(store.get(key)["status"], runner.PROCESS_PENDING)
             finally:
                 store.close()

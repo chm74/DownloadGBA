@@ -1,0 +1,30 @@
+2026-09-29 14:15:33,276 - INFO - 目标目录: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\吉林省
+2026-09-29 14:15:33,276 - INFO - 识别区域: 亚洲 / 中国 / 吉林省
+2026-09-29 14:15:33,276 - INFO - 共发现 39 个 shp 文件
+2026-09-29 14:15:33,369 - INFO - 已删除旧数据 156 条
+2026-09-29 14:15:33,370 - INFO - 处理文件: \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\吉林省\jilin_001_001_3857.shp
+2026-09-29 14:15:40,544 - ERROR - 执行失败: continent=亚洲, country=中国, region=吉林省
+Traceback (most recent call last):
+  File "F:\DownloadGBA\updateTools\twopyshp2pgsql\main3_region.py", line 264, in refresh_targets
+    refresh_region_data(root=root, target=target, logger=logger)
+  File "F:\DownloadGBA\updateTools\twopyshp2pgsql\main3_region.py", line 234, in refresh_region_data
+    bbox_wkt = build_bbox_wkt(shp_path, logger)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\DownloadGBA\updateTools\twopyshp2pgsql\main3_region.py", line 182, in build_bbox_wkt
+    gdf = gpd.read_file(shp_path)
+          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\DownloadGBA\updateTools\twopyshp2pgsql\.venv\Lib\site-packages\geopandas\io\file.py", line 316, in _read_file
+    return _read_file_pyogrio(
+           ^^^^^^^^^^^^^^^^^^^
+  File "F:\DownloadGBA\updateTools\twopyshp2pgsql\.venv\Lib\site-packages\geopandas\io\file.py", line 576, in _read_file_pyogrio
+    return pyogrio.read_dataframe(path_or_bytes, bbox=bbox, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\DownloadGBA\updateTools\twopyshp2pgsql\.venv\Lib\site-packages\pyogrio\geopandas.py", line 382, in read_dataframe
+    result = read_func(
+             ^^^^^^^^^^
+  File "F:\DownloadGBA\updateTools\twopyshp2pgsql\.venv\Lib\site-packages\pyogrio\raw.py", line 200, in read
+    return ogr_read(
+           ^^^^^^^^^
+  File "pyogrio/_io.pyx", line 1412, in pyogrio._io.ogr_read
+  File "pyogrio/_io.pyx", line 262, in pyogrio._io.ogr_open
+pyogrio.errors.DataSourceError: Unable to open \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\吉林省\jilin_001_001_3857.shx or \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\吉林省\jilin_001_001_3857.SHX. Set SHAPE_RESTORE_SHX config option to YES to restore or create it.

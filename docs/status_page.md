@@ -63,6 +63,7 @@ New-NetFirewallRule -DisplayName "GBA Status" -Direction Inbound -LocalPort 8765
 - `POST /api/queue/requeue`：把失败任务重新入队，请求体 `{"task_id": "...", "position": "tail|top"}`（缺省 `tail`；兼容 `dataset_key` 字段名）；任务不存在返回 404，非 FAILED 状态或非法 position 返回 400；成功后返回 `{"ok": true, "task_id": ..., "position": ..., "queue": [...], "pending_total": N}`；受 `--action-token` 保护
 - `POST /api/process/reorder`：调整处理队列顺序，请求体 `{"dataset_key": "...", "direction": "up|down|top"}`；受 `--action-token` 保护
 - `POST /api/process/requeue`：把处理失败任务重新加入待处理队列，请求体 `{"dataset_key": "...", "position": "tail|top"}`（缺省 `tail`）；任务不存在返回 404，非 FAILED 状态或非法 position 返回 400；成功后返回 `{"ok": true, "dataset_key": ..., "position": ..., "queue": [...], "pending_total": N}`；受 `--action-token` 保护
+- `POST /api/process/requeue-completed`：确认永久删除处理产物后，将已完成任务重置并置顶；请求体包含 `dataset_key`、`confirm_delete: true` 和页面展示的 `expected_output_dir`、`expected_input_dir`。服务端重新校验状态、路径及共享引用；受 `--action-token` 保护
 - `POST /api/process/note`：保存处理队列备注，请求体 `{"dataset_key": "...", "note": "..."}`（≤200 字符；key 不存在返回 404）；受 `--action-token` 保护
 - `POST /api/process/sync`：扫描下载完成的数据并同步到处理队列（等价于 `run_shp_process_tasks.py --sync`），返回 `{"ok": true, "total": N, "added": N, "updated": N}`；受 `--action-token` 保护
 - `GET /api/process/control`：处理队列控制状态（运行中、执行器 PID、当前任务、默认日志文件）
@@ -79,12 +80,14 @@ New-NetFirewallRule -DisplayName "GBA Status" -Direction Inbound -LocalPort 8765
 - 处理控制：显示运行状态 / 执行器 PID / 当前任务；可填「数量」（0=全部待处理）并勾选「资源不足时等待」，点「开始执行」在后台启动处理队列；点「停止处理」会连同 pipeline 子进程一起停止，并把 RUNNING 任务重置为「待处理」（可再次开始续跑）；点「同步队列」手动扫描下载完成的数据并加入待处理队列（等价于 `--sync`）。执行器日志 `data/process_run.log`
   - 注意：启动后为独立后台进程，重启看板不影响它；与下载解耦，处理前建议先在「建筑数据下载」页签停止下载
   - 下载完成的任务默认会自动登记进处理队列（由 `run_world_building_tasks.py` 在任务成功后写入，`--no-process-sync` 可关闭）；看板启动前的历史完成数据可点「同步队列」补登记
+  - 对已处理完成（`OK`）的数据集，同步会比较下载完成时间及源 SHP 文件指纹；发现源数据晚于处理完成时间或文件指纹变化时，自动恢复为 `PENDING`。队列顺序和备注保留，旧尝试次数、阶段、进度、日志、错误和完成时间清空
 - 左侧卡片：处理任务总数、运行中、待处理、已完成、失败/阻塞
 - 当前处理任务：命名前缀、阶段（准备输入 / 切分 / QGIS 校验 / 清洗 / 重投影 / 产物校验）、分片进度条（n/N）、预计剩余、源要素数、产物大小、来源与输出目录、stdout 日志尾（超过 10 分钟无进度更新标记「可能卡住」）
 - 待处理队列：排序（`#` 序号 + ↑/↓/⤒ 按钮）、数据集、命名前缀、来源目录、要素数、SHP 文件数、备注
 - 队列备注：可直接编辑（上限 200 字符），**失焦或回车自动保存**、`Esc` 撤销；保存到处理库 `process_tasks.note`，重跑/sync 不会清空；与「数据库表已更新」页签的备注（存 `db_update_status.json`）互相独立
 - 队列排序：点「排序」列按钮即可手动调整待处理任务的执行顺序（即时写入处理库 `queue_order`），**在下次 `--run` 时生效**；也可用 CLI `--move-up / --move-down / --move-top / --order` 调整
 - 最近完成：命名前缀、分片数、要素数、耗时、完成时间、输出目录
+- 处理「最近完成」每项提供「置顶」：确认后永久删除该任务的处理输出目录和处理输入副本，保留原始下载数据；将任务重置为待处理并排到队首，下次执行处理生效。服务端拒绝共享目录或输出根目录以外的删除路径
 - 失败/阻塞：失败原因与尝试次数；失败表提供「操作」列：「加入队列」追加到待处理队尾、「置顶」排到队首，把 FAILED 任务重置为待处理（清空阶段与错误，尝试次数保留），**在下次 `--run` 时生效**；阻塞表示只有合并 gpkg、缺少交付 SHP（先运行 `python scripts/run_world_building_tasks.py --export-shp-only`）
 - 命名规则：处理阶段以 `<process_name_prefix>` 开头（prefix 取下载清单 CSV 第 5 列，只读；缺失时从输入文件名推导）：输入副本 `<prefix>.shp` / `<prefix>_partNN.shp`，目录 `<prefix>_pipeline(_input)`，最终分片 `<prefix>_xxx_xxx_3857.shp`
 
