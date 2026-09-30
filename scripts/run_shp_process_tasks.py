@@ -548,6 +548,55 @@ def requeue_completed_task(
     return {"queue": ordered, "cleanup_error": "；".join(cleanup_errors) or None}
 
 
+def reset_task_after_download_redo(
+    repo_root: Path, process_db: Path, download_db: Path, dataset_key: str
+) -> str | None:
+    """下载数据被重做后，重置对应的处理任务并置顶。
+
+    已完成（OK）的处理任务会复用 requeue_completed_task 删除其产物与输入副本；
+    其它状态仅重置为待处理并置顶。返回清理错误字符串；无该处理任务时返回 None。
+    """
+    repo_root = Path(repo_root).resolve()
+    store = ProcessStore(process_db)
+    try:
+        row = store.get(dataset_key)
+        if row is None:
+            return None
+        if row["status"] == PROCESS_OK:
+            try:
+                result = requeue_completed_task(repo_root, process_db, download_db, dataset_key)
+                return result.get("cleanup_error")
+            except (KeyError, ValueError):
+                pass
+
+        pending = [item["dataset_key"] for item in store.pending_tasks() if item["dataset_key"] != dataset_key]
+        ordered = [dataset_key, *pending]
+        now = lib.utc_now()
+        store.conn.execute(
+            """
+            UPDATE process_tasks
+            SET status = ?, attempts = 0, input_dir = NULL, output_dir = NULL, log_file = NULL,
+                stage = NULL, stage_detail = NULL, tiles_done = NULL, tiles_total = NULL,
+                last_log = NULL, last_error = NULL, tile_count = NULL, feature_count = NULL,
+                started_at = NULL, finished_at = NULL, duration_seconds = NULL, updated_at = ?
+            WHERE dataset_key = ?
+            """,
+            (PROCESS_PENDING, now, dataset_key),
+        )
+        store.conn.executemany(
+            "UPDATE process_tasks SET queue_order = ?, updated_at = ? WHERE dataset_key = ?",
+            [(index, now, key) for index, key in enumerate(ordered, start=1)],
+        )
+        store.conn.execute(
+            "INSERT INTO process_events (dataset_key, event, detail, created_at) VALUES (?, ?, ?, ?)",
+            (dataset_key, "PROCESS_REDO_TOP_FROM_DOWNLOAD", "", now),
+        )
+        store.conn.commit()
+        return None
+    finally:
+        store.close()
+
+
 def reset_running_in_db(process_db: Path) -> int:
     store = ProcessStore(process_db)
     try:

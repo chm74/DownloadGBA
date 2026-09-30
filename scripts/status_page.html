@@ -11,7 +11,7 @@
   }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font: 14px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; }
-  .wrap { max-width: 1428px; margin: 0 auto; padding: 20px 16px 48px; }
+  .wrap { max-width: 1571px; margin: 0 auto; padding: 20px 16px 48px; }
   header { display:flex; flex-wrap:wrap; align-items:baseline; gap:10px 16px; margin-bottom:16px; }
   h1 { font-size:20px; margin:0; }
   .muted { color:var(--muted); font-size:12px; }
@@ -21,8 +21,12 @@
   .badge.done { background:var(--ok); }
   .badge.unknown { background:var(--muted); }
   .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin:0 0 16px; position:sticky; top:0; z-index:20; background:var(--bg); }
+  .queue-toolbar, .sticky-toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; padding-bottom:8px; position:sticky; top:40px; z-index:15; background:var(--card); border-bottom:1px solid var(--line); }
   .tab { background:none; border:none; border-bottom:2px solid transparent; padding:8px 14px; margin-bottom:-1px; cursor:pointer; color:var(--muted); font:inherit; font-size:14px; }
   .tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+  .subtabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin:0 0 12px; }
+  .subtab { background:none; border:none; border-bottom:2px solid transparent; padding:6px 12px; margin-bottom:-1px; cursor:pointer; color:var(--muted); font:inherit; font-size:13px; }
+  .subtab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
   .panel[hidden] { display:none; }
   .plain-list { margin:0; padding-left:18px; color:var(--muted); font-size:13px; }
   .plain-list li { margin-bottom:6px; }
@@ -127,7 +131,7 @@
 
   <section>
     <h2>队列（全部待执行任务）</h2>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+    <div class="queue-toolbar">
       <span id="queue-summary" class="muted">-</span>
       <label class="muted">搜索城市
         <input id="queue-search" type="text" placeholder="中文或英文，如 安哥拉 / Angola"
@@ -158,7 +162,7 @@
   <section>
     <h2>最近完成</h2>
     <div class="muted" style="margin-bottom:10px;">
-      点“置顶”可将完成任务重新加入待执行队首（下次启动批处理生效）｜<span id="recent-message"></span>
+      点“置顶”可删除旧下载数据并将任务重置到队首重下（下次启动批处理生效）｜<span id="recent-message"></span>
     </div>
     <div id="recent-table"><div class="empty">暂无已完成任务</div></div>
   </section>
@@ -166,7 +170,7 @@
   <section id="failed-section" style="display:none">
     <h2>失败任务</h2>
     <div class="muted" style="margin-bottom:10px;">
-      点「加入队列」把失败任务重新排入待执行队列（下次启动批处理生效）｜<span id="failed-message"></span>
+      点「置顶」把失败任务重新排入待执行队首（下次启动批处理生效）｜<span id="failed-message"></span>
     </div>
     <div id="failed-table"></div>
   </section>
@@ -231,7 +235,7 @@
 
         <section>
           <h2>最近完成</h2>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+          <div class="sticky-toolbar">
             <span id="p-recent-summary" class="muted">-</span>
             <span id="p-recent-message" class="muted"></span>
             <button id="p-recent-first" type="button" style="padding:4px 10px;cursor:pointer;">首页</button>
@@ -246,7 +250,7 @@
         <section id="p-failed-section" style="display:none">
           <h2>失败 / 阻塞</h2>
           <div class="muted" style="margin-bottom:10px;">
-            点「加入队列」把失败任务重新排入待处理队列（下次执行处理生效）｜<span id="p-failed-message"></span>
+            点「置顶」把失败任务重新排入待处理队首（下次执行处理生效）｜<span id="p-failed-message"></span>
           </div>
           <div id="p-failed-table"></div>
         </section>
@@ -284,6 +288,27 @@
             <span class="muted">对已完成处理的任务手动标记是否已更新到数据库表，保存后写入 <code>data/db_update_status.json</code>。</span>
             <button id="d-save" type="button" style="padding:4px 12px;cursor:pointer;">保存修改</button>
             <span id="d-message" class="muted"></span>
+          </div>
+          <div class="subtabs">
+            <button type="button" class="subtab active" data-dfilter="updated">更新到库（<span id="d-count-updated">0</span>）</button>
+            <button type="button" class="subtab" data-dfilter="pending">未更新到库（<span id="d-count-pending">0</span>）</button>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+            <span id="d-summary" class="muted">-</span>
+            <label class="muted">每页
+              <select id="d-page-size" style="margin-left:4px;padding:3px 6px;">
+                <option value="15" selected>15</option>
+                <option value="30">30</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="200">200</option>
+              </select>
+            </label>
+            <button id="d-first" type="button" style="padding:4px 10px;cursor:pointer;">首页</button>
+            <button id="d-prev" type="button" style="padding:4px 10px;cursor:pointer;">上一页</button>
+            <span id="d-page-label" class="muted">-</span>
+            <button id="d-next" type="button" style="padding:4px 10px;cursor:pointer;">下一页</button>
+            <button id="d-last" type="button" style="padding:4px 10px;cursor:pointer;">末页</button>
           </div>
           <div id="d-table"><div class="empty">暂无已完成处理的任务</div></div>
         </section>
@@ -431,12 +456,13 @@ function renderQueue(items, total, page, pageSize, totalAll) {
       <tbody>${items.map(item => {
         const isFirst = item.order === 1;
         const isLast = item.order >= total;
+        const isGlobalFirst = item.global_order === 1;
         return `
         <tr>
           <td>
             <button type="button" class="mini" data-reorder="${esc(item.task_id)}" data-direction="up" title="上移" ${isFirst ? "disabled" : ""}>↑</button>
             <button type="button" class="mini" data-reorder="${esc(item.task_id)}" data-direction="down" title="下移" ${isLast ? "disabled" : ""}>↓</button>
-            <button type="button" class="mini" data-reorder="${esc(item.task_id)}" data-direction="top" title="置顶" ${isFirst ? "disabled" : ""}>⤒</button>
+            <button type="button" class="mini" data-reorder="${esc(item.task_id)}" data-direction="top" title="置顶" ${isGlobalFirst ? "disabled" : ""}>⤒</button>
           </td>
           <td>${esc(item.order)}</td>
           <td class="mono">${esc(item.task_id)}</td>
@@ -558,7 +584,7 @@ function renderRecent(items) {
   }
   box.innerHTML = `
     <table>
-      <thead><tr><th>任务</th><th>状态</th><th>要素数</th><th>耗时</th><th>完成时间</th><th>操作</th></tr></thead>
+      <thead><tr><th>任务</th><th>状态</th><th>要素数</th><th>耗时</th><th>完成时间</th><th>下载目录</th><th>操作</th></tr></thead>
       <tbody>${items.map(item => `
         <tr>
           <td class="mono">${esc(item.task_id)}</td>
@@ -566,7 +592,8 @@ function renderRecent(items) {
           <td>${esc(item.feature_count ?? "-")}</td>
           <td>${fmtDuration(item.duration_seconds)}</td>
           <td>${esc(item.finished_at || "-")}</td>
-          <td><button type="button" class="mini" data-requeue="${esc(item.task_id)}" data-position="top" title="重新加入待执行队首">置顶</button></td>
+          <td class="mono">${esc(item.download_dir || "-")}</td>
+          <td><button type="button" class="mini" data-requeue-completed="${esc(item.task_id)}" data-download-dir="${esc(item.download_dir || "")}" title="删除旧下载数据并置顶重做">置顶</button></td>
         </tr>`).join("")}
       </tbody>
     </table>`;
@@ -591,7 +618,6 @@ function renderFailed(items) {
           <td>${esc(item.last_error)}</td>
           <td>${esc(item.finished_at || "-")}</td>
           <td>
-            <button type="button" class="mini" data-requeue="${esc(item.task_id)}" data-position="tail" title="追加到队尾">加入队列</button>
             <button type="button" class="mini" data-requeue="${esc(item.task_id)}" data-position="top" title="置顶到队首">置顶</button>
           </td>
         </tr>`).join("")}
@@ -625,7 +651,49 @@ async function requeueDownload(taskId, position, button, messageId = "failed-mes
   }
 }
 
+async function requeueCompletedDownload(taskId, button) {
+  const dir = button.dataset.downloadDir || "未记录";
+  const confirmed = window.confirm(
+    `确认将“${taskId}”重新加入待执行队首？\n` +
+    `将永久删除下载目录：${dir}\n` +
+    `（含分片、完成标记、合并产物），并重置对应的数据处理任务。\n` +
+    `删除后无法恢复。`
+  );
+  if (!confirmed) return;
+  const message = document.getElementById("recent-message");
+  button.disabled = true;
+  message.textContent = "正在删除下载数据并置顶…";
+  try {
+    const response = await fetch("/api/queue/requeue-completed", {
+      method: "POST",
+      headers: actionHeaders(),
+      body: JSON.stringify({
+        task_id: taskId,
+        confirm_delete: true,
+        expected_download_dir: button.dataset.downloadDir || "",
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      message.textContent = (data.queue ? "" : "置顶失败：") + (data.error || response.status);
+      if (data.queue) refresh();
+      return;
+    }
+    message.textContent = `已删除旧下载数据并加入待执行队首（待执行 ${data.pending_total} 条，下次启动批处理生效）`;
+    refresh();
+  } catch (error) {
+    message.textContent = "置顶请求失败：" + error;
+  } finally {
+    button.disabled = false;
+  }
+}
+
 document.getElementById("recent-table").addEventListener("click", (event) => {
+  const completedButton = event.target.closest("button[data-requeue-completed]");
+  if (completedButton && !completedButton.disabled) {
+    requeueCompletedDownload(completedButton.dataset.requeueCompleted, completedButton);
+    return;
+  }
   const button = event.target.closest("button[data-requeue]");
   if (!button || button.disabled) return;
   if (!window.confirm(`确认将完成任务“${button.dataset.requeue}”重新加入下载队列并置顶？`)) {
@@ -907,7 +975,6 @@ function renderProcessingFailed(processing) {
             <td>${esc(item.last_error)}</td>
             <td>${esc(item.finished_at || item.updated_at || "-")}</td>
             <td>
-              <button type="button" class="mini" data-prequeue="${esc(item.dataset_key)}" data-position="tail" title="追加到待处理队尾">加入队列</button>
               <button type="button" class="mini" data-prequeue="${esc(item.dataset_key)}" data-position="top" title="置顶到待处理队首">置顶</button>
             </td>
           </tr>`).join("")}
@@ -983,13 +1050,81 @@ function renderProcessing(processing) {
   renderProcessingFailed(processing);
 }
 
-const dbUpdateState = { edits: {} };
+const dbUpdateState = { edits: {}, page: 1, pageSize: 15, rows: [], filter: "updated" };
 
 function dbUpdateStamp() {
   const now = new Date();
   const pad = (value) => String(value).padStart(2, "0");
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
     + `T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+}
+
+function dbUpdateEffectiveRow(item) {
+  const edit = dbUpdateState.edits[item.dataset_key];
+  return edit ? { ...item, ...edit } : item;
+}
+
+function dbUpdateFilteredRows() {
+  const allRows = dbUpdateState.rows || [];
+  return allRows.filter(item => {
+    const updated = !!dbUpdateEffectiveRow(item).updated;
+    return dbUpdateState.filter === "updated" ? updated : !updated;
+  });
+}
+
+function renderDbUpdateTable() {
+  const box = document.getElementById("d-table");
+  const allRows = dbUpdateState.rows || [];
+  let updatedCount = 0;
+  for (const item of allRows) {
+    if (dbUpdateEffectiveRow(item).updated) updatedCount += 1;
+  }
+  document.getElementById("d-count-updated").textContent = updatedCount;
+  document.getElementById("d-count-pending").textContent = allRows.length - updatedCount;
+  document.querySelectorAll(".subtab").forEach((button) => {
+    button.classList.toggle("active", button.dataset.dfilter === dbUpdateState.filter);
+  });
+
+  const rows = dbUpdateFilteredRows();
+  const total = rows.length;
+  const pageSize = dbUpdateState.pageSize;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  dbUpdateState.page = Math.min(Math.max(dbUpdateState.page, 1), totalPages);
+  document.getElementById("d-summary").textContent = `共 ${total} 条`;
+  document.getElementById("d-page-label").textContent = `第 ${dbUpdateState.page}/${totalPages} 页`;
+  document.getElementById("d-first").disabled = dbUpdateState.page <= 1;
+  document.getElementById("d-prev").disabled = dbUpdateState.page <= 1;
+  document.getElementById("d-next").disabled = dbUpdateState.page >= totalPages;
+  document.getElementById("d-last").disabled = dbUpdateState.page >= totalPages;
+
+  if (total === 0) {
+    box.innerHTML = dbUpdateState.filter === "updated"
+      ? '<div class="empty">暂无已更新到库的记录</div>'
+      : '<div class="empty">暂无未更新到库的记录</div>';
+    return;
+  }
+  const start = (dbUpdateState.page - 1) * pageSize;
+  const pageRows = rows.slice(start, start + pageSize);
+  box.innerHTML = `
+    <table>
+      <thead><tr><th>数据集</th><th>命名前缀</th><th>分片数</th><th>要素数</th><th>处理完成时间</th><th>输出目录</th><th>已更新</th><th>更新时间</th><th>备注</th></tr></thead>
+      <tbody>${pageRows.map(item => {
+        const row = dbUpdateEffectiveRow(item);
+        return `
+        <tr data-dkey="${esc(row.dataset_key)}">
+          <td class="mono">${esc(row.display_name || row.dataset_key)}</td>
+          <td class="mono">${esc(row.process_name_prefix || "-")}</td>
+          <td>${esc(row.tile_count ?? "-")}</td>
+          <td>${fmtNumber(row.feature_count)}</td>
+          <td>${esc(row.finished_at || "-")}</td>
+          <td class="mono">${esc(row.output_dir || "-")}</td>
+          <td style="text-align:center;"><input type="checkbox" class="cell-check" data-field="updated" ${row.updated ? "checked" : ""}></td>
+          <td><input type="text" class="cell-input" data-field="updated_at" value="${esc(row.updated_at || "")}" placeholder="YYYY-MM-DDTHH:MM:SS"></td>
+          <td><input type="text" class="cell-input" data-field="note" value="${esc(row.note || "")}" placeholder="备注"></td>
+        </tr>`;
+      }).join("")}
+      </tbody>
+    </table>`;
 }
 
 function renderDbUpdated(snapshot) {
@@ -1005,31 +1140,38 @@ function renderDbUpdated(snapshot) {
   document.getElementById("d-updated").textContent = counts.updated ?? 0;
   document.getElementById("d-pending").textContent = counts.pending ?? 0;
 
+  dbUpdateState.rows = snapshot.rows || [];
   if (Object.keys(dbUpdateState.edits).length > 0) return;
-  const box = document.getElementById("d-table");
-  const rows = snapshot.rows || [];
-  if (rows.length === 0) {
-    box.innerHTML = '<div class="empty">暂无已完成处理的任务</div>';
-    return;
-  }
-  box.innerHTML = `
-    <table>
-      <thead><tr><th>数据集</th><th>命名前缀</th><th>分片数</th><th>要素数</th><th>处理完成时间</th><th>输出目录</th><th>已更新</th><th>更新时间</th><th>备注</th></tr></thead>
-      <tbody>${rows.map(item => `
-        <tr data-dkey="${esc(item.dataset_key)}">
-          <td class="mono">${esc(item.display_name || item.dataset_key)}</td>
-          <td class="mono">${esc(item.process_name_prefix || "-")}</td>
-          <td>${esc(item.tile_count ?? "-")}</td>
-          <td>${fmtNumber(item.feature_count)}</td>
-          <td>${esc(item.finished_at || "-")}</td>
-          <td class="mono">${esc(item.output_dir || "-")}</td>
-          <td style="text-align:center;"><input type="checkbox" class="cell-check" data-field="updated" ${item.updated ? "checked" : ""}></td>
-          <td><input type="text" class="cell-input" data-field="updated_at" value="${esc(item.updated_at || "")}" placeholder="YYYY-MM-DDTHH:MM:SS"></td>
-          <td><input type="text" class="cell-input" data-field="note" value="${esc(item.note || "")}" placeholder="备注"></td>
-        </tr>`).join("")}
-      </tbody>
-    </table>`;
+  renderDbUpdateTable();
 }
+
+function dbUpdateGoTo(page) {
+  const totalPages = Math.max(1, Math.ceil(dbUpdateFilteredRows().length / dbUpdateState.pageSize));
+  dbUpdateState.page = Math.min(Math.max(page, 1), totalPages);
+  renderDbUpdateTable();
+}
+
+document.getElementById("d-first").addEventListener("click", () => dbUpdateGoTo(1));
+document.getElementById("d-prev").addEventListener("click", () => dbUpdateGoTo(dbUpdateState.page - 1));
+document.getElementById("d-next").addEventListener("click", () => dbUpdateGoTo(dbUpdateState.page + 1));
+document.getElementById("d-last").addEventListener("click", () => {
+  const totalPages = Math.max(1, Math.ceil(dbUpdateFilteredRows().length / dbUpdateState.pageSize));
+  dbUpdateGoTo(totalPages);
+});
+document.getElementById("d-page-size").addEventListener("change", (event) => {
+  const size = parseInt(event.target.value, 10);
+  dbUpdateState.pageSize = Number.isFinite(size) && size > 0 ? size : 15;
+  dbUpdateState.page = 1;
+  renderDbUpdateTable();
+});
+document.querySelectorAll(".subtab").forEach((button) => {
+  button.addEventListener("click", () => {
+    if (dbUpdateState.filter === button.dataset.dfilter) return;
+    dbUpdateState.filter = button.dataset.dfilter;
+    dbUpdateState.page = 1;
+    renderDbUpdateTable();
+  });
+});
 
 function collectDbUpdateRow(rowElement) {
   return {

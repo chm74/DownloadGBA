@@ -280,6 +280,7 @@ class SnapshotTests(unittest.TestCase):
             queue = snapshot["queue"]
             self.assertEqual([item["task_id"] for item in queue], ["Africa|Angola|Angola", "Africa|Benin|Benin"])
             self.assertEqual(queue[0]["order"], 1)
+            self.assertEqual([item["global_order"] for item in queue], [1, 2])
             self.assertEqual(queue[0]["continent_display"], "Africa(非洲)")
             self.assertEqual(queue[0]["country_display"], "Angola(安哥拉)")
             self.assertEqual(queue[0]["city_display"], "Angola(安哥拉)")
@@ -295,6 +296,8 @@ class SnapshotTests(unittest.TestCase):
             )
             self.assertEqual(paged["queue_total"], 2)
             self.assertEqual([item["task_id"] for item in paged["queue"]], ["Africa|Benin|Benin"])
+            self.assertEqual(paged["queue"][0]["order"], 2)
+            self.assertEqual(paged["queue"][0]["global_order"], 2)
 
             recent = snapshot["recent_done"]
             self.assertEqual(recent[0]["task_id"], "Europe|San_Marino|San_Marino")
@@ -355,7 +358,11 @@ class SnapshotTests(unittest.TestCase):
             self.assertEqual([item["task_id"] for item in english["queue"]], ["Africa|Benin|Benin"])
             self.assertEqual(english["queue_total"], 1)
             self.assertEqual(english["queue_total_all"], 2)
+            self.assertEqual(english["queue"][0]["order"], 1)
+            self.assertEqual(english["queue"][0]["global_order"], 2)
             self.assertEqual([item["task_id"] for item in chinese["queue"]], ["Africa|Angola|Angola"])
+            self.assertEqual(chinese["queue"][0]["order"], 1)
+            self.assertEqual(chinese["queue"][0]["global_order"], 1)
             self.assertEqual([item["task_id"] for item in upper["queue"]], ["Africa|Angola|Angola"])
 
     def test_build_snapshot_missing_db(self):
@@ -1727,6 +1734,205 @@ class ControlTests(unittest.TestCase):
         self.assertEqual(calls[1], [200, 201])
         self.assertEqual(result["runner_pid"], 999)
         self.assertEqual(result["tile_workers"], 3)
+
+    def _make_completed_download(self, repo_root: Path) -> Path:
+        task_dir = repo_root / "data" / "Europe" / "San_Marino" / "San_Marino"
+        task_dir.mkdir(parents=True, exist_ok=True)
+        (task_dir / "GBA_0001.gpkg").write_bytes(b"tile")
+        (task_dir / lib.MARKER_NAME).write_text(
+            json.dumps(
+                {
+                    "task_id": "Europe|San_Marino|San_Marino",
+                    "download_dir": "data/Europe/San_Marino/San_Marino",
+                    "status": "OK",
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        return task_dir
+
+    def _post_requeue_completed(self, port: int, body: dict):
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/queue/requeue-completed",
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        return urllib.request.urlopen(request, timeout=10)
+
+    def test_queue_requeue_completed_deletes_download_and_tops(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            build_repo_fixture(repo_root)
+            task_dir = self._make_completed_download(repo_root)
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                with self._post_requeue_completed(
+                    port,
+                    {
+                        "task_id": "Europe|San_Marino|San_Marino",
+                        "confirm_delete": True,
+                        "expected_download_dir": "data/Europe/San_Marino/San_Marino",
+                    },
+                ) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                self.assertTrue(payload["ok"], payload)
+                self.assertFalse(task_dir.exists())
+                self.assertEqual(payload["queue"][0], "Europe|San_Marino|San_Marino")
+
+                store = lib.StateStore(repo_root / "state.db")
+                try:
+                    row = store.get("Europe|San_Marino|San_Marino")
+                    self.assertEqual(row["status"], lib.STATUS_PENDING)
+                    self.assertIsNone(row["processed_3857_dir"])
+                    self.assertEqual(store.pending_tasks()[0]["task_id"], "Europe|San_Marino|San_Marino")
+                finally:
+                    store.close()
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_queue_requeue_completed_requires_confirm_delete(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            build_repo_fixture(repo_root)
+            task_dir = self._make_completed_download(repo_root)
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                with self.assertRaises(urllib.error.HTTPError) as context:
+                    self._post_requeue_completed(
+                        port,
+                        {
+                            "task_id": "Europe|San_Marino|San_Marino",
+                            "expected_download_dir": "data/Europe/San_Marino/San_Marino",
+                        },
+                    )
+                self.assertEqual(context.exception.code, 400)
+                self.assertTrue(task_dir.exists())
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_queue_requeue_completed_rejects_stale_download_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            build_repo_fixture(repo_root)
+            task_dir = self._make_completed_download(repo_root)
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                with self.assertRaises(urllib.error.HTTPError) as context:
+                    self._post_requeue_completed(
+                        port,
+                        {
+                            "task_id": "Europe|San_Marino|San_Marino",
+                            "confirm_delete": True,
+                            "expected_download_dir": "data/Europe/San_Marino/Other",
+                        },
+                    )
+                self.assertEqual(context.exception.code, 400)
+                self.assertTrue(task_dir.exists())
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_queue_requeue_completed_rejects_non_success_status(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            build_repo_fixture(repo_root)
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                with self.assertRaises(urllib.error.HTTPError) as context:
+                    self._post_requeue_completed(
+                        port,
+                        {
+                            "task_id": "Africa|Angola|Angola",
+                            "confirm_delete": True,
+                            "expected_download_dir": "data/Africa/Angola/Angola",
+                        },
+                    )
+                self.assertEqual(context.exception.code, 400)
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_requeue_completed_download_rejects_external_existing_data(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            build_repo_fixture(repo_root)
+            store = lib.StateStore(repo_root / "state.db")
+            try:
+                store.set_existing_data("Europe|San_Marino|San_Marino", "legacy/San_Marino")
+            finally:
+                store.close()
+            (repo_root / "legacy" / "San_Marino").mkdir(parents=True, exist_ok=True)
+            with self.assertRaises(ValueError):
+                lib.requeue_completed_download(
+                    repo_root,
+                    repo_root / "state.db",
+                    "Europe|San_Marino|San_Marino",
+                    "data/Europe/San_Marino/San_Marino",
+                )
+
+    def test_reset_task_after_download_redo_resets_ok_processing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            process_db = repo_root / "process.db"
+            output_root = repo_root / "Tools" / "Oneshp_pipline_qgis" / "out_data"
+            output_dir = output_root / "san_marino_pipeline"
+            input_dir = output_root / "san_marino_pipeline_input"
+            output_dir.mkdir(parents=True)
+            input_dir.mkdir(parents=True)
+            (output_dir / run_shp_process_tasks.PROCESS_MARKER_NAME).write_text(
+                json.dumps({"dataset_key": "Europe|San_Marino|San_Marino"}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            store = run_shp_process_tasks.ProcessStore(process_db)
+            try:
+                store.conn.execute(
+                    """
+                    INSERT INTO process_tasks (
+                        dataset_key, task_id, display_name, process_name_prefix, source_dir,
+                        input_dir, output_dir, status, feature_count, updated_at, queue_order
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "Europe|San_Marino|San_Marino",
+                        "Europe|San_Marino|San_Marino",
+                        "San_Marino",
+                        "san_marino",
+                        "data/Europe/San_Marino",
+                        str(input_dir),
+                        str(output_dir),
+                        run_shp_process_tasks.PROCESS_OK,
+                        10,
+                        lib.utc_now(),
+                        1,
+                    ),
+                )
+                store.conn.commit()
+            finally:
+                store.close()
+
+            error = run_shp_process_tasks.reset_task_after_download_redo(
+                repo_root, process_db, repo_root / "state.db", "Europe|San_Marino|San_Marino"
+            )
+            self.assertIsNone(error)
+            self.assertFalse(output_dir.exists())
+            self.assertFalse(input_dir.exists())
+            store = run_shp_process_tasks.ProcessStore(process_db)
+            try:
+                row = store.get("Europe|San_Marino|San_Marino")
+                self.assertEqual(row["status"], run_shp_process_tasks.PROCESS_PENDING)
+                self.assertEqual(
+                    store.pending_tasks()[0]["dataset_key"], "Europe|San_Marino|San_Marino"
+                )
+            finally:
+                store.close()
 
 
 if __name__ == "__main__":

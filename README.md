@@ -417,7 +417,7 @@ python scripts/run_world_building_tasks.py --move-top "Botswana"
 
 #### 用途
 
-网页看板：浏览器查看当前下载任务、分块进度、队列分页（全部待执行任务，支持翻页、每页条数、按城市中英文搜索、手动排序）、最近完成情况；失败任务表提供「操作」列，可把失败任务「加入队列」（队尾）或「置顶」重新排入待执行队列（下次启动批处理生效）；并提供「批处理控制」，可修改 `tile-workers` 并发参数一键重启批处理、或一键停止当前下载任务（已完成分块复用，断点继续）。「数据处理」页签展示 SHP 处理队列（切分 → QGIS 校验 → 清洗 → 3857 重投影）的阶段、分片进度与日志尾。
+网页看板：浏览器查看当前下载任务、分块进度、队列分页（全部待执行任务，支持翻页、每页条数、按城市中英文搜索、手动排序）、最近完成情况；失败任务表可把失败任务「置顶」重新排入待执行队首（不删除已下载数据，下次启动批处理生效）；「最近完成」表的「置顶」为破坏性操作：确认后永久删除该任务整个下载目录并重置为待执行队首，同时重置下游数据处理任务。「批处理控制」可修改 `tile-workers` 并发参数一键重启批处理、或一键停止当前下载任务（已完成分块复用，断点继续）。「数据处理」页签展示 SHP 处理队列（切分 → QGIS 校验 → 清洗 → 3857 重投影）的阶段、分片进度与日志尾。
 
 #### 启动与访问
 
@@ -429,7 +429,7 @@ python -u scripts/status_server.py --port 8765
 - 后台常驻：`Start-Process python -ArgumentList "-u","scripts/status_server.py","--port","8765" -WorkingDirectory "E:\LoD1" -WindowStyle Hidden`
 - 局域网首次访问需放行防火墙：`New-NetFirewallRule -DisplayName "GBA Status" -Direction Inbound -LocalPort 8765 -Protocol TCP -Action Allow`
 - 局域网防误操作（可选）：加 `--action-token <令牌>`，重启操作需在页面输入该令牌
-- 「最近完成」表格含「原始数据」列：显示历史已下载数据的路径（用 `scripts/sync_existing_data.py` 扫描同步，或任务下载完成后自动写入）
+- 「最近完成」表格含「下载目录」列：显示该任务的下载数据目录；点该行「置顶」会**永久删除该目录**并把任务重置为待执行队首（同时重置下游数据处理任务），请谨慎操作
 
 完整说明见 `docs/status_page.md`。
 

@@ -8,7 +8,7 @@
 - 当前任务卡片提供「停止当前任务并加入队尾」：先停止下载 runner 与 worker，确认进程退出后再把任务原子重置为 `PENDING` 并追加到全部待执行任务队尾；已完成分块保留。若进程未完全退出，任务继续保持 `RUNNING`。
 - 队列分页列出**全部**待执行任务（默认按手动排序 `queue_order`，未排序时按清单顺序），支持每页 15/30/50/100/200 条与首页/上一页/下一页/末页切换；「排序」列提供 ↑ / ↓ / ⤒（置顶，跨页生效）按钮，改动在**下次启动批处理**时生效（可用「保存并重启批处理」立即套用）；大洲/国家/城市显示为"英文(中文)"，中文名来自本地 Natural Earth 行政边界（`data/boundaries`）
 - 队列支持**按城市名称搜索**（中英文均可，大小写不敏感，如 `Burundi` / `布隆迪`）；搜索后分页、排序与「共 N 条」统计均基于过滤结果，并显示未过滤总数
-- 最近完成任务（要素数、耗时、完成时间、原始数据路径）与失败任务（错误原因）；失败任务表提供「操作」列：「加入队列」追加到队尾、「置顶」排到队首，把 FAILED 任务重置为待执行（清空尝试次数与最后错误），改动在**下次启动批处理**时生效
+- 最近完成任务（要素数、耗时、完成时间、下载目录）与失败任务（错误原因）；**最近完成**每项提供「置顶」（破坏性）：确认后永久删除该任务的整个下载目录（分片、完成标记、网格清单、合并/分卷产物），把任务重置为待执行并排到队首，同时重置下游「数据处理」队列中的同一数据集；服务端拒绝历史数据引用（`existing_data_dir` 与下载目录不一致）、共享目录、符号链接及仓库外的路径。失败任务表提供「操作」列：「置顶」把 FAILED 任务重置为待执行并排到队首（清空尝试次数与最后错误，**不删除已下载数据**）；改动均在**下次启动批处理**时生效
 - 批处理整体状态（运行中 / 已停止 / 全部完成）与磁盘剩余空间
 - 页面每 15 秒自动刷新，无外部 CDN 依赖
 - **批处理控制**：查看当前 `tile-workers` 与 runner PID，可直接修改并发参数并一键重启批处理
@@ -61,6 +61,7 @@ New-NetFirewallRule -DisplayName "GBA Status" -Direction Inbound -LocalPort 8765
 - `POST /api/stop`：停止当前下载任务（不重启），返回停止的 PID 列表
 - `POST /api/queue/reorder`：调整下载待执行队列顺序，请求体 `{"task_id": "...", "direction": "up|down|top"}`（兼容 `dataset_key` 字段名）；`top` 跨页生效；排序在下次启动批处理时生效；受 `--action-token` 保护
 - `POST /api/queue/requeue`：把失败任务重新入队，请求体 `{"task_id": "...", "position": "tail|top"}`（缺省 `tail`；兼容 `dataset_key` 字段名）；任务不存在返回 404，非 FAILED 状态或非法 position 返回 400；成功后返回 `{"ok": true, "task_id": ..., "position": ..., "queue": [...], "pending_total": N}`；受 `--action-token` 保护
+- `POST /api/queue/requeue-completed`：**破坏性**接口。确认永久删除已完成任务的整个下载目录（分片、完成标记、网格清单、合并/分卷产物）后，把该任务重置为待执行并置顶到队首，同时重置下游「数据处理」队列中的同一数据集（已完成处理会删除其产物与输入副本）。请求体包含 `task_id`、`confirm_delete: true` 和页面展示的 `expected_download_dir`。服务端重新校验状态（仅 OK/OK_EMPTY）、路径（须在仓库根内且非符号链接、不与其它任务共享）、完成标记及历史数据引用；失败返回 400/404，清理未完成时返回 200 且 `ok:false`、`error` 说明；受 `--action-token` 保护
 - `POST /api/process/reorder`：调整处理队列顺序，请求体 `{"dataset_key": "...", "direction": "up|down|top"}`；受 `--action-token` 保护
 - `POST /api/process/requeue`：把处理失败任务重新加入待处理队列，请求体 `{"dataset_key": "...", "position": "tail|top"}`（缺省 `tail`）；任务不存在返回 404，非 FAILED 状态或非法 position 返回 400；成功后返回 `{"ok": true, "dataset_key": ..., "position": ..., "queue": [...], "pending_total": N}`；受 `--action-token` 保护
 - `POST /api/process/requeue-completed`：确认永久删除处理产物后，将已完成任务重置并置顶；请求体包含 `dataset_key`、`confirm_delete: true` 和页面展示的 `expected_output_dir`、`expected_input_dir`。服务端重新校验状态、路径及共享引用；受 `--action-token` 保护
@@ -88,7 +89,7 @@ New-NetFirewallRule -DisplayName "GBA Status" -Direction Inbound -LocalPort 8765
 - 队列排序：点「排序」列按钮即可手动调整待处理任务的执行顺序（即时写入处理库 `queue_order`），**在下次 `--run` 时生效**；也可用 CLI `--move-up / --move-down / --move-top / --order` 调整
 - 最近完成：命名前缀、分片数、要素数、耗时、完成时间、输出目录
 - 处理「最近完成」每项提供「置顶」：确认后永久删除该任务的处理输出目录和处理输入副本，保留原始下载数据；将任务重置为待处理并排到队首，下次执行处理生效。服务端拒绝共享目录或输出根目录以外的删除路径
-- 失败/阻塞：失败原因与尝试次数；失败表提供「操作」列：「加入队列」追加到待处理队尾、「置顶」排到队首，把 FAILED 任务重置为待处理（清空阶段与错误，尝试次数保留），**在下次 `--run` 时生效**；阻塞表示只有合并 gpkg、缺少交付 SHP（先运行 `python scripts/run_world_building_tasks.py --export-shp-only`）
+- 失败/阻塞：失败原因与尝试次数；失败表提供「操作」列：「置顶」排到队首，把 FAILED 任务重置为待处理（清空阶段与错误，尝试次数保留），**在下次 `--run` 时生效**；阻塞表示只有合并 gpkg、缺少交付 SHP（先运行 `python scripts/run_world_building_tasks.py --export-shp-only`）
 - 命名规则：处理阶段以 `<process_name_prefix>` 开头（prefix 取下载清单 CSV 第 5 列，只读；缺失时从输入文件名推导）：输入副本 `<prefix>.shp` / `<prefix>_partNN.shp`，目录 `<prefix>_pipeline(_input)`，最终分片 `<prefix>_xxx_xxx_3857.shp`
 
 队列命令：
@@ -108,7 +109,9 @@ python scripts/run_shp_process_tasks.py --move-top "宁夏"          # 置顶
 数据来源：处理库 `data/shp_process_state.db` 中状态为 `OK` 的任务 + 手动维护文件 `data/db_update_status.json`。
 
 - 左侧卡片：已处理任务总数、已更新、未更新
+- 子选项卡：「更新到库」「未更新到库」两栏（按钮上显示各自条数），按「已更新」状态筛选，默认显示「更新到库」
 - 表格列：数据集、命名前缀、分片数、要素数、处理完成时间、输出目录、已更新（勾选）、更新时间、备注（可编辑）
+- 表格分页：默认每页 15 条，可切换 15/30/50/100/200，支持首页/上一页/下一页/末页；跨页编辑会保留未保存修改
 - 勾选「已更新」时自动填入当前时间（可手动改）；「保存修改」后写入 JSON 文件；有未保存修改时自动刷新不会覆盖表格内容
 - 需要重新扫描处理结果时先运行 `python scripts/run_shp_process_tasks.py --sync`（或点数据处理页签的「同步队列」）
 

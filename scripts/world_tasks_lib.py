@@ -4,8 +4,10 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sqlite3
 import unicodedata
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -1174,3 +1176,118 @@ def stop_running_task_to_tail(state_db: Path, task_id: str) -> list[str]:
         return store.stop_running_task_to_tail(task_id)
     finally:
         store.close()
+
+
+def requeue_completed_download(
+    repo_root: Path,
+    state_db: Path,
+    task_id: str,
+    expected_download_dir: str | None = None,
+) -> dict:
+    """删除某已完成任务的全部下载数据，重置为待执行并置顶到队首。
+
+    删除是破坏性的：先改名到同目录下的暂存名，DB 事务提交成功后再物理删除；
+    若事务失败则把暂存目录改名恢复。返回 {"queue", "deleted_dir", "cleanup_error"}。
+    """
+    repo_root = Path(repo_root).resolve()
+    store = StateStore(state_db)
+    staged: list[tuple[Path, Path]] = []
+    committed = False
+    try:
+        store.conn.execute("BEGIN IMMEDIATE")
+        row = store.get(task_id)
+        if row is None:
+            raise KeyError(f"任务不存在: {task_id}")
+        if row["status"] not in SUCCESS_STATUSES:
+            raise ValueError(f"只有已完成任务可以删除数据并置顶重做，当前状态: {row['status']}")
+
+        task_dir = resolve_task_dir(repo_root, row["download_dir"])
+        if task_dir == repo_root:
+            raise ValueError("下载目录不能是仓库根目录，拒绝删除")
+        if expected_download_dir is not None and row["download_dir"] != expected_download_dir:
+            raise ValueError("下载目录已变化，请刷新页面后再确认")
+        if task_dir.is_symlink():
+            raise ValueError(f"下载目录是符号链接，拒绝删除: {task_dir}")
+        if task_dir.exists() and not task_dir.is_dir():
+            raise ValueError(f"下载目录不是目录，拒绝删除: {task_dir}")
+
+        recorded_existing = row.get("existing_data_dir")
+        if recorded_existing:
+            existing_dir = Path(recorded_existing)
+            if not existing_dir.is_absolute():
+                existing_dir = repo_root / existing_dir
+            if existing_dir.resolve() != task_dir:
+                raise ValueError(f"任务使用历史数据目录，请先处理后再重做: {recorded_existing}")
+
+        for other in store.all_tasks():
+            if other["task_id"] == task_id:
+                continue
+            if other.get("download_dir"):
+                if resolve_task_dir(repo_root, other["download_dir"]) == task_dir:
+                    raise ValueError(f"下载目录与另一任务共享: {other['task_id']}")
+            other_existing = other.get("existing_data_dir")
+            if other_existing:
+                other_dir = Path(other_existing)
+                if not other_dir.is_absolute():
+                    other_dir = repo_root / other_dir
+                if other_dir.resolve() == task_dir:
+                    raise ValueError(f"下载目录与另一任务共享: {other['task_id']}")
+
+        marker = read_marker(task_dir)
+        if marker is not None:
+            if marker.get("task_id") not in (None, task_id):
+                raise ValueError("下载目录完成标记与任务不匹配，拒绝删除")
+            recorded_dir = marker.get("download_dir")
+            if recorded_dir and normalize_download_dir(recorded_dir) != normalize_download_dir(row["download_dir"]):
+                raise ValueError("下载目录完成标记与任务不匹配，拒绝删除")
+
+        if task_dir.exists():
+            staged_path = task_dir.with_name(f".{task_dir.name}.delete-{uuid.uuid4().hex}")
+            task_dir.rename(staged_path)
+            staged.append((task_dir, staged_path))
+
+        pending = [item["task_id"] for item in store.pending_tasks() if item["task_id"] != task_id]
+        ordered = [task_id, *pending]
+        now = utc_now()
+        store.conn.execute(
+            """
+            UPDATE tasks
+            SET status = ?, attempts = 0, exit_code = NULL, feature_count = NULL,
+                merge_output = NULL, boundary_source = NULL, existing_data_dir = NULL,
+                processed_3857_dir = NULL, last_error = NULL, started_at = NULL,
+                finished_at = NULL, duration_seconds = NULL, updated_at = ?
+            WHERE task_id = ?
+            """,
+            (STATUS_PENDING, now, task_id),
+        )
+        store.conn.executemany(
+            "UPDATE tasks SET queue_order = ?, updated_at = ? WHERE task_id = ?",
+            [(index, now, key) for index, key in enumerate(ordered, start=1)],
+        )
+        store.conn.execute(
+            "INSERT INTO task_events (task_id, event, detail, created_at) VALUES (?, ?, ?, ?)",
+            (task_id, "DOWNLOAD_REDO_TOP", f"deleted={repo_relative(repo_root, task_dir)}", now),
+        )
+        store.conn.commit()
+        committed = True
+    except Exception:
+        store.conn.rollback()
+        if not committed:
+            for original, staged_path in reversed(staged):
+                if staged_path.exists() and not original.exists():
+                    staged_path.rename(original)
+        raise
+    finally:
+        store.close()
+
+    cleanup_errors = []
+    for _, staged_path in staged:
+        try:
+            shutil.rmtree(staged_path)
+        except OSError as exc:
+            cleanup_errors.append(f"{staged_path}: {exc}")
+    return {
+        "queue": ordered,
+        "deleted_dir": str(task_dir),
+        "cleanup_error": "；".join(cleanup_errors) or None,
+    }

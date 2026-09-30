@@ -10,6 +10,6 @@ from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = PACKAGE_ROOT.parent.parent
-QGIS_BIN_DIR = Path(r"C:\Program Files\QGIS 3.34.8\bin")
-QGIS_PROCESS_BAT = QGIS_BIN_DIR / "qgis_process-qgis-ltr.bat"
-QGIS_PROCESS_EXE = Path(r"C:\Program Files\QGIS 3.34.8\apps\qgis-ltr\bin\qgis_process.exe")
+QGIS_BIN_DIR = Path(r"D:\QGIS\bin")
+QGIS_PROCESS_BAT = QGIS_BIN_DIR / "qgis_process-qgis.bat"
+QGIS_PROCESS_EXE = Path(r"D:\QGIS\apps\qgis\bin\qgis_process.exe")

@@ -1,0 +1,9 @@
+[SYNC] manifest=F:\建筑数据下载\DownloadGBA\data\world_building_download_tasks.csv tasks=259 added=0 updated=0 reset=0
+[SELECT] 1 个任务待执行（状态过滤=['PENDING', 'RUNNING']）
+--- [1/1] 亚洲|中国|广东省 ---
+[RUN] 亚洲|中国|广东省 -> F:\建筑数据下载\DownloadGBA\data\亚洲\中国\广东省
+[SHP] 亚洲|中国|广东省 -> 8 个分卷
+[PROCESS] 已登记处理队列: 亚洲|中国|广东省 added=0 updated=1
+[OK] 亚洲|中国|广东省 features=7390696 elapsed=43996s
+[SUMMARY] selected=1 ok=1 ok_empty=0 skipped=0 failed=0
+[STATE] PENDING=250, OK=8, FAILED=2

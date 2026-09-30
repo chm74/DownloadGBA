@@ -417,7 +417,7 @@ def build_snapshot(
         search_text = str(snapshot["queue_search"] or "")
         needle = search_text.casefold()
         decorated_rows: list[dict] = []
-        for row in pending_rows:
+        for global_order, row in enumerate(pending_rows, start=1):
             country_zh, city_zh = _chinese_names(
                 row["continent"],
                 row["country"],
@@ -431,6 +431,7 @@ def build_snapshot(
             item = dict(row)
             item["_country_zh"] = country_zh
             item["_city_zh"] = city_zh
+            item["_global_order"] = global_order
             decorated_rows.append(item)
 
         snapshot["queue_total"] = len(decorated_rows)
@@ -441,6 +442,7 @@ def build_snapshot(
             queue_items.append(
                 {
                     "order": page_start + index,
+                    "global_order": row["_global_order"],
                     "task_id": row["task_id"],
                     "continent": row["continent"],
                     "continent_display": format_continent(row["continent"]),
@@ -1501,6 +1503,7 @@ class StatusHandler(BaseHTTPRequestHandler):
             "/api/stop",
             "/api/queue/reorder",
             "/api/queue/requeue",
+            "/api/queue/requeue-completed",
             "/api/queue/stop-current",
             "/api/process/reorder",
             "/api/process/requeue",
@@ -1668,6 +1671,51 @@ class StatusHandler(BaseHTTPRequestHandler):
                 ensure_ascii=False,
             )
             self._send(200, body.encode("utf-8"), "application/json; charset=utf-8")
+            return
+
+        if path == "/api/queue/requeue-completed":
+            try:
+                task_id = str(payload.get("task_id") or payload.get("dataset_key") or "").strip()
+                if not task_id:
+                    raise ValueError("task_id 不能为空")
+                if payload.get("confirm_delete") is not True:
+                    raise ValueError("必须确认删除下载数据")
+                expected_download_dir = str(payload.get("expected_download_dir") or "").strip()
+                if not expected_download_dir:
+                    raise ValueError("缺少已确认的下载目录，请刷新页面后重试")
+                with CONTROL_LOCK:
+                    result = lib.requeue_completed_download(
+                        Path(config["repo_root"]), Path(config["state_db"]),
+                        task_id, expected_download_dir,
+                    )
+                    downstream_error = None
+                    try:
+                        downstream_error = process_queue.reset_task_after_download_redo(
+                            Path(config["repo_root"]), Path(config["process_db"]),
+                            Path(config["state_db"]), task_id,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        downstream_error = f"下游处理任务重置失败：{exc}"
+            except KeyError as exc:
+                status, error = 404, str(exc)
+            except ValueError as exc:
+                status, error = 400, str(exc)
+            except Exception as exc:  # noqa: BLE001
+                status, error = 500, str(exc)
+            else:
+                errors = [item for item in (result.get("cleanup_error"), downstream_error) if item]
+                body = json.dumps({
+                    "ok": not errors,
+                    "task_id": task_id,
+                    "queue": result["queue"],
+                    "pending_total": len(result["queue"]),
+                    "deleted_dir": result.get("deleted_dir"),
+                    "error": "；".join(errors) if errors else None,
+                }, ensure_ascii=False)
+                self._send(200, body.encode("utf-8"), "application/json; charset=utf-8")
+                return
+            self._send(status, json.dumps({"ok": False, "error": error}, ensure_ascii=False).encode("utf-8"),
+                       "application/json; charset=utf-8")
             return
 
         if path == "/api/process/reorder":

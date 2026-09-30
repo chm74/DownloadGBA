@@ -1,9 +1,8 @@
-[SYNC] process_db=F:\DownloadGBA\data\shp_process_state.db 发现=21 新增=0 更新=21
-[PLAN 1/2] 亚洲|中国|黑龙江省  prefix=heilongjiang  features=5310499  shp=1  source=data/亚洲/中国/黑龙江省
-[DONE] 亚洲|中国|黑龙江省 status=OK tiles=50 features=5303060
-[PLAN 2/2] 亚洲|中国|香港澳门  prefix=HK  features=263805  shp=1  source=data/亚洲/中国/香港澳门
-[DONE] 亚洲|中国|香港澳门 status=OK tiles=6 features=707265
-[PROCESS] total=40 ok=37 pending=0 running=0 failed=3 blocked=0
+[SYNC] process_db=F:\建筑数据下载\DownloadGBA\data\shp_process_state.db 发现=4 新增=0 更新=4
+[PLAN 1/1] 亚洲|中国|广东省  prefix=guangdong  features=7390696  shp=1  source=data/亚洲/中国/广东省
+[DONE] 亚洲|中国|广东省 status=OK tiles=70 features=7389947
+[PROCESS] total=41 ok=37 pending=1 running=0 failed=3 blocked=0
+[PENDING] Oceania|Australia|Sydney  prefix=Sydney  features=819003  source=data/Oceania/Australia/Sydney
 [FAILED] Africa|Benin|Benin  attempts=2  准备输入失败: [WinError 2] 系统找不到指定的文件。
 [FAILED] Africa|Botswana|Botswana  attempts=3  准备输入失败: [WinError 3] 系统找不到指定的路径。
 [FAILED] Africa|Algeria|Algeria  attempts=3  准备输入失败: [WinError 2] 系统找不到指定的文件。
