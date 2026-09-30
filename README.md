@@ -507,3 +507,50 @@ python scripts/run_shp_process_tasks.py --move-top "宁夏"
 - `docs/world_building_tasks_pipeline.md`
 - `docs/status_page.md`
 - `docs/gba_wfs_download_limits.md`
+
+## 部署环境清单
+
+### 需安装的软件
+
+| 软件 | 用途 | 是否必需 |
+|---|---|---|
+| Python 3.12 | 运行所有脚本 | 必需 |
+| uv | 建虚拟环境 / 装依赖 | 必需（否则用各工具 `setup.ps1`） |
+| Git | 拉取代码 / 状态同步 | 必需 |
+| QGIS 3.34.8 LTR | 数据处理（`qgis_process`） | 仅处理时需要 |
+| PostgreSQL + psql | 重导任务清单 / SHP 入库 | 仅这两项需要 |
+
+> QGIS 路径当前硬编码在 `Tools/Oneshp_pipline_qgis/src/shp_pipeline_qgis/paths.py`（默认 `C:\Program Files\QGIS 3.34.8\bin`），换机器需安装同版本或修改该文件。
+
+### Python 环境依赖
+
+```powershell
+# 主下载链（装到系统 Python）
+python -m pip install geopandas shapely pyogrio pandas requests osmnx
+# 处理工具
+uv sync --project Tools\Oneshp_pipline_qgis
+# SHP 入库工具
+uv sync --project Tools\Twopyshp2pgsql
+# （可选）入库工具副本
+uv sync --project updateTools\twopyshp2pgsql
+```
+
+可选：`pip install pytest`（跑测试）。
+
+### 需修改 / 配置
+
+| 配置 | 位置 | 说明 |
+|---|---|---|
+| git 代理 | `拉取更新.txt` | 改成新机器代理（如 `http.proxy=http://127.0.0.1:7890`），无代理则删 |
+| 数据库 + 共享目录 | `Tools/Twopyshp2pgsql/.env`、`updateTools/twopyshp2pgsql/.env` | `PG_DBNAME/PG_USER/PG_PASSWORD/PG_HOST/PG_PORT`、`DATA_ROOT` |
+| 导出清单口令 | 环境变量 `PGPASSWORD` | 运行 `export_world_building_tasks.py` 时用 |
+| 看板端口 | 防火墙入站 `8765` | 局域网访问需放行 |
+| （可选）限速 | 环境变量 `GBA_WFS_MIN_INTERVAL` | 默认 1.05 秒/请求 |
+
+### 无需安装（随仓库自带）
+
+- `data/boundaries/*.gpkg`（本地边界）
+- `data/*.db`（状态库）
+
+- 最小（仅下载）：Python 3.12 + 主下载链依赖 + 能访问 WFS。
+- 完整：再加 uv、QGIS 3.34.8、PostgreSQL(psql)，并配置 `.env` 与代理。
