@@ -770,6 +770,37 @@ def save_db_update_marks(path: Path, rows: list[dict]) -> int:
     return saved
 
 
+def reset_db_update_mark(path: Path, dataset_key: str) -> bool:
+    """把某数据集的手工标记重置为“未更新”；标记不存在时不做改动。"""
+    marks = load_db_update_marks(path)
+    if dataset_key not in marks:
+        return False
+    save_db_update_marks(
+        path,
+        [{"dataset_key": dataset_key, "updated": False, "updated_at": "", "note": ""}],
+    )
+    return True
+
+
+def delete_db_update_mark(path: Path, dataset_key: str) -> bool:
+    """从标记文件中彻底移除某数据集的手工标记；不存在时不做改动。"""
+    file_path = Path(path)
+    marks = load_db_update_marks(file_path)
+    if dataset_key not in marks:
+        return False
+    del marks[dataset_key]
+    payload = {
+        "version": 1,
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "rows": marks,
+    }
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = file_path.with_name(f".{file_path.name}.tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(file_path)
+    return True
+
+
 def build_db_update_snapshot(repo_root: Path, process_db: Path, marks_file: Path) -> dict:
     repo_root = Path(repo_root)
     process_db = Path(process_db)
@@ -1540,7 +1571,8 @@ class StatusHandler(BaseHTTPRequestHandler):
                 )
                 return
             try:
-                saved = save_db_update_marks(config["db_update_file"], rows)
+                with CONTROL_LOCK:
+                    saved = save_db_update_marks(config["db_update_file"], rows)
             except ValueError as exc:
                 self._send(
                     400,
@@ -1696,6 +1728,11 @@ class StatusHandler(BaseHTTPRequestHandler):
                         )
                     except Exception as exc:  # noqa: BLE001
                         downstream_error = f"下游处理任务重置失败：{exc}"
+                    mark_error = None
+                    try:
+                        delete_db_update_mark(Path(config["db_update_file"]), task_id)
+                    except Exception as exc:  # noqa: BLE001
+                        mark_error = f"删除数据库更新记录失败：{exc}"
             except KeyError as exc:
                 status, error = 404, str(exc)
             except ValueError as exc:
@@ -1703,7 +1740,11 @@ class StatusHandler(BaseHTTPRequestHandler):
             except Exception as exc:  # noqa: BLE001
                 status, error = 500, str(exc)
             else:
-                errors = [item for item in (result.get("cleanup_error"), downstream_error) if item]
+                errors = [
+                    item
+                    for item in (result.get("cleanup_error"), downstream_error, mark_error)
+                    if item
+                ]
                 body = json.dumps({
                     "ok": not errors,
                     "task_id": task_id,
@@ -1795,6 +1836,11 @@ class StatusHandler(BaseHTTPRequestHandler):
                         Path(config["state_db"]), dataset_key,
                         expected_output_dir, expected_input_dir,
                     )
+                    mark_error = None
+                    try:
+                        reset_db_update_mark(Path(config["db_update_file"]), dataset_key)
+                    except Exception as exc:  # noqa: BLE001
+                        mark_error = f"重置数据库更新标记失败：{exc}"
             except KeyError as exc:
                 status, error = 404, str(exc)
             except ValueError as exc:
@@ -1802,13 +1848,17 @@ class StatusHandler(BaseHTTPRequestHandler):
             except Exception as exc:  # noqa: BLE001
                 status, error = 500, str(exc)
             else:
-                cleanup_error = result.get("cleanup_error")
+                errors = []
+                if result.get("cleanup_error"):
+                    errors.append(f"旧产物清理未完成：{result['cleanup_error']}")
+                if mark_error:
+                    errors.append(mark_error)
                 body = json.dumps({
-                    "ok": not cleanup_error,
+                    "ok": not errors,
                     "dataset_key": dataset_key,
                     "queue": result["queue"],
                     "pending_total": len(result["queue"]),
-                    "error": f"任务已置顶，但旧产物清理未完成：{cleanup_error}" if cleanup_error else None,
+                    "error": "；".join(errors) if errors else None,
                 }, ensure_ascii=False)
                 self._send(200, body.encode("utf-8"), "application/json; charset=utf-8")
                 return

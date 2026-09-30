@@ -602,6 +602,27 @@ class DbUpdateTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 status_server.save_db_update_marks(marks_file, [{"updated": True}])
 
+    def test_reset_and_delete_db_update_mark(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            marks_file = Path(tmp) / "marks.json"
+            key = "Europe|San_Marino|San_Marino"
+            status_server.save_db_update_marks(
+                marks_file,
+                [{"dataset_key": key, "updated": True, "updated_at": "2026-01-01T00:00:00", "note": "已入库"}],
+            )
+
+            self.assertFalse(status_server.reset_db_update_mark(marks_file, "Missing|Key|Key"))
+            self.assertTrue(status_server.reset_db_update_mark(marks_file, key))
+            marks = status_server.load_db_update_marks(marks_file)
+            self.assertIn(key, marks)
+            self.assertFalse(marks[key]["updated"])
+            self.assertEqual(marks[key]["updated_at"], "")
+            self.assertEqual(marks[key]["note"], "")
+
+            self.assertFalse(status_server.delete_db_update_mark(marks_file, "Missing|Key|Key"))
+            self.assertTrue(status_server.delete_db_update_mark(marks_file, key))
+            self.assertNotIn(key, status_server.load_db_update_marks(marks_file))
+
     def test_build_db_update_snapshot_missing_db(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)
@@ -1580,6 +1601,11 @@ class ControlTests(unittest.TestCase):
             output_dir = root / "Tools/Oneshp_pipline_qgis/out_data/San_Marino_pipeline"
             output_dir.mkdir(parents=True)
             (output_dir / "result.shp").write_bytes(b"output")
+            marks_file = root / "data" / "db_update_status.json"
+            status_server.save_db_update_marks(
+                marks_file,
+                [{"dataset_key": key, "updated": True, "updated_at": "2026-01-01T00:00:00", "note": "已入库"}],
+            )
             server = self._make_server(root)
             try:
                 url = f"http://127.0.0.1:{server.server_address[1]}/api/process/requeue-completed"
@@ -1607,6 +1633,11 @@ class ControlTests(unittest.TestCase):
                 self.assertTrue(result["ok"])
                 self.assertEqual(result["queue"][0], key)
                 self.assertFalse(output_dir.exists())
+                marks = status_server.load_db_update_marks(marks_file)
+                self.assertIn(key, marks)
+                self.assertFalse(marks[key]["updated"])
+                self.assertEqual(marks[key]["updated_at"], "")
+                self.assertEqual(marks[key]["note"], "")
                 with urllib.request.urlopen(f"http://127.0.0.1:{server.server_address[1]}/api/status") as response:
                     snapshot = json.loads(response.read().decode("utf-8"))["processing"]
                 self.assertNotIn(key, [row["dataset_key"] for row in snapshot["recent_done"]])
@@ -1766,6 +1797,12 @@ class ControlTests(unittest.TestCase):
             repo_root = Path(tmp)
             build_repo_fixture(repo_root)
             task_dir = self._make_completed_download(repo_root)
+            marks_file = repo_root / "data" / "db_update_status.json"
+            status_server.save_db_update_marks(
+                marks_file,
+                [{"dataset_key": "Europe|San_Marino|San_Marino", "updated": True,
+                  "updated_at": "2026-01-01T00:00:00", "note": "已入库"}],
+            )
             server = self._make_server(repo_root)
             port = server.server_address[1]
             try:
@@ -1781,6 +1818,7 @@ class ControlTests(unittest.TestCase):
                 self.assertTrue(payload["ok"], payload)
                 self.assertFalse(task_dir.exists())
                 self.assertEqual(payload["queue"][0], "Europe|San_Marino|San_Marino")
+                self.assertNotIn("Europe|San_Marino|San_Marino", status_server.load_db_update_marks(marks_file))
 
                 store = lib.StateStore(repo_root / "state.db")
                 try:
