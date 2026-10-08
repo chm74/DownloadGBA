@@ -72,6 +72,8 @@ New-NetFirewallRule -DisplayName "GBA Status" -Direction Inbound -LocalPort 8765
 - `POST /api/process/stop`：停止处理队列（连同 pipeline 子进程），并把 RUNNING 任务重置为 PENDING；受 `--action-token` 保护
 - `GET /api/db_updated`：数据库表已更新看板快照（已处理完成任务 + 手动标记）
 - `POST /api/db_updated`：保存手动标记，请求体 `{"rows": [{"dataset_key": "...", "updated": true, "updated_at": "...", "note": "..."}]}`；受 `--action-token` 保护
+- `GET /api/config`：读取看板配置（数据库连接 + 区域成果 SHP 共享目录）
+- `POST /api/config`：保存配置，请求体 `{"database": {"host": "...", "port": 5432, "dbname": "...", "user": "...", "password": "..."}, "result_root": "..."}`；写入 `data/config.json`；校验端口 1~65535、主机/库名/用户/共享目录非空；受 `--action-token` 保护
 - 其他路径返回 404
 
 ## 数据处理页签
@@ -163,3 +165,9 @@ python scripts/run_shp_process_tasks.py --move-top "宁夏"          # 置顶
 - 处理页签若提示"处理状态库不存在"，先运行一次
   `python scripts/run_shp_process_tasks.py --sync`。
 - 数据库表已更新页签的手动标记保存在 `data/db_update_status.json`（可用 `--db-update-file` 改路径），删除该文件即可清空标记。
+
+## 配置页签
+
+- 配置数据库连接（主机/端口/库名/用户名/密码）与「区域成果 SHP 共享目录」，保存后写入 `data/config.json`（随 git 同步）。
+- 进入页签时读取当前配置填充表单，密码以 `password` 输入框展示、可直接编辑。
+- 「保存」调用 `POST /api/config`；未配置时读取回退到 `main3_region.py` 的默认值。

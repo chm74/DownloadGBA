@@ -27,6 +27,14 @@
   .subtabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin:0 0 12px; }
   .subtab { background:none; border:none; border-bottom:2px solid transparent; padding:6px 12px; margin-bottom:-1px; cursor:pointer; color:var(--muted); font:inherit; font-size:13px; }
   .subtab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+  .cfg-subsection { border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:14px; }
+  .cfg-section-title { font-size:13px; font-weight:600; margin:0 0 10px; }
+  .cfg-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px 16px; }
+  .cfg-field { display:flex; flex-direction:column; gap:4px; }
+  .cfg-field > label { color:var(--muted); font-size:12px; }
+  .cfg-field input { width:100%; padding:6px 8px; font:inherit; font-size:13px; border:1px solid var(--line); border-radius:6px; background:transparent; color:var(--text); }
+  .cfg-field input:focus { outline:1px solid var(--accent); border-color:var(--accent); }
+  .cfg-actions { display:flex; gap:12px; align-items:center; }
   .panel[hidden] { display:none; }
   .plain-list { margin:0; padding-left:18px; color:var(--muted); font-size:13px; }
   .plain-list li { margin-bottom:6px; }
@@ -88,6 +96,7 @@
     <button type="button" class="tab active" data-tab="download">建筑数据下载</button>
     <button type="button" class="tab" data-tab="processing">数据处理</button>
     <button type="button" class="tab" data-tab="dbupdated">数据库表更新记录</button>
+    <button type="button" class="tab" data-tab="config">配置</button>
   </nav>
 
   <div class="layout panel" id="panel-download">
@@ -312,6 +321,45 @@
             <button id="d-last" type="button" style="padding:4px 10px;cursor:pointer;">末页</button>
           </div>
           <div id="d-table"><div class="empty">暂无已完成处理的任务</div></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-config" hidden>
+    <div class="layout">
+      <main class="main">
+        <section>
+          <h2>配置</h2>
+          <div class="muted" style="margin-bottom:14px;">
+            配置数据库连接与区域成果 SHP 共享目录（保存功能待补充）。
+          </div>
+
+          <div class="cfg-subsection">
+            <div class="cfg-section-title">数据库连接</div>
+            <div class="cfg-grid">
+              <div class="cfg-field"><label>主机</label><input id="cfg-db-host" type="text" value="172.16.1.145" placeholder="127.0.0.1"></div>
+              <div class="cfg-field"><label>端口</label><input id="cfg-db-port" type="number" min="1" max="65535" value="5432"></div>
+              <div class="cfg-field"><label>库名</label><input id="cfg-db-name" type="text" value="building" placeholder="building"></div>
+              <div class="cfg-field"><label>用户名</label><input id="cfg-db-user" type="text" value="postgres" placeholder="postgres"></div>
+              <div class="cfg-field"><label>密码</label><input id="cfg-db-password" type="password" value="frontfree" placeholder=""></div>
+            </div>
+          </div>
+
+          <div class="cfg-subsection">
+            <div class="cfg-section-title">区域成果 SHP 共享目录</div>
+            <div class="cfg-grid">
+              <div class="cfg-field" style="grid-column:1/-1;">
+                <label>共享目录（UNC）</label>
+                <input id="cfg-result-root" type="text" value="\\192.168.2.121\BuildingData\AutoGenerate" placeholder="\\<服务器>\BuildingData\AutoGenerte">
+              </div>
+            </div>
+          </div>
+
+          <div class="cfg-actions">
+            <button id="cfg-save" type="button" style="padding:6px 16px;cursor:pointer;">保存</button>
+            <span id="cfg-message" class="muted"></span>
+          </div>
         </section>
       </main>
     </div>
@@ -548,6 +596,7 @@ const TAB_PANELS = {
   download: "panel-download",
   processing: "panel-processing",
   dbupdated: "panel-db-updated",
+  config: "panel-config",
 };
 
 function switchTab(name) {
@@ -558,6 +607,7 @@ function switchTab(name) {
   Object.entries(TAB_PANELS).forEach(([key, panelId]) => {
     document.getElementById(panelId).hidden = key !== target;
   });
+  if (target === "config") loadConfig();
   try {
     localStorage.setItem("gba_tab", target);
   } catch (error) {
@@ -1351,6 +1401,56 @@ async function saveDbUpdated() {
 }
 
 document.getElementById("d-save").addEventListener("click", saveDbUpdated);
+
+async function loadConfig() {
+  const message = document.getElementById("cfg-message");
+  try {
+    const response = await fetch("/api/config", { cache: "no-store" });
+    const data = await response.json();
+    const db = data.database || {};
+    document.getElementById("cfg-db-host").value = db.host || "";
+    document.getElementById("cfg-db-port").value = db.port ?? 5432;
+    document.getElementById("cfg-db-name").value = db.dbname || "";
+    document.getElementById("cfg-db-user").value = db.user || "";
+    document.getElementById("cfg-db-password").value = db.password || "";
+    document.getElementById("cfg-result-root").value = data.result_root || "";
+    if (message) message.textContent = "";
+  } catch (error) {
+    if (message) message.textContent = "读取配置失败：" + error;
+  }
+}
+
+async function saveConfig() {
+  const message = document.getElementById("cfg-message");
+  const payload = {
+    database: {
+      host: document.getElementById("cfg-db-host").value.trim(),
+      port: document.getElementById("cfg-db-port").value.trim(),
+      dbname: document.getElementById("cfg-db-name").value.trim(),
+      user: document.getElementById("cfg-db-user").value.trim(),
+      password: document.getElementById("cfg-db-password").value,
+    },
+    result_root: document.getElementById("cfg-result-root").value.trim(),
+  };
+  if (message) message.textContent = "正在保存…";
+  try {
+    const response = await fetch("/api/config", {
+      method: "POST",
+      headers: actionHeaders(),
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      if (message) message.textContent = "保存失败：" + (data.error || response.status);
+      return;
+    }
+    if (message) message.textContent = "配置已保存";
+  } catch (error) {
+    if (message) message.textContent = "保存请求失败：" + error;
+  }
+}
+
+document.getElementById("cfg-save").addEventListener("click", saveConfig);
 
 async function refreshDbUpdated() {
   try {

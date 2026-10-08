@@ -2386,5 +2386,110 @@ class ControlTests(unittest.TestCase):
                 store.close()
 
 
+    def test_load_dashboard_config_defaults(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            config = status_server.load_dashboard_config(repo_root)
+            self.assertEqual(config["database"]["host"], status_server.DEFAULT_UPDATE_DB["host"])
+            self.assertEqual(config["database"]["port"], status_server.DEFAULT_UPDATE_DB["port"])
+            self.assertEqual(config["result_root"], status_server.DEFAULT_RESULT_ROOT)
+
+    def test_save_and_load_dashboard_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            saved = status_server.save_dashboard_config(
+                repo_root,
+                {
+                    "database": {"host": "10.0.0.5", "port": "5433", "dbname": "gis",
+                                 "user": "u1", "password": "p1"},
+                    "result_root": "\\\\srv\\share\\AutoGenerte",
+                },
+            )
+            self.assertEqual(saved["database"]["port"], 5433)
+            config = status_server.load_dashboard_config(repo_root)
+            self.assertEqual(config["database"]["host"], "10.0.0.5")
+            self.assertEqual(config["database"]["port"], 5433)
+            self.assertEqual(config["database"]["dbname"], "gis")
+            self.assertEqual(config["database"]["password"], "p1")
+            self.assertEqual(config["result_root"], "\\\\srv\\share\\AutoGenerte")
+            self.assertTrue((repo_root / "data" / "config.json").exists())
+
+    def test_config_endpoint_get_and_post(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/config", timeout=10) as response:
+                    initial = json.loads(response.read().decode("utf-8"))
+                self.assertEqual(initial["database"]["dbname"], status_server.DEFAULT_UPDATE_DB["dbname"])
+
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{port}/api/config",
+                    data=json.dumps({
+                        "database": {"host": "1.2.3.4", "port": 5555, "dbname": "bld",
+                                     "user": "pg", "password": "secret"},
+                        "result_root": "\\\\host\\AutoGenerte",
+                    }).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                self.assertTrue(payload["ok"])
+
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/config", timeout=10) as response:
+                    saved = json.loads(response.read().decode("utf-8"))
+                self.assertEqual(saved["database"]["host"], "1.2.3.4")
+                self.assertEqual(saved["database"]["port"], 5555)
+                self.assertEqual(saved["database"]["password"], "secret")
+                self.assertEqual(saved["result_root"], "\\\\host\\AutoGenerte")
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_config_endpoint_rejects_invalid(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                for body in (
+                    {"database": {"host": "h", "port": 70000, "dbname": "b", "user": "u", "password": ""}, "result_root": "x"},
+                    {"database": {"host": "h", "port": 5432, "dbname": "b", "user": "u", "password": ""}, "result_root": ""},
+                ):
+                    request = urllib.request.Request(
+                        f"http://127.0.0.1:{port}/api/config",
+                        data=json.dumps(body).encode("utf-8"),
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with self.assertRaises(urllib.error.HTTPError) as context:
+                        urllib.request.urlopen(request, timeout=10)
+                    self.assertEqual(context.exception.code, 400)
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_config_endpoint_requires_token(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            server = self._make_server(repo_root, action_token="secret")
+            port = server.server_address[1]
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{port}/api/config",
+                    data=json.dumps({"database": {"host": "h", "port": 5432, "dbname": "b", "user": "u", "password": ""}, "result_root": "x"}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as context:
+                    urllib.request.urlopen(request, timeout=10)
+                self.assertEqual(context.exception.code, 403)
+            finally:
+                server.shutdown()
+                server.server_close()
+
+
 if __name__ == "__main__":
     unittest.main()

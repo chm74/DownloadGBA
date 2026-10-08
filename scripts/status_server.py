@@ -26,6 +26,15 @@ DEFAULT_BOUNDARIES_DIR = "data/boundaries"
 DEFAULT_RUN_LOG = "data/world_tasks_run.log"
 DEFAULT_RUN_ERR_LOG = "data/world_tasks_run.err.log"
 DEFAULTS_FILE = "data/status_defaults.json"
+DEFAULT_CONFIG_FILE = "data/config.json"
+DEFAULT_UPDATE_DB = {
+    "host": "172.16.1.145",
+    "port": 5432,
+    "dbname": "building",
+    "user": "postgres",
+    "password": "frontfree",
+}
+DEFAULT_RESULT_ROOT = r"\\192.168.2.121\BuildingData\AutoGenerate"
 RUNNER_MARKER = "run_world_building_tasks.py"
 WORKER_MARKER = "download_gba_lod1_wfs"
 PROCESS_RUNNER_MARKER = "run_shp_process_tasks.py"
@@ -1427,6 +1436,73 @@ def load_defaults(repo_root: Path) -> dict:
         return {}
 
 
+def _normalize_config_port(value: object, default: int | None) -> int | None:
+    try:
+        port = int(value)
+    except (TypeError, ValueError):
+        return default
+    return port if 1 <= port <= 65535 else default
+
+
+def load_dashboard_config(repo_root: Path) -> dict:
+    path = Path(repo_root) / DEFAULT_CONFIG_FILE
+    stored: dict = {}
+    if path.exists():
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                stored = raw
+        except (OSError, ValueError):
+            stored = {}
+    db = stored.get("database") if isinstance(stored.get("database"), dict) else {}
+    port = _normalize_config_port(db.get("port"), None)
+    database = {
+        "host": str(db.get("host") or DEFAULT_UPDATE_DB["host"]),
+        "port": port if port is not None else DEFAULT_UPDATE_DB["port"],
+        "dbname": str(db.get("dbname") or DEFAULT_UPDATE_DB["dbname"]),
+        "user": str(db.get("user") or DEFAULT_UPDATE_DB["user"]),
+        "password": str(db.get("password") if db.get("password") is not None else DEFAULT_UPDATE_DB["password"]),
+    }
+    result_root = str(stored.get("result_root") or DEFAULT_RESULT_ROOT)
+    return {"database": database, "result_root": result_root}
+
+
+def save_dashboard_config(repo_root: Path, config: dict) -> dict:
+    db = config.get("database") if isinstance(config.get("database"), dict) else {}
+    host = str(db.get("host") or "").strip()
+    dbname = str(db.get("dbname") or "").strip()
+    user = str(db.get("user") or "").strip()
+    result_root = str(config.get("result_root") or "").strip()
+    if not host:
+        raise ValueError("数据库主机不能为空")
+    if not dbname:
+        raise ValueError("数据库名不能为空")
+    if not user:
+        raise ValueError("数据库用户不能为空")
+    if not result_root:
+        raise ValueError("区域成果 SHP 共享目录不能为空")
+    port = _normalize_config_port(db.get("port"), None)
+    if port is None:
+        raise ValueError("数据库端口必须是 1~65535 的整数")
+    raw_password = db.get("password")
+    payload = {
+        "database": {
+            "host": host,
+            "port": port,
+            "dbname": dbname,
+            "user": user,
+            "password": "" if raw_password is None else str(raw_password),
+        },
+        "result_root": result_root,
+    }
+    path = Path(repo_root) / DEFAULT_CONFIG_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(path)
+    return payload
+
+
 def build_control_snapshot(config: dict) -> dict:
     detected = detect_batch()
     defaults = load_defaults(config["repo_root"])
@@ -1610,6 +1686,10 @@ class StatusHandler(BaseHTTPRequestHandler):
             body = json.dumps(build_merge_status(dataset_key), ensure_ascii=False).encode("utf-8")
             self._send(200, body, "application/json; charset=utf-8")
             return
+        if path == "/api/config":
+            body = json.dumps(load_dashboard_config(config["repo_root"]), ensure_ascii=False).encode("utf-8")
+            self._send(200, body, "application/json; charset=utf-8")
+            return
         if path == "/api/db_updated":
             snapshot = build_db_update_snapshot(
                 repo_root=config["repo_root"],
@@ -1644,6 +1724,7 @@ class StatusHandler(BaseHTTPRequestHandler):
             "/api/process/merge-parts",
             "/api/process/redownload",
             "/api/db_updated",
+            "/api/config",
         ):
             self._send(404, b"not found", "text/plain; charset=utf-8")
             return
@@ -1659,6 +1740,28 @@ class StatusHandler(BaseHTTPRequestHandler):
             payload = json.loads(raw) if raw.strip() else {}
         except (ValueError, OSError):
             self._send(400, b'{"ok": false, "error": "invalid json body"}', "application/json; charset=utf-8")
+            return
+
+        if path == "/api/config":
+            try:
+                with CONTROL_LOCK:
+                    saved = save_dashboard_config(config["repo_root"], payload)
+            except ValueError as exc:
+                self._send(
+                    400,
+                    json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+                return
+            except OSError as exc:
+                self._send(
+                    500,
+                    json.dumps({"ok": False, "error": f"写入失败: {exc}"}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+                return
+            body = json.dumps({"ok": True, "config": saved}, ensure_ascii=False)
+            self._send(200, body.encode("utf-8"), "application/json; charset=utf-8")
             return
 
         if path == "/api/db_updated":
