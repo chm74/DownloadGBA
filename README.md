@@ -501,7 +501,7 @@ python scripts/run_shp_process_tasks.py --move-top "宁夏"
 
 ## 相关文档
 
-- `docs/操作手册.md`（日常操作：启动 / 下载 / 排优先级 / 数据处理 / 入库更新）
+- `docs/操作手册.md`（项目简介 / 首次上手 / 前置准备 / 启动 / 下载 / 排优先级 / 数据处理 / 入库更新 / 常见问题）
 - `docs/gba_building_shp_height_process.md`
 - `docs/gba_building_shp_height_usage.md`
 - `docs/province_gba_batch_solution.md`
