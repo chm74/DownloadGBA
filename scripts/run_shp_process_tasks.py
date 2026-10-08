@@ -38,7 +38,15 @@ PROCESS_RUNNING = "RUNNING"
 PROCESS_OK = "OK"
 PROCESS_FAILED = "FAILED"
 PROCESS_BLOCKED = "BLOCKED_NO_SHP"
-PROCESS_ALL_STATUSES = (PROCESS_PENDING, PROCESS_RUNNING, PROCESS_OK, PROCESS_FAILED, PROCESS_BLOCKED)
+PROCESS_WAITING_DOWNLOAD = "WAITING_DOWNLOAD"
+PROCESS_ALL_STATUSES = (
+    PROCESS_PENDING,
+    PROCESS_RUNNING,
+    PROCESS_OK,
+    PROCESS_FAILED,
+    PROCESS_BLOCKED,
+    PROCESS_WAITING_DOWNLOAD,
+)
 SUCCESS_PROCESS_STATUSES = (PROCESS_OK,)
 
 STAGE_LABELS = {
@@ -54,6 +62,13 @@ DEFAULT_MIN_FREE_RAM_GB = 3.0
 DEFAULT_MIN_FREE_DISK_GB = 50.0
 PROGRESS_WRITE_INTERVAL = 5.0
 RESOURCE_WAIT_SECONDS = 60.0
+
+MERGE_ENGINE_OGR2OGR = "ogr2ogr"
+DEFAULT_MERGE_MAX_GB = 1.8
+OGR2OGR_CANDIDATES = (
+    r"D:\QGIS\bin\ogr2ogr.exe",
+    r"C:\Program Files\QGIS 3.34.8\bin\ogr2ogr.exe",
+)
 
 
 class ProcessStore:
@@ -227,7 +242,7 @@ class ProcessStore:
                     (PROCESS_PENDING, now, key),
                 )
                 self.add_event(key, "PROCESS_SOURCE_CHANGED", change_reason)
-            elif row["status"] == PROCESS_BLOCKED and source["shp_files"]:
+            elif row["status"] in (PROCESS_BLOCKED, PROCESS_WAITING_DOWNLOAD) and source["shp_files"]:
                 self.conn.execute(
                     "UPDATE process_tasks SET status = ?, last_error = NULL, updated_at = ? WHERE dataset_key = ?",
                     (PROCESS_PENDING, now, key),
@@ -551,10 +566,11 @@ def requeue_completed_task(
 def reset_task_after_download_redo(
     repo_root: Path, process_db: Path, download_db: Path, dataset_key: str
 ) -> str | None:
-    """下载数据被重做后，重置对应的处理任务并置顶。
+    """下载数据被重做后，把处理任务置为「等待重新下载」。
 
-    已完成（OK）的处理任务会复用 requeue_completed_task 删除其产物与输入副本；
-    其它状态仅重置为待处理并置顶。返回清理错误字符串；无该处理任务时返回 None。
+    已完成（OK）的处理任务会删除其产物与输入副本；随后清空派生字段并把状态
+    置为 WAITING_DOWNLOAD（保留 attempts/note），下载完成后由 sync 自动恢复为
+    PENDING。返回清理错误字符串；无该处理任务时返回 None。
     """
     repo_root = Path(repo_root).resolve()
     store = ProcessStore(process_db)
@@ -562,37 +578,35 @@ def reset_task_after_download_redo(
         row = store.get(dataset_key)
         if row is None:
             return None
+        kept_attempts = row.get("attempts") or 0
+        cleanup_error = None
         if row["status"] == PROCESS_OK:
             try:
                 result = requeue_completed_task(repo_root, process_db, download_db, dataset_key)
-                return result.get("cleanup_error")
+                cleanup_error = result.get("cleanup_error")
             except (KeyError, ValueError):
-                pass
+                cleanup_error = None
 
-        pending = [item["dataset_key"] for item in store.pending_tasks() if item["dataset_key"] != dataset_key]
-        ordered = [dataset_key, *pending]
         now = lib.utc_now()
         store.conn.execute(
             """
             UPDATE process_tasks
-            SET status = ?, attempts = 0, input_dir = NULL, output_dir = NULL, log_file = NULL,
-                stage = NULL, stage_detail = NULL, tiles_done = NULL, tiles_total = NULL,
-                last_log = NULL, last_error = NULL, tile_count = NULL, feature_count = NULL,
-                started_at = NULL, finished_at = NULL, duration_seconds = NULL, updated_at = ?
+            SET status = ?, shp_files = ?, attempts = ?, input_dir = NULL, output_dir = NULL,
+                log_file = NULL, stage = NULL, stage_detail = NULL, tiles_done = NULL,
+                tiles_total = NULL, last_log = NULL, last_error = ?, tile_count = NULL,
+                feature_count = NULL, source_fingerprint = NULL, source_updated_at = NULL,
+                download_finished_at = NULL, started_at = NULL, finished_at = NULL,
+                duration_seconds = NULL, queue_order = NULL, updated_at = ?
             WHERE dataset_key = ?
             """,
-            (PROCESS_PENDING, now, dataset_key),
-        )
-        store.conn.executemany(
-            "UPDATE process_tasks SET queue_order = ?, updated_at = ? WHERE dataset_key = ?",
-            [(index, now, key) for index, key in enumerate(ordered, start=1)],
+            (PROCESS_WAITING_DOWNLOAD, "[]", kept_attempts, "原始下载数据已删除，等待重新下载", now, dataset_key),
         )
         store.conn.execute(
             "INSERT INTO process_events (dataset_key, event, detail, created_at) VALUES (?, ?, ?, ?)",
-            (dataset_key, "PROCESS_REDO_TOP_FROM_DOWNLOAD", "", now),
+            (dataset_key, "PROCESS_WAITING_DOWNLOAD", "原始下载数据已删除，等待重新下载", now),
         )
         store.conn.commit()
-        return None
+        return cleanup_error
     finally:
         store.close()
 
@@ -900,9 +914,205 @@ def sync_process_tasks(
                 added += 1
             else:
                 updated += 1
-        return {"total": len(selected), "added": added, "updated": updated, "sources": selected}
+
+        repo_resolved = Path(repo_root).resolve()
+        discovered = {source["dataset_key"] for source in selected}
+        waiting = 0
+        for row in store.all_tasks():
+            if row["status"] != PROCESS_PENDING or row["dataset_key"] in discovered:
+                continue
+            if only_tokens and not matches_filters(row, only_tokens):
+                continue
+            files = json.loads(row["shp_files"] or "[]")
+            has_file = False
+            for item in files:
+                candidate = Path(str(item))
+                if not candidate.is_absolute():
+                    candidate = repo_resolved / candidate
+                if candidate.is_file():
+                    has_file = True
+                    break
+            if files and has_file:
+                continue
+            store.conn.execute(
+                "UPDATE process_tasks SET status = ?, shp_files = ?, last_error = ?, updated_at = ? "
+                "WHERE dataset_key = ?",
+                (PROCESS_WAITING_DOWNLOAD, "[]", "源 SHP 缺失，等待重新下载", lib.utc_now(), row["dataset_key"]),
+            )
+            store.add_event(row["dataset_key"], "PROCESS_WAITING_DOWNLOAD", "源 SHP 缺失，对账置为等待重新下载")
+            waiting += 1
+        store.conn.commit()
+        return {
+            "total": len(selected),
+            "added": added,
+            "updated": updated,
+            "waiting": waiting,
+            "sources": selected,
+        }
     finally:
         store.close()
+
+
+def resolve_ogr2ogr(explicit: str | None = None) -> str:
+    if explicit:
+        path = Path(explicit).expanduser()
+        if path.is_file():
+            return str(path)
+        raise ValueError(f"ogr2ogr 不存在: {explicit}")
+    discovered = shutil.which("ogr2ogr")
+    if discovered:
+        return discovered
+    for candidate in OGR2OGR_CANDIDATES:
+        if Path(candidate).is_file():
+            return candidate
+    raise ValueError("未找到 ogr2ogr，请用 --ogr2ogr 指定路径（QGIS 自带：<QGIS>\\bin\\ogr2ogr.exe）")
+
+
+def _shp_component_bytes(shp: Path) -> int:
+    total = 0
+    for suffix in (".shp", ".dbf"):
+        component = Path(shp).with_suffix(suffix)
+        if component.is_file():
+            total += component.stat().st_size
+    return total
+
+
+def merge_task_shp_parts(
+    repo_root: Path,
+    process_db: Path,
+    dataset_key: str,
+    engine: str = MERGE_ENGINE_OGR2OGR,
+    ogr2ogr_exe: str | None = None,
+    max_output_gb: float = DEFAULT_MERGE_MAX_GB,
+    download_db: Path = DEFAULT_DOWNLOAD_DB,
+    manifest_path: Path | str = DEFAULT_MANIFEST,
+    sync: bool = True,
+    progress_cb=None,
+    log_cb=None,
+) -> dict:
+    """把某处理任务的交付分卷合并为单个 <前缀>_buildings_height_gba.shp。
+
+    成功后删除原分卷并（可选）同步处理队列。失败不改动任何原分卷。
+    """
+    def log(message: str) -> None:
+        if log_cb is not None:
+            log_cb(message)
+
+    repo_root = Path(repo_root).resolve()
+    store = ProcessStore(process_db)
+    try:
+        row = store.get(dataset_key)
+        if row is None:
+            raise KeyError(f"未找到处理任务: {dataset_key}")
+        if row["status"] == PROCESS_RUNNING:
+            raise ValueError("任务正在处理中，不能合并分卷")
+        source_dir = lib.resolve_task_dir(repo_root, row["source_dir"])
+        shp_records = json.loads(row["shp_files"] or "[]")
+        prefix = row.get("process_name_prefix") or derive_prefix_from_files(
+            [Path(str(item)).name for item in shp_records]
+        ) or dataset_slug(dataset_key)
+    finally:
+        store.close()
+
+    if engine != MERGE_ENGINE_OGR2OGR:
+        raise ValueError(f"暂不支持的合并引擎: {engine}")
+
+    parts: list[Path] = []
+    for item in shp_records:
+        path = Path(str(item))
+        if not path.is_absolute():
+            path = repo_root / path
+        path = path.resolve()
+        if path.suffix.lower() != ".shp":
+            continue
+        if path.is_symlink():
+            raise ValueError(f"分卷是符号链接，拒绝处理: {path}")
+        if path.parent != source_dir:
+            raise ValueError(f"分卷不在来源目录内: {path}")
+        if not path.is_file():
+            raise ValueError(f"分卷文件不存在: {path}")
+        parts.append(path)
+    parts.sort(key=lambda path: str(path).lower())
+
+    if len(parts) < 2:
+        raise ValueError("该任务只有一个 SHP，无需合并")
+
+    total_bytes = sum(_shp_component_bytes(part) for part in parts)
+    if total_bytes > max_output_gb * (1 << 30):
+        raise ValueError(
+            f"分卷合计 {total_bytes / (1 << 30):.2f}GB 超过 {max_output_gb:g}GB；"
+            "Shapefile 单文件上限约 2GB，建议改用 GPKG"
+        )
+
+    ogr2ogr = resolve_ogr2ogr(ogr2ogr_exe)
+    final_shp = source_dir / f"{prefix}_buildings_height_gba.shp"
+    tmp_base = source_dir / f".merge-{uuid.uuid4().hex}"
+    tmp_shp = tmp_base.with_suffix(".shp")
+    output_components = (".shp", *SIDECAR_SUFFIXES)
+
+    def remove_components(base: Path) -> None:
+        for suffix in output_components:
+            base.with_suffix(suffix).unlink(missing_ok=True)
+
+    try:
+        log(f"[MERGE] 开始合并 {len(parts)} 个分卷 -> {final_shp.name}")
+        remove_components(tmp_base)
+        subprocess.run(
+            [ogr2ogr, "-f", "ESRI Shapefile", "-lco", "ENCODING=UTF-8", str(tmp_shp), str(parts[0])],
+            check=True, capture_output=True, text=True, encoding="utf-8",
+        )
+        if progress_cb is not None:
+            progress_cb(1, len(parts))
+        for index, part in enumerate(parts[1:], start=2):
+            subprocess.run(
+                [ogr2ogr, "-f", "ESRI Shapefile", "-append", str(tmp_shp), str(part)],
+                check=True, capture_output=True, text=True, encoding="utf-8",
+            )
+            log(f"[MERGE] 已合入 {index}/{len(parts)}: {part.name}")
+            if progress_cb is not None:
+                progress_cb(index, len(parts))
+
+        remove_components(final_shp.with_suffix(""))
+        for suffix in output_components:
+            tmp_component = tmp_base.with_suffix(suffix)
+            if tmp_component.exists():
+                tmp_component.replace(final_shp.with_suffix(suffix))
+
+        deleted = 0
+        for part in parts:
+            for suffix in output_components:
+                part.with_suffix(suffix).unlink(missing_ok=True)
+            deleted += 1
+        log(f"[MERGE] 合并完成: {final_shp.name}，已删除 {deleted} 个原分卷")
+    except Exception:
+        remove_components(tmp_base)
+        raise
+
+    result = {
+        "ok": True,
+        "dataset_key": dataset_key,
+        "merged": lib.repo_relative(repo_root, final_shp),
+        "deleted_parts": len(parts),
+        "shp_count": 1,
+        "sync": None,
+        "error": None,
+    }
+    if sync:
+        scan_root = repo_root / DEFAULT_SCAN_ROOT
+        download_path = Path(download_db)
+        if not download_path.is_absolute():
+            download_path = repo_root / download_path
+        result["sync"] = sync_process_tasks(
+            repo_root,
+            Path(process_db),
+            download_path,
+            scan_root,
+            [],
+            [dataset_key],
+            True,
+            manifest_path,
+        )
+    return result
 
 
 def available_memory_bytes() -> int | None:
@@ -1320,7 +1530,7 @@ def print_summary(store: ProcessStore) -> None:
     print(
         f"[PROCESS] total={total} ok={counts.get(PROCESS_OK, 0)} pending={counts.get(PROCESS_PENDING, 0)} "
         f"running={counts.get(PROCESS_RUNNING, 0)} failed={counts.get(PROCESS_FAILED, 0)} "
-        f"blocked={counts.get(PROCESS_BLOCKED, 0)}"
+        f"blocked={counts.get(PROCESS_BLOCKED, 0)} waiting={counts.get(PROCESS_WAITING_DOWNLOAD, 0)}"
     )
     for row in store.all_tasks():
         if row["status"] == PROCESS_PENDING:

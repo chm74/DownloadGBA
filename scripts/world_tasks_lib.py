@@ -881,6 +881,8 @@ class StateStore:
         if "queue_order" not in columns:
             self.conn.execute("ALTER TABLE tasks ADD COLUMN queue_order INTEGER")
             self.conn.execute("UPDATE tasks SET queue_order = manifest_order + 1")
+        if "redownload_count" not in columns:
+            self.conn.execute("ALTER TABLE tasks ADD COLUMN redownload_count INTEGER NOT NULL DEFAULT 0")
 
     def close(self) -> None:
         self.conn.close()
@@ -1252,10 +1254,11 @@ def requeue_completed_download(
         store.conn.execute(
             """
             UPDATE tasks
-            SET status = ?, attempts = 0, exit_code = NULL, feature_count = NULL,
+            SET status = ?, exit_code = NULL, feature_count = NULL,
                 merge_output = NULL, boundary_source = NULL, existing_data_dir = NULL,
                 processed_3857_dir = NULL, last_error = NULL, started_at = NULL,
-                finished_at = NULL, duration_seconds = NULL, updated_at = ?
+                finished_at = NULL, duration_seconds = NULL,
+                redownload_count = COALESCE(redownload_count, 0) + 1, updated_at = ?
             WHERE task_id = ?
             """,
             (STATUS_PENDING, now, task_id),
@@ -1268,6 +1271,9 @@ def requeue_completed_download(
             "INSERT INTO task_events (task_id, event, detail, created_at) VALUES (?, ?, ?, ?)",
             (task_id, "DOWNLOAD_REDO_TOP", f"deleted={repo_relative(repo_root, task_dir)}", now),
         )
+        redownload_count = store.conn.execute(
+            "SELECT redownload_count FROM tasks WHERE task_id = ?", (task_id,)
+        ).fetchone()[0]
         store.conn.commit()
         committed = True
     except Exception:
@@ -1289,5 +1295,6 @@ def requeue_completed_download(
     return {
         "queue": ordered,
         "deleted_dir": str(task_dir),
+        "redownload_count": redownload_count,
         "cleanup_error": "；".join(cleanup_errors) or None,
     }

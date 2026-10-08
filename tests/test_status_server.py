@@ -1,8 +1,10 @@
 import argparse
 import json
+import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -1935,8 +1937,9 @@ class ControlTests(unittest.TestCase):
                     """
                     INSERT INTO process_tasks (
                         dataset_key, task_id, display_name, process_name_prefix, source_dir,
-                        input_dir, output_dir, status, feature_count, updated_at, queue_order
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        input_dir, output_dir, status, feature_count, updated_at, queue_order,
+                        shp_files, attempts, note
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         "Europe|San_Marino|San_Marino",
@@ -1950,6 +1953,9 @@ class ControlTests(unittest.TestCase):
                         10,
                         lib.utc_now(),
                         1,
+                        json.dumps(["data/Europe/San_Marino/San_Marino_buildings_height_gba.shp"]),
+                        2,
+                        "保留备注",
                     ),
                 )
                 store.conn.commit()
@@ -1965,10 +1971,417 @@ class ControlTests(unittest.TestCase):
             store = run_shp_process_tasks.ProcessStore(process_db)
             try:
                 row = store.get("Europe|San_Marino|San_Marino")
-                self.assertEqual(row["status"], run_shp_process_tasks.PROCESS_PENDING)
-                self.assertEqual(
-                    store.pending_tasks()[0]["dataset_key"], "Europe|San_Marino|San_Marino"
+                self.assertEqual(row["status"], run_shp_process_tasks.PROCESS_WAITING_DOWNLOAD)
+                self.assertEqual(json.loads(row["shp_files"] or "[]"), [])
+                self.assertEqual(row["attempts"], 2)
+                self.assertEqual(row["note"], "保留备注")
+                self.assertEqual(store.pending_tasks(), [])
+            finally:
+                store.close()
+
+    def _make_part_shp(self, path: Path, features: int) -> None:
+        gdf = gpd.GeoDataFrame(
+            {"GBA_ID": [str(i) for i in range(features)]},
+            geometry=[box(i, 0, i + 1, 1) for i in range(features)],
+            crs=4326,
+        )
+        gdf.to_file(path)
+
+    def _register_merge_task(self, process_db: Path, shp_files: list[str], status: str) -> None:
+        store = run_shp_process_tasks.ProcessStore(process_db)
+        try:
+            store.upsert_source(
+                {
+                    "dataset_key": "Asia|China|Test",
+                    "task_id": "Asia|China|Test",
+                    "display_name": "Test",
+                    "process_name_prefix": "Test",
+                    "source_dir": "data/Asia/China/Test",
+                    "shp_files": shp_files,
+                    "status": status,
+                }
+            )
+        finally:
+            store.close()
+
+    def test_merge_task_shp_parts_merges_and_deletes_parts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            source_dir = repo_root / "data" / "Asia" / "China" / "Test"
+            source_dir.mkdir(parents=True)
+            part1 = source_dir / "Test_buildings_height_gba_part1.shp"
+            part2 = source_dir / "Test_buildings_height_gba_part2.shp"
+            self._make_part_shp(part1, 2)
+            self._make_part_shp(part2, 3)
+            process_db = repo_root / "process.db"
+            self._register_merge_task(
+                process_db,
+                [lib.repo_relative(repo_root, part1), lib.repo_relative(repo_root, part2)],
+                run_shp_process_tasks.PROCESS_PENDING,
+            )
+
+            def fake_run(command, **kwargs):
+                output = Path(command[-2])
+                source = Path(command[-1])
+                frame = gpd.read_file(source)
+                if output.exists():
+                    frame = gpd.GeoDataFrame(
+                        gpd.pd.concat([gpd.read_file(output), frame], ignore_index=True),
+                        crs=frame.crs,
+                    )
+                frame.to_file(output)
+                return subprocess.CompletedProcess(command, 0, "", "")
+
+            with patch.object(run_shp_process_tasks, "resolve_ogr2ogr", return_value="ogr2ogr"), \
+                 patch.object(run_shp_process_tasks.subprocess, "run", side_effect=fake_run):
+                result = run_shp_process_tasks.merge_task_shp_parts(
+                    repo_root, process_db, "Asia|China|Test", sync=False
                 )
+
+            final = source_dir / "Test_buildings_height_gba.shp"
+            self.assertTrue(final.exists())
+            self.assertFalse(part1.exists())
+            self.assertFalse(part2.exists())
+            self.assertEqual(result["shp_count"], 1)
+            self.assertEqual(result["deleted_parts"], 2)
+
+    def test_merge_task_shp_parts_rejects_single_or_running(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            source_dir = repo_root / "data" / "Asia" / "China" / "Test"
+            source_dir.mkdir(parents=True)
+            single = source_dir / "Test_buildings_height_gba.shp"
+            self._make_part_shp(single, 1)
+            process_db = repo_root / "process.db"
+            self._register_merge_task(
+                process_db, [lib.repo_relative(repo_root, single)],
+                run_shp_process_tasks.PROCESS_PENDING,
+            )
+            with self.assertRaises(ValueError):
+                run_shp_process_tasks.merge_task_shp_parts(
+                    repo_root, process_db, "Asia|China|Test", sync=False
+                )
+
+            part1 = source_dir / "Test_buildings_height_gba_part1.shp"
+            part2 = source_dir / "Test_buildings_height_gba_part2.shp"
+            self._make_part_shp(part1, 2)
+            self._make_part_shp(part2, 2)
+            self._register_merge_task(
+                process_db,
+                [lib.repo_relative(repo_root, part1), lib.repo_relative(repo_root, part2)],
+                run_shp_process_tasks.PROCESS_PENDING,
+            )
+            store = run_shp_process_tasks.ProcessStore(process_db)
+            try:
+                store.conn.execute(
+                    "UPDATE process_tasks SET status = ? WHERE dataset_key = ?",
+                    (run_shp_process_tasks.PROCESS_RUNNING, "Asia|China|Test"),
+                )
+                store.conn.commit()
+            finally:
+                store.close()
+            with self.assertRaises(ValueError):
+                run_shp_process_tasks.merge_task_shp_parts(
+                    repo_root, process_db, "Asia|China|Test", sync=False
+                )
+
+    def test_process_merge_parts_endpoint_reports_progress(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            process_db = repo_root / "process.db"
+            self._register_merge_task(
+                process_db,
+                [
+                    "data/Asia/China/Test/Test_buildings_height_gba_part1.shp",
+                    "data/Asia/China/Test/Test_buildings_height_gba_part2.shp",
+                ],
+                run_shp_process_tasks.PROCESS_PENDING,
+            )
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                with patch.object(
+                    status_server.process_queue,
+                    "merge_task_shp_parts",
+                    return_value={"ok": True, "shp_count": 1},
+                ) as mocked:
+                    request = urllib.request.Request(
+                        f"http://127.0.0.1:{port}/api/process/merge-parts",
+                        data=json.dumps(
+                            {
+                                "dataset_key": "Asia|China|Test",
+                                "confirm_delete": True,
+                                "expected_source_dir": "data/Asia/China/Test",
+                            }
+                        ).encode("utf-8"),
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with urllib.request.urlopen(request, timeout=10) as response:
+                        payload = json.loads(response.read().decode("utf-8"))
+                    self.assertTrue(payload["ok"])
+                    self.assertEqual(payload["state"], "running")
+
+                    state = {"state": "running"}
+                    for _ in range(200):
+                        with urllib.request.urlopen(
+                            f"http://127.0.0.1:{port}/api/process/merge-status"
+                            "?dataset_key=Asia%7CChina%7CTest",
+                            timeout=10,
+                        ) as response:
+                            state = json.loads(response.read().decode("utf-8"))
+                        if state.get("state") != "running":
+                            break
+                        time.sleep(0.02)
+                self.assertEqual(state["state"], "done")
+                mocked.assert_called_once()
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_process_merge_parts_endpoint_requires_confirm(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            process_db = repo_root / "process.db"
+            self._register_merge_task(
+                process_db,
+                [
+                    "data/Asia/China/Test/Test_buildings_height_gba_part1.shp",
+                    "data/Asia/China/Test/Test_buildings_height_gba_part2.shp",
+                ],
+                run_shp_process_tasks.PROCESS_PENDING,
+            )
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{port}/api/process/merge-parts",
+                    data=json.dumps({"dataset_key": "Asia|China|Test"}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as context:
+                    urllib.request.urlopen(request, timeout=10)
+                self.assertEqual(context.exception.code, 400)
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def _register_process_ok(self, process_db: Path, key: str, source_dir: str, shp_files: list[str]) -> None:
+        store = run_shp_process_tasks.ProcessStore(process_db)
+        try:
+            store.conn.execute(
+                """
+                INSERT INTO process_tasks (
+                    dataset_key, task_id, display_name, process_name_prefix, source_dir,
+                    status, shp_files, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (key, key, key.split("|")[-1], key.split("|")[-1].lower(),
+                 source_dir, run_shp_process_tasks.PROCESS_OK, json.dumps(shp_files), lib.utc_now()),
+            )
+            store.conn.commit()
+        finally:
+            store.close()
+
+    def test_process_redownload_endpoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            build_repo_fixture(repo_root)
+            task_dir = self._make_completed_download(repo_root)
+            marks_file = repo_root / "data" / "db_update_status.json"
+            status_server.save_db_update_marks(
+                marks_file,
+                [{"dataset_key": "Europe|San_Marino|San_Marino", "updated": True,
+                  "updated_at": "2026-01-01T00:00:00", "note": "x"}],
+            )
+            store = lib.StateStore(repo_root / "state.db")
+            try:
+                store.conn.execute(
+                    "UPDATE tasks SET attempts = 3 WHERE task_id = ?",
+                    ("Europe|San_Marino|San_Marino",),
+                )
+                store.conn.commit()
+            finally:
+                store.close()
+            self._register_process_ok(
+                repo_root / "process.db", "Europe|San_Marino|San_Marino",
+                "data/Europe/San_Marino/San_Marino",
+                ["data/Europe/San_Marino/San_Marino/San_Marino_buildings_height_gba_part1.shp"],
+            )
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{port}/api/process/redownload",
+                    data=json.dumps({
+                        "dataset_key": "Europe|San_Marino|San_Marino",
+                        "confirm_delete": True,
+                        "expected_download_dir": "data/Europe/San_Marino/San_Marino",
+                    }).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                self.assertTrue(payload["ok"], payload)
+                self.assertEqual(payload["redownload_count"], 1)
+                self.assertFalse(task_dir.exists())
+
+                dstore = lib.StateStore(repo_root / "state.db")
+                try:
+                    row = dstore.get("Europe|San_Marino|San_Marino")
+                    self.assertEqual(row["status"], lib.STATUS_PENDING)
+                    self.assertEqual(row["attempts"], 3)
+                    self.assertEqual(row["redownload_count"], 1)
+                finally:
+                    dstore.close()
+
+                pstore = run_shp_process_tasks.ProcessStore(repo_root / "process.db")
+                try:
+                    prow = pstore.get("Europe|San_Marino|San_Marino")
+                    self.assertEqual(prow["status"], run_shp_process_tasks.PROCESS_WAITING_DOWNLOAD)
+                    self.assertEqual(json.loads(prow["shp_files"] or "[]"), [])
+                finally:
+                    pstore.close()
+
+                self.assertNotIn(
+                    "Europe|San_Marino|San_Marino",
+                    status_server.load_db_update_marks(marks_file),
+                )
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_process_redownload_endpoint_requires_confirm(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            build_repo_fixture(repo_root)
+            self._register_process_ok(
+                repo_root / "process.db", "Europe|San_Marino|San_Marino",
+                "data/Europe/San_Marino/San_Marino", [],
+            )
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{port}/api/process/redownload",
+                    data=json.dumps({"dataset_key": "Europe|San_Marino|San_Marino"}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as context:
+                    urllib.request.urlopen(request, timeout=10)
+                self.assertEqual(context.exception.code, 400)
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_process_redownload_rejects_task_without_download(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            process_db = repo_root / "process.db"
+            store = run_shp_process_tasks.ProcessStore(process_db)
+            try:
+                store.conn.execute(
+                    """
+                    INSERT INTO process_tasks (
+                        dataset_key, task_id, display_name, process_name_prefix, source_dir,
+                        status, shp_files, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("EXT|data/Asia/China/Scan", "", "Scan", "scan", "data/Asia/China/Scan",
+                     run_shp_process_tasks.PROCESS_OK, "[]", lib.utc_now()),
+                )
+                store.conn.commit()
+            finally:
+                store.close()
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{port}/api/process/redownload",
+                    data=json.dumps({
+                        "dataset_key": "EXT|data/Asia/China/Scan",
+                        "confirm_delete": True,
+                        "expected_download_dir": "",
+                    }).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as context:
+                    urllib.request.urlopen(request, timeout=10)
+                self.assertEqual(context.exception.code, 400)
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_sync_reconcile_marks_missing_pending_as_waiting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            process_db = repo_root / "process.db"
+            store = run_shp_process_tasks.ProcessStore(process_db)
+            try:
+                store.conn.execute(
+                    """
+                    INSERT INTO process_tasks (
+                        dataset_key, task_id, display_name, process_name_prefix, source_dir,
+                        status, shp_files, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("Asia|China|Missing", "Asia|China|Missing", "Missing", "missing",
+                     "data/Asia/China/Missing", run_shp_process_tasks.PROCESS_PENDING,
+                     json.dumps(["data/Asia/China/Missing/Missing_buildings_height_gba.shp"]),
+                     lib.utc_now()),
+                )
+                store.conn.commit()
+            finally:
+                store.close()
+
+            run_shp_process_tasks.sync_process_tasks(
+                repo_root, process_db, repo_root / "state.db", repo_root / "data", [], [],
+                True, run_shp_process_tasks.DEFAULT_MANIFEST,
+            )
+
+            store = run_shp_process_tasks.ProcessStore(process_db)
+            try:
+                row = store.get("Asia|China|Missing")
+                self.assertEqual(row["status"], run_shp_process_tasks.PROCESS_WAITING_DOWNLOAD)
+                self.assertEqual(json.loads(row["shp_files"] or "[]"), [])
+            finally:
+                store.close()
+
+    def test_waiting_download_recovers_to_pending_on_new_shp(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            process_db = repo_root / "process.db"
+            store = run_shp_process_tasks.ProcessStore(process_db)
+            try:
+                store.conn.execute(
+                    """
+                    INSERT INTO process_tasks (
+                        dataset_key, task_id, display_name, process_name_prefix, source_dir,
+                        status, shp_files, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("Asia|China|Back", "Asia|China|Back", "Back", "back",
+                     "data/Asia/China/Back", run_shp_process_tasks.PROCESS_WAITING_DOWNLOAD,
+                     "[]", lib.utc_now()),
+                )
+                store.conn.commit()
+                store.upsert_source(
+                    {
+                        "dataset_key": "Asia|China|Back",
+                        "task_id": "Asia|China|Back",
+                        "display_name": "Back",
+                        "process_name_prefix": "back",
+                        "source_dir": "data/Asia/China/Back",
+                        "shp_files": ["data/Asia/China/Back/Back_buildings_height_gba.shp"],
+                        "status": run_shp_process_tasks.PROCESS_PENDING,
+                    }
+                )
+                row = store.get("Asia|China|Back")
+                self.assertEqual(row["status"], run_shp_process_tasks.PROCESS_PENDING)
             finally:
                 store.close()
 

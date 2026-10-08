@@ -186,6 +186,7 @@
           <div class="card"><div class="muted">运行中</div><div class="num run" id="p-running">-</div></div>
           <div class="card"><div class="muted">待处理</div><div class="num" id="p-pending">-</div></div>
           <div class="card"><div class="muted">已完成</div><div class="num ok" id="p-ok">-</div></div>
+          <div class="card"><div class="muted">等待重新下载</div><div class="num" id="p-waiting">-</div></div>
           <div class="card"><div class="muted">失败/阻塞</div><div class="num err" id="p-failed">-</div></div>
         </div>
       </aside>
@@ -228,7 +229,7 @@
         <section>
           <h2>待处理队列</h2>
           <div class="muted" style="margin-bottom:8px;">
-            点「排序」列的按钮可手动调整执行顺序（下次 <code>--run</code> 生效）｜<span id="p-queue-message"></span>
+            点「排序」列的按钮可手动调整执行顺序（下次 <code>--run</code> 生效）｜点「自动合并」可将该区域的分卷自动合并为一个 SHP（与初版数据库命名保持一致）｜<span id="p-queue-message"></span>
           </div>
           <div id="p-queue-table"><div class="empty">暂无待处理任务</div></div>
         </section>
@@ -584,7 +585,7 @@ function renderRecent(items) {
   }
   box.innerHTML = `
     <table>
-      <thead><tr><th>任务</th><th>状态</th><th>要素数</th><th>耗时</th><th>完成时间</th><th>下载目录</th><th>操作</th></tr></thead>
+      <thead><tr><th>任务</th><th>状态</th><th>要素数</th><th>耗时</th><th>完成时间</th><th>重下次数</th><th>下载目录</th><th>操作</th></tr></thead>
       <tbody>${items.map(item => `
         <tr>
           <td class="mono">${esc(item.task_id)}</td>
@@ -592,8 +593,9 @@ function renderRecent(items) {
           <td>${esc(item.feature_count ?? "-")}</td>
           <td>${fmtDuration(item.duration_seconds)}</td>
           <td>${esc(item.finished_at || "-")}</td>
+          <td>${esc(item.redownload_count ?? 0)}</td>
           <td class="mono">${esc(item.download_dir || "-")}</td>
-          <td><button type="button" class="mini" data-requeue-completed="${esc(item.task_id)}" data-download-dir="${esc(item.download_dir || "")}" title="删除旧下载数据并置顶重做">置顶</button></td>
+          <td><button type="button" class="mini" style="color:#b91c1c;border-color:#b91c1c;" data-requeue-completed="${esc(item.task_id)}" data-download-dir="${esc(item.download_dir || "")}" title="删除原始下载数据并退回下载队列，重下后自动重处理">重新下载</button></td>
         </tr>`).join("")}
       </tbody>
     </table>`;
@@ -618,7 +620,7 @@ function renderFailed(items) {
           <td>${esc(item.last_error)}</td>
           <td>${esc(item.finished_at || "-")}</td>
           <td>
-            <button type="button" class="mini" data-requeue="${esc(item.task_id)}" data-position="top" title="置顶到队首">置顶</button>
+            <button type="button" class="mini" data-requeue="${esc(item.task_id)}" data-position="top" title="重新入队并添加到队首（下次启动批处理生效）">重新入队</button>
           </td>
         </tr>`).join("")}
       </tbody>
@@ -627,7 +629,7 @@ function renderFailed(items) {
 
 async function requeueDownload(taskId, position, button, messageId = "failed-message") {
   const message = document.getElementById(messageId);
-  const labels = { tail: "加入队尾", top: "置顶" };
+  const labels = { tail: "加入队尾", top: "重新入队" };
   const label = labels[position] || position;
   message.textContent = `${label}中…`;
   if (button) button.disabled = true;
@@ -642,7 +644,7 @@ async function requeueDownload(taskId, position, button, messageId = "failed-mes
       message.textContent = `${label}失败：` + (data.error || response.status);
       return;
     }
-    message.textContent = `${label}成功，已入队（当前待执行 ${data.pending_total} 条，下次启动批处理生效）`;
+    message.textContent = `${label}成功，已添加到队首（当前待执行 ${data.pending_total} 条，下次启动批处理生效）`;
     await refresh();
   } catch (error) {
     message.textContent = "入队请求失败：" + error;
@@ -755,7 +757,7 @@ function renderProcessingQueue(processing) {
   }
   box.innerHTML = `
     <table>
-      <thead><tr><th>排序</th><th>#</th><th>数据集</th><th>命名前缀</th><th>来源目录</th><th>要素数</th><th>SHP</th><th>状态</th><th>备注</th></tr></thead>
+      <thead><tr><th>排序</th><th>#</th><th>数据集</th><th>命名前缀</th><th>来源目录</th><th>要素数</th><th>SHP</th><th>状态</th><th>备注</th><th>操作</th></tr></thead>
       <tbody>${items.map((item, index) => {
         const isFirst = index === 0;
         const isLast = index === items.length - 1;
@@ -777,6 +779,7 @@ function renderProcessingQueue(processing) {
           <td>待处理</td>
           <td><input class="note-input" type="text" maxlength="200" placeholder="添加备注"
                      data-note-key="${key}" data-saved="${esc(note)}" value="${esc(note)}"></td>
+          <td><button type="button" class="mini" title="可以通过点击该按钮，自动合并为一个SHP" data-auto-merge="${key}" data-source-dir="${esc(item.source_dir || "")}" data-shp-count="${esc(item.shp_count ?? 0)}" ${(item.shp_count ?? 0) > 1 ? "" : "disabled"}>自动合并</button></td>
         </tr>`;
       }).join("")}
       </tbody>
@@ -862,7 +865,75 @@ async function reorderProcessing(datasetKey, direction) {
   }
 }
 
+function pollProcessingMerge(datasetKey, button, originalText) {
+  const message = document.getElementById("p-queue-message");
+  const timer = setInterval(async () => {
+    try {
+      const response = await fetch(`/api/process/merge-status?dataset_key=${encodeURIComponent(datasetKey)}`, { cache: "no-store" });
+      const data = await response.json();
+      if (data.state === "running") {
+        if (message) message.textContent = `合并中：${data.message || ""}`;
+        return;
+      }
+      clearInterval(timer);
+      if (data.state === "done") {
+        if (message) message.textContent = `已合并为单个 SHP 并同步队列：${datasetKey}`;
+        await refresh();
+      } else {
+        if (message) message.textContent = "合并失败：" + (data.error || "未知错误");
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    } catch (error) {
+      clearInterval(timer);
+      if (message) message.textContent = "查询合并状态失败：" + error;
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }, 2000);
+}
+
+async function autoMergeParts(datasetKey, button) {
+  const message = document.getElementById("p-queue-message");
+  const count = button.dataset.shpCount || "?";
+  if (!window.confirm(`确认将“${datasetKey}”的 ${count} 个分卷自动合并为一个 SHP？\n将删除原分卷，并同步处理队列。`)) {
+    return;
+  }
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "合并中…";
+  if (message) message.textContent = "正在启动合并…";
+  try {
+    const response = await fetch("/api/process/merge-parts", {
+      method: "POST",
+      headers: actionHeaders(),
+      body: JSON.stringify({
+        dataset_key: datasetKey,
+        confirm_delete: true,
+        expected_source_dir: button.dataset.sourceDir || "",
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      if (message) message.textContent = "合并启动失败：" + (data.error || response.status);
+      button.disabled = false;
+      button.textContent = originalText;
+      return;
+    }
+    pollProcessingMerge(datasetKey, button, originalText);
+  } catch (error) {
+    if (message) message.textContent = "合并请求失败：" + error;
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+}
+
 document.getElementById("p-queue-table").addEventListener("click", (event) => {
+  const mergeButton = event.target.closest("button[data-auto-merge]");
+  if (mergeButton && !mergeButton.disabled) {
+    autoMergeParts(mergeButton.dataset.autoMerge, mergeButton);
+    return;
+  }
   const button = event.target.closest("button[data-reorder]");
   if (!button || button.disabled) return;
   reorderProcessing(button.dataset.reorder, button.dataset.direction);
@@ -894,7 +965,10 @@ function renderProcessingRecent(processing) {
           <td>${fmtDuration(item.duration_seconds)}</td>
           <td>${esc(item.finished_at || "-")}</td>
           <td class="mono">${esc(item.output_dir || "-")}</td>
-          <td><button type="button" class="mini" data-prequeue-completed="${esc(item.dataset_key)}" data-output-dir="${esc(item.output_dir || "")}" data-input-dir="${esc(item.input_dir || "")}" title="删除处理产物并重新加入待处理队首">置顶</button></td>
+          <td>
+            <button type="button" class="mini" data-prequeue-completed="${esc(item.dataset_key)}" data-output-dir="${esc(item.output_dir || "")}" data-input-dir="${esc(item.input_dir || "")}" title="删除处理产物并重新处理（保留原始下载数据）">重做处理</button>
+            <button type="button" class="mini" style="color:#b91c1c;border-color:#b91c1c;" data-redownload="${esc(item.dataset_key)}" data-download-dir="${esc(item.source_dir || "")}" title="删除原始下载数据并退回下载队列，重下后自动重处理" ${item.task_id ? "" : "disabled"}>重新下载</button>
+          </td>
         </tr>`).join("")}
       </tbody>
     </table>`;
@@ -932,7 +1006,49 @@ async function requeueCompletedProcessing(datasetKey, button) {
   }
 }
 
+async function requeueRedownload(datasetKey, button) {
+  const downloadDir = button.dataset.downloadDir || "未记录";
+  const confirmed = window.confirm(
+    `确认将“${datasetKey}”重新下载？\n` +
+    `将永久删除原始下载目录：${downloadDir}\n` +
+    `以及处理产物/输入副本；任务退回下载队列，下载完成后自动重新处理。\n` +
+    `删除后无法恢复。`
+  );
+  if (!confirmed) return;
+  const message = document.getElementById("p-recent-message");
+  button.disabled = true;
+  message.textContent = "正在删除原始数据并退回下载队列…";
+  try {
+    const response = await fetch("/api/process/redownload", {
+      method: "POST",
+      headers: actionHeaders(),
+      body: JSON.stringify({
+        dataset_key: datasetKey,
+        confirm_delete: true,
+        expected_download_dir: button.dataset.downloadDir || "",
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      message.textContent = (data.queue ? "" : "重新下载失败：") + (data.error || response.status);
+      if (data.queue) refresh();
+      return;
+    }
+    message.textContent = `已退回下载队列（待下载 ${data.pending_total} 条，累计重下 ${data.redownload_count} 次），下载完成后自动恢复待处理`;
+    refresh();
+  } catch (error) {
+    message.textContent = "重新下载请求失败：" + error;
+  } finally {
+    button.disabled = false;
+  }
+}
+
 document.getElementById("p-recent-table").addEventListener("click", (event) => {
+  const redownloadButton = event.target.closest("button[data-redownload]");
+  if (redownloadButton && !redownloadButton.disabled) {
+    requeueRedownload(redownloadButton.dataset.redownload, redownloadButton);
+    return;
+  }
   const button = event.target.closest("button[data-prequeue-completed]");
   if (!button || button.disabled) return;
   requeueCompletedProcessing(button.dataset.prequeueCompleted, button);
@@ -975,7 +1091,7 @@ function renderProcessingFailed(processing) {
             <td>${esc(item.last_error)}</td>
             <td>${esc(item.finished_at || item.updated_at || "-")}</td>
             <td>
-              <button type="button" class="mini" data-prequeue="${esc(item.dataset_key)}" data-position="top" title="置顶到待处理队首">置顶</button>
+              <button type="button" class="mini" data-prequeue="${esc(item.dataset_key)}" data-position="top" title="重新入队并添加到待处理队首">重新入队</button>
             </td>
           </tr>`).join("")}
         </tbody>
@@ -999,7 +1115,7 @@ function renderProcessingFailed(processing) {
 
 async function requeueProcessing(datasetKey, position, button) {
   const message = document.getElementById("p-failed-message");
-  const labels = { tail: "加入队尾", top: "置顶" };
+  const labels = { tail: "加入队尾", top: "重新入队" };
   const label = labels[position] || position;
   message.textContent = `${label}中…`;
   if (button) button.disabled = true;
@@ -1014,7 +1130,7 @@ async function requeueProcessing(datasetKey, position, button) {
       message.textContent = `${label}失败：` + (data.error || response.status);
       return;
     }
-    message.textContent = `${label}成功，已加入待处理队列（当前待处理 ${data.pending_total} 条，下次执行处理生效）`;
+    message.textContent = `${label}成功，已添加到待处理队首（当前待处理 ${data.pending_total} 条，下次执行处理生效）`;
     await refresh();
   } catch (error) {
     message.textContent = "入队请求失败：" + error;
@@ -1043,6 +1159,7 @@ function renderProcessing(processing) {
   document.getElementById("p-running").textContent = counts.RUNNING ?? 0;
   document.getElementById("p-pending").textContent = counts.PENDING ?? 0;
   document.getElementById("p-ok").textContent = counts.OK ?? 0;
+  document.getElementById("p-waiting").textContent = counts.WAITING_DOWNLOAD ?? 0;
   document.getElementById("p-failed").textContent = (counts.FAILED ?? 0) + (counts.BLOCKED_NO_SHP ?? 0);
   renderProcessingRunning(processing.running);
   renderProcessingQueue(processing);

@@ -69,6 +69,8 @@ DEFAULT_REFRESH_SECONDS = 15
 
 GRID_TOTAL_CACHE: dict[tuple[str, float], int] = {}
 RAW_DATA_CACHE: dict[str, tuple[float, str | None]] = {}
+MERGE_JOBS: dict[str, dict] = {}
+MERGE_LOCK = threading.Lock()
 
 CONTINENT_ZH = {
     "Africa": "非洲",
@@ -178,6 +180,16 @@ def parse_args() -> argparse.Namespace:
         "--action-token",
         default="",
         help="可选操作令牌；设置后页面重启操作必须携带匹配令牌（局域网防误操作）。",
+    )
+    parser.add_argument(
+        "--merge-engine",
+        default=process_queue.MERGE_ENGINE_OGR2OGR,
+        help="交付分卷「自动合并」使用的引擎，目前支持 ogr2ogr。",
+    )
+    parser.add_argument(
+        "--ogr2ogr",
+        default="",
+        help="ogr2ogr 可执行文件路径，默认自动探测（QGIS 自带）。",
     )
     return parser.parse_args()
 
@@ -472,6 +484,7 @@ def build_snapshot(
                     "finished_at": row["finished_at"],
                     "download_dir": row["download_dir"],
                     "existing_data_dir": existing_data_dir,
+                    "redownload_count": row["redownload_count"] if "redownload_count" in row_keys else 0,
                 }
             )
         snapshot["recent_done"] = recent_items
@@ -665,6 +678,7 @@ def build_processing_snapshot(
             {
                 "dataset_key": row["dataset_key"],
                 "task_id": row["task_id"],
+                "source_dir": row["source_dir"],
                 "process_name_prefix": _row_optional(row, "process_name_prefix"),
                 "tile_count": row["tile_count"],
                 "feature_count": row["feature_count"],
@@ -799,6 +813,85 @@ def delete_db_update_mark(path: Path, dataset_key: str) -> bool:
     temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     temporary.replace(file_path)
     return True
+
+
+def build_merge_status(dataset_key: str) -> dict:
+    with MERGE_LOCK:
+        job = MERGE_JOBS.get(dataset_key)
+        if job is None:
+            return {"ok": True, "dataset_key": dataset_key, "state": "idle"}
+        snapshot = dict(job)
+    snapshot["ok"] = snapshot.get("state") != "error"
+    snapshot["dataset_key"] = dataset_key
+    return snapshot
+
+
+def start_merge_job(config: dict, dataset_key: str, expected_source_dir: str) -> dict:
+    """校验后启动后台合并任务，立即返回 running 状态。"""
+    store = process_queue.ProcessStore(Path(config["process_db"]))
+    try:
+        row = store.get(dataset_key)
+        if row is None:
+            raise KeyError(f"未找到处理任务: {dataset_key}")
+        if row["status"] == process_queue.PROCESS_RUNNING:
+            raise ValueError("任务正在处理中，不能合并分卷")
+        if expected_source_dir and row["source_dir"] != expected_source_dir:
+            raise ValueError("来源目录已变化，请刷新页面后重试")
+        shp_count = len(json.loads(row["shp_files"] or "[]"))
+        if shp_count < 2:
+            raise ValueError("该任务只有一个 SHP，无需合并")
+    finally:
+        store.close()
+
+    with MERGE_LOCK:
+        existing = MERGE_JOBS.get(dataset_key)
+        if existing is not None and existing.get("state") == "running":
+            raise ValueError("该任务已有合并任务进行中")
+        MERGE_JOBS[dataset_key] = {
+            "state": "running",
+            "done": 0,
+            "total": shp_count,
+            "message": "开始合并…",
+            "error": None,
+            "result": None,
+            "updated_at": datetime.now().isoformat(timespec="seconds"),
+        }
+
+    engine = config.get("merge_engine") or process_queue.MERGE_ENGINE_OGR2OGR
+    ogr2ogr_exe = config.get("ogr2ogr") or None
+
+    def progress(done: int, total: int) -> None:
+        with MERGE_LOCK:
+            job = MERGE_JOBS.get(dataset_key)
+            if job is not None:
+                job.update(done=done, total=total, message=f"已合并 {done}/{total} 个分卷",
+                           updated_at=datetime.now().isoformat(timespec="seconds"))
+
+    def worker() -> None:
+        try:
+            result = process_queue.merge_task_shp_parts(
+                Path(config["repo_root"]),
+                Path(config["process_db"]),
+                dataset_key,
+                engine=engine,
+                ogr2ogr_exe=ogr2ogr_exe,
+                download_db=Path(config["state_db"]),
+                progress_cb=progress,
+            )
+            with MERGE_LOCK:
+                MERGE_JOBS[dataset_key].update(
+                    state="done", result=result, message="合并完成，已同步处理队列", error=None,
+                    updated_at=datetime.now().isoformat(timespec="seconds"),
+                )
+        except Exception as exc:  # noqa: BLE001
+            with MERGE_LOCK:
+                MERGE_JOBS[dataset_key].update(
+                    state="error", error=str(exc), message=f"合并失败：{exc}",
+                    updated_at=datetime.now().isoformat(timespec="seconds"),
+                )
+
+    threading.Thread(target=worker, name=f"merge-{dataset_key}", daemon=True).start()
+    return {"ok": True, "dataset_key": dataset_key, "state": "running"}
 
 
 def build_db_update_snapshot(repo_root: Path, process_db: Path, marks_file: Path) -> dict:
@@ -1512,6 +1605,11 @@ class StatusHandler(BaseHTTPRequestHandler):
             body = json.dumps(build_process_control_snapshot(config), ensure_ascii=False).encode("utf-8")
             self._send(200, body, "application/json; charset=utf-8")
             return
+        if path == "/api/process/merge-status":
+            dataset_key = (parse_qs(urlparse(self.path).query).get("dataset_key") or [""])[0]
+            body = json.dumps(build_merge_status(dataset_key), ensure_ascii=False).encode("utf-8")
+            self._send(200, body, "application/json; charset=utf-8")
+            return
         if path == "/api/db_updated":
             snapshot = build_db_update_snapshot(
                 repo_root=config["repo_root"],
@@ -1543,6 +1641,8 @@ class StatusHandler(BaseHTTPRequestHandler):
             "/api/process/sync",
             "/api/process/start",
             "/api/process/stop",
+            "/api/process/merge-parts",
+            "/api/process/redownload",
             "/api/db_updated",
         ):
             self._send(404, b"not found", "text/plain; charset=utf-8")
@@ -1866,6 +1966,93 @@ class StatusHandler(BaseHTTPRequestHandler):
                        "application/json; charset=utf-8")
             return
 
+        if path == "/api/process/redownload":
+            try:
+                dataset_key = str(payload.get("dataset_key") or "").strip()
+                if not dataset_key:
+                    raise ValueError("dataset_key 不能为空")
+                if payload.get("confirm_delete") is not True:
+                    raise ValueError("必须确认删除原始下载数据")
+                expected_download_dir = str(payload.get("expected_download_dir") or "").strip()
+                store = process_queue.ProcessStore(Path(config["process_db"]))
+                try:
+                    row = store.get(dataset_key)
+                finally:
+                    store.close()
+                if row is None:
+                    raise KeyError(f"未找到处理任务: {dataset_key}")
+                task_id = str(row.get("task_id") or "").strip()
+                if not task_id:
+                    raise ValueError("该任务无对应下载任务，无法重新下载")
+                with CONTROL_LOCK:
+                    result = lib.requeue_completed_download(
+                        Path(config["repo_root"]), Path(config["state_db"]),
+                        task_id, expected_download_dir or None,
+                    )
+                    downstream_error = None
+                    try:
+                        downstream_error = process_queue.reset_task_after_download_redo(
+                            Path(config["repo_root"]), Path(config["process_db"]),
+                            Path(config["state_db"]), dataset_key,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        downstream_error = f"处理队列重置失败：{exc}"
+                    mark_error = None
+                    try:
+                        delete_db_update_mark(Path(config["db_update_file"]), dataset_key)
+                    except Exception as exc:  # noqa: BLE001
+                        mark_error = f"删除数据库更新记录失败：{exc}"
+            except KeyError as exc:
+                status, error = 404, str(exc)
+            except ValueError as exc:
+                status, error = 400, str(exc)
+            except Exception as exc:  # noqa: BLE001
+                status, error = 500, str(exc)
+            else:
+                errors = [
+                    item
+                    for item in (result.get("cleanup_error"), downstream_error, mark_error)
+                    if item
+                ]
+                body = json.dumps({
+                    "ok": not errors,
+                    "dataset_key": dataset_key,
+                    "task_id": task_id,
+                    "queue": result["queue"],
+                    "pending_total": len(result["queue"]),
+                    "redownload_count": result.get("redownload_count"),
+                    "deleted_dir": result.get("deleted_dir"),
+                    "error": "；".join(errors) if errors else None,
+                }, ensure_ascii=False)
+                self._send(200, body.encode("utf-8"), "application/json; charset=utf-8")
+                return
+            self._send(status, json.dumps({"ok": False, "error": error}, ensure_ascii=False).encode("utf-8"),
+                       "application/json; charset=utf-8")
+            return
+
+        if path == "/api/process/merge-parts":
+            try:
+                dataset_key = str(payload.get("dataset_key") or "").strip()
+                if not dataset_key:
+                    raise ValueError("dataset_key 不能为空")
+                if payload.get("confirm_delete") is not True:
+                    raise ValueError("必须确认删除原分卷")
+                expected_source_dir = str(payload.get("expected_source_dir") or "")
+                result = start_merge_job(config, dataset_key, expected_source_dir)
+            except KeyError as exc:
+                status, error = 404, str(exc)
+            except ValueError as exc:
+                status, error = 400, str(exc)
+            except Exception as exc:  # noqa: BLE001
+                status, error = 500, str(exc)
+            else:
+                body = json.dumps(result, ensure_ascii=False)
+                self._send(200, body.encode("utf-8"), "application/json; charset=utf-8")
+                return
+            self._send(status, json.dumps({"ok": False, "error": error}, ensure_ascii=False).encode("utf-8"),
+                       "application/json; charset=utf-8")
+            return
+
         if path == "/api/process/note":
             try:
                 dataset_key, note = normalize_note_payload(payload)
@@ -2000,6 +2187,8 @@ def create_server(args: argparse.Namespace, repo_root: Path) -> ThreadingHTTPSer
         "python_exe": args.python_exe,
         "process_python_exe": getattr(args, "process_python_exe", DEFAULT_PROCESS_PYTHON) or DEFAULT_PROCESS_PYTHON,
         "action_token": args.action_token or "",
+        "merge_engine": getattr(args, "merge_engine", process_queue.MERGE_ENGINE_OGR2OGR),
+        "ogr2ogr": getattr(args, "ogr2ogr", "") or "",
         "queue_limit": args.queue_limit,
         "recent_limit": args.recent_limit,
         "stale_minutes": args.log_stale_minutes,
