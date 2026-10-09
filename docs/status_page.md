@@ -74,6 +74,10 @@ New-NetFirewallRule -DisplayName "GBA Status" -Direction Inbound -LocalPort 8765
 - `POST /api/db_updated`：保存手动标记，请求体 `{"rows": [{"dataset_key": "...", "updated": true, "updated_at": "...", "note": "..."}]}`；受 `--action-token` 保护
 - `GET /api/config`：读取看板配置（数据库连接 + 区域成果 SHP 共享目录）
 - `POST /api/config`：保存配置，请求体 `{"database": {"host": "...", "port": 5432, "dbname": "...", "user": "...", "password": "..."}, "result_root": "..."}`；写入 `data/config.json`；校验端口 1~65535、主机/库名/用户/共享目录非空；受 `--action-token` 保护
+- `POST /api/db_updated/import`：对某区域执行“更新到库”。请求体 `{"dataset_key": "洲|国家|区域"}`；先检查共享目录 `result_root/洲/国家/区域/*.shp` 与处理产物 `out_data/<前缀>_pipeline/final/*_3857.shp` 是否一致：
+  - 不一致 → 返回 `{"ok": false, "consistent": false, "missing": [...], "extra": [...], "message": "内容不一致，请手动检查共享目录"}`，**不执行**；
+  - 一致 → 后台运行 `updateTools/twopyshp2pgsql/main3_region.py`（数据库连接与共享目录取自 `/api/config`，以环境变量注入），成功后自动把该区域登记为「已更新」；受 `--action-token` 保护
+- `GET /api/db_updated/import-status`：查询入库任务状态（`running|done|error|blocked|idle`）
 - 其他路径返回 404
 
 ## 数据处理页签
@@ -113,7 +117,8 @@ python scripts/run_shp_process_tasks.py --move-top "宁夏"          # 置顶
 
 - 左侧卡片：已处理任务总数、已更新、未更新
 - 子选项卡：「更新到库」「未更新到库」两栏（按钮上显示各自条数），按「已更新」状态筛选，默认显示「更新到库」
-- 表格列：数据集、命名前缀、分片数、要素数、处理完成时间、输出目录、已更新（勾选）、更新时间、备注（可编辑）
+- 表格列：数据集、命名前缀、分片数、要素数、处理完成时间、输出目录、已更新（勾选）、更新时间、备注（可编辑）、操作
+- 「未更新到库」的行提供「操作 → 更新到库」按钮：点击后**先检查**共享目录 `result_root/洲/国家/区域/*.shp` 与处理产物 `out_data/<前缀>_pipeline/final/*_3857.shp` 是否一致（按文件名比对）；不一致则提示手动检查、不执行；一致则后台运行 `updateTools/twopyshp2pgsql/main3_region.py`，成功后自动登记为「已更新」。数据库连接与共享目录取自「配置」页签
 - 表格分页：默认每页 15 条，可切换 15/30/50/100/200，支持首页/上一页/下一页/末页；跨页编辑会保留未保存修改
 - 勾选「已更新」时自动填入当前时间（可手动改）；「保存修改」后写入 JSON 文件；有未保存修改时自动刷新不会覆盖表格内容
 - 重做会同步标记：处理页「最近完成」的「重做处理」会把该数据集标记重置为「未更新」；下载页「最近完成」的「重新下载」会删除该数据集标记（任务转 PENDING 后该行也从本表消失）

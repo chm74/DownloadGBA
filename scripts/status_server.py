@@ -35,6 +35,9 @@ DEFAULT_UPDATE_DB = {
     "password": "frontfree",
 }
 DEFAULT_RESULT_ROOT = r"\\192.168.2.121\BuildingData\AutoGenerate"
+DEFAULT_UPDATE_PYTHON = "updateTools/twopyshp2pgsql/.venv/Scripts/python.exe"
+DEFAULT_UPDATE_SCRIPT = "updateTools/twopyshp2pgsql/main3_region.py"
+DEFAULT_UPDATE_LOG_DIR = "updateTools/twopyshp2pgsql/logs"
 RUNNER_MARKER = "run_world_building_tasks.py"
 WORKER_MARKER = "download_gba_lod1_wfs"
 PROCESS_RUNNER_MARKER = "run_shp_process_tasks.py"
@@ -80,6 +83,8 @@ GRID_TOTAL_CACHE: dict[tuple[str, float], int] = {}
 RAW_DATA_CACHE: dict[str, tuple[float, str | None]] = {}
 MERGE_JOBS: dict[str, dict] = {}
 MERGE_LOCK = threading.Lock()
+DB_IMPORT_JOBS: dict[str, dict] = {}
+DB_IMPORT_LOCK = threading.Lock()
 
 CONTINENT_ZH = {
     "Africa": "非洲",
@@ -903,6 +908,159 @@ def start_merge_job(config: dict, dataset_key: str, expected_source_dir: str) ->
     return {"ok": True, "dataset_key": dataset_key, "state": "running"}
 
 
+def _process_task_row(config: dict, dataset_key: str) -> dict | None:
+    store = process_queue.ProcessStore(Path(config["process_db"]))
+    try:
+        return store.get(dataset_key)
+    finally:
+        store.close()
+
+
+def check_db_update_consistency(config: dict, dataset_key: str) -> dict:
+    """检查共享目录中的 SHP 是否与处理产物 final/*_3857.shp 一致。"""
+    repo_root = Path(config["repo_root"])
+    row = _process_task_row(config, dataset_key)
+    if row is None:
+        raise KeyError(f"未找到处理任务: {dataset_key}")
+    parts = [part.strip() for part in dataset_key.split("|")]
+    if len(parts) != 3 or not all(parts):
+        raise ValueError("dataset_key 需为 洲|国家|区域 三段")
+    continent, country, region = parts
+    result_root = str(load_dashboard_config(repo_root).get("result_root") or "").strip()
+    if not result_root:
+        raise ValueError("未配置区域成果 SHP 共享目录")
+    output_dir = row.get("output_dir")
+    if not output_dir:
+        raise ValueError("处理产物目录未记录")
+    expected_dir = (repo_root / output_dir).resolve() / "final"
+    base = {
+        "continent": continent,
+        "country": country,
+        "region": region,
+        "expected": [],
+        "actual": [],
+        "missing": [],
+        "extra": [],
+    }
+    if not expected_dir.is_dir():
+        return {**base, "consistent": False, "message": f"处理产物缺失：{expected_dir}"}
+    expected = {path.stem for path in expected_dir.glob("*_3857.shp")}
+    base["expected"] = sorted(expected)
+    share_dir = Path(result_root) / continent / country / region
+    base["share_dir"] = str(share_dir)
+    if not share_dir.is_dir():
+        return {**base, "consistent": False, "missing": sorted(expected),
+                "message": f"共享目录不存在：{share_dir}"}
+    actual = {path.stem for path in share_dir.glob("*.shp")}
+    base["actual"] = sorted(actual)
+    missing = sorted(expected - actual)
+    extra = sorted(actual - expected)
+    base["missing"] = missing
+    base["extra"] = extra
+    consistent = bool(expected) and not missing and not extra
+    return {**base, "consistent": consistent,
+            "message": "一致" if consistent else "内容不一致，请手动检查共享目录"}
+
+
+def build_db_import_status(dataset_key: str) -> dict:
+    with DB_IMPORT_LOCK:
+        job = DB_IMPORT_JOBS.get(dataset_key)
+        if job is None:
+            return {"ok": True, "dataset_key": dataset_key, "state": "idle"}
+        snapshot = dict(job)
+    snapshot["ok"] = snapshot.get("state") != "error"
+    snapshot["dataset_key"] = dataset_key
+    return snapshot
+
+
+def start_db_import_job(config: dict, dataset_key: str) -> dict:
+    repo_root = Path(config["repo_root"])
+    precheck = check_db_update_consistency(config, dataset_key)
+    if not precheck.get("consistent"):
+        return {"ok": False, "state": "blocked", **precheck}
+
+    python_exe = repo_root / DEFAULT_UPDATE_PYTHON
+    script = repo_root / DEFAULT_UPDATE_SCRIPT
+    if not python_exe.is_file():
+        raise ValueError(f"未找到入库解释器：{python_exe}")
+    if not script.is_file():
+        raise ValueError(f"未找到入库脚本：{script}")
+
+    cfg = load_dashboard_config(repo_root)
+    db = cfg["database"]
+    result_root = cfg["result_root"]
+    log_dir = repo_root / DEFAULT_UPDATE_LOG_DIR
+    continent = precheck["continent"]
+    country = precheck["country"]
+    region = precheck["region"]
+
+    with DB_IMPORT_LOCK:
+        existing = DB_IMPORT_JOBS.get(dataset_key)
+        if existing is not None and existing.get("state") == "running":
+            raise ValueError("该区域已有入库任务进行中")
+        DB_IMPORT_JOBS[dataset_key] = {
+            "state": "running",
+            "message": "开始入库…",
+            "error": None,
+            "log_tail": "",
+            "updated_at": datetime.now().isoformat(timespec="seconds"),
+        }
+
+    command = [
+        str(python_exe),
+        str(script),
+        "--continent", continent,
+        "--country", country,
+        "--region", region,
+        "--root", result_root,
+        "--log-dir", str(log_dir),
+    ]
+    env = os.environ.copy()
+    env.update({
+        "PG_DBNAME": str(db.get("dbname") or ""),
+        "PG_USER": str(db.get("user") or ""),
+        "PG_PASSWORD": str(db.get("password") or ""),
+        "PG_HOST": str(db.get("host") or ""),
+        "PG_PORT": str(db.get("port") or ""),
+        "DATA_ROOT": result_root,
+        "PYTHONIOENCODING": "utf-8",
+    })
+
+    def worker() -> None:
+        try:
+            proc = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", env=env)
+            tail = ((proc.stdout or "") + (proc.stderr or ""))[-2000:]
+            if proc.returncode == 0:
+                marks = load_db_update_marks(Path(config["db_update_file"]))
+                note = (marks.get(dataset_key) or {}).get("note") or ""
+                save_db_update_marks(
+                    Path(config["db_update_file"]),
+                    [{"dataset_key": dataset_key, "updated": True,
+                      "updated_at": datetime.now().isoformat(timespec="seconds"), "note": note}],
+                )
+                with DB_IMPORT_LOCK:
+                    DB_IMPORT_JOBS[dataset_key].update(
+                        state="done", message="入库完成，已登记为已更新", error=None, log_tail=tail,
+                        updated_at=datetime.now().isoformat(timespec="seconds"),
+                    )
+            else:
+                with DB_IMPORT_LOCK:
+                    DB_IMPORT_JOBS[dataset_key].update(
+                        state="error", message=f"入库失败（退出码 {proc.returncode}）",
+                        error=tail, log_tail=tail,
+                        updated_at=datetime.now().isoformat(timespec="seconds"),
+                    )
+        except Exception as exc:  # noqa: BLE001
+            with DB_IMPORT_LOCK:
+                DB_IMPORT_JOBS[dataset_key].update(
+                    state="error", message=f"入库异常：{exc}", error=str(exc),
+                    updated_at=datetime.now().isoformat(timespec="seconds"),
+                )
+
+    threading.Thread(target=worker, name=f"db-import-{dataset_key}", daemon=True).start()
+    return {"ok": True, "state": "running"}
+
+
 def build_db_update_snapshot(repo_root: Path, process_db: Path, marks_file: Path) -> dict:
     repo_root = Path(repo_root)
     process_db = Path(process_db)
@@ -1690,6 +1848,11 @@ class StatusHandler(BaseHTTPRequestHandler):
             body = json.dumps(load_dashboard_config(config["repo_root"]), ensure_ascii=False).encode("utf-8")
             self._send(200, body, "application/json; charset=utf-8")
             return
+        if path == "/api/db_updated/import-status":
+            dataset_key = (parse_qs(urlparse(self.path).query).get("dataset_key") or [""])[0]
+            body = json.dumps(build_db_import_status(dataset_key), ensure_ascii=False).encode("utf-8")
+            self._send(200, body, "application/json; charset=utf-8")
+            return
         if path == "/api/db_updated":
             snapshot = build_db_update_snapshot(
                 repo_root=config["repo_root"],
@@ -1724,6 +1887,7 @@ class StatusHandler(BaseHTTPRequestHandler):
             "/api/process/merge-parts",
             "/api/process/redownload",
             "/api/db_updated",
+            "/api/db_updated/import",
             "/api/config",
         ):
             self._send(404, b"not found", "text/plain; charset=utf-8")
@@ -1740,6 +1904,26 @@ class StatusHandler(BaseHTTPRequestHandler):
             payload = json.loads(raw) if raw.strip() else {}
         except (ValueError, OSError):
             self._send(400, b'{"ok": false, "error": "invalid json body"}', "application/json; charset=utf-8")
+            return
+
+        if path == "/api/db_updated/import":
+            try:
+                dataset_key = str(payload.get("dataset_key") or "").strip()
+                if not dataset_key:
+                    raise ValueError("dataset_key 不能为空")
+                result = start_db_import_job(config, dataset_key)
+            except KeyError as exc:
+                status, error = 404, str(exc)
+            except ValueError as exc:
+                status, error = 400, str(exc)
+            except Exception as exc:  # noqa: BLE001
+                status, error = 500, str(exc)
+            else:
+                self._send(200, json.dumps(result, ensure_ascii=False).encode("utf-8"),
+                           "application/json; charset=utf-8")
+                return
+            self._send(status, json.dumps({"ok": False, "error": error}, ensure_ascii=False).encode("utf-8"),
+                       "application/json; charset=utf-8")
             return
 
         if path == "/api/config":

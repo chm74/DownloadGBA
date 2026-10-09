@@ -2386,6 +2386,150 @@ class ControlTests(unittest.TestCase):
                 store.close()
 
 
+    def _write_config_root(self, repo_root: Path, result_root: Path) -> None:
+        status_server.save_dashboard_config(
+            repo_root,
+            {
+                "database": {"host": "h", "port": 5432, "dbname": "b", "user": "u", "password": "p"},
+                "result_root": str(result_root),
+            },
+        )
+
+    def _insert_process_ok(self, process_db: Path, key: str, output_dir: str) -> None:
+        store = run_shp_process_tasks.ProcessStore(process_db)
+        try:
+            store.conn.execute(
+                """
+                INSERT INTO process_tasks (
+                    dataset_key, task_id, display_name, process_name_prefix, source_dir,
+                    output_dir, status, shp_files, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (key, key, key.split("|")[-1], key.split("|")[-1].lower(),
+                 "data/x", output_dir, run_shp_process_tasks.PROCESS_OK, "[]", lib.utc_now()),
+            )
+            store.conn.commit()
+        finally:
+            store.close()
+
+    def _make_tiles(self, directory: Path, names: list[str]) -> None:
+        directory.mkdir(parents=True, exist_ok=True)
+        for name in names:
+            for suffix in (".shp", ".dbf", ".shx"):
+                (directory / f"{name}{suffix}").write_bytes(b"x")
+
+    def test_check_db_update_consistency(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            key = "Europe|San_Marino|San_Marino"
+            output_dir = "Tools/Oneshp_pipline_qgis/out_data/san_marino_pipeline"
+            self._make_tiles(repo_root / output_dir / "final", ["a_3857", "b_3857"])
+            share_root = repo_root / "share"
+            share = share_root / "Europe" / "San_Marino" / "San_Marino"
+            self._make_tiles(share, ["a_3857", "b_3857"])
+            self._write_config_root(repo_root, share_root)
+            self._insert_process_ok(repo_root / "process.db", key, output_dir)
+            config = {"repo_root": repo_root, "process_db": repo_root / "process.db"}
+
+            result = status_server.check_db_update_consistency(config, key)
+            self.assertTrue(result["consistent"], result)
+
+            (share / "b_3857.shp").unlink()
+            result = status_server.check_db_update_consistency(config, key)
+            self.assertFalse(result["consistent"])
+            self.assertEqual(result["missing"], ["b_3857"])
+
+            self._make_tiles(share, ["c_3857"])
+            result = status_server.check_db_update_consistency(config, key)
+            self.assertFalse(result["consistent"])
+            self.assertIn("c_3857", result["extra"])
+
+    def test_db_updated_import_endpoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            key = "Europe|San_Marino|San_Marino"
+            output_dir = "Tools/Oneshp_pipline_qgis/out_data/san_marino_pipeline"
+            self._make_tiles(repo_root / output_dir / "final", ["a_3857", "b_3857"])
+            share_root = repo_root / "share"
+            share = share_root / "Europe" / "San_Marino" / "San_Marino"
+            self._make_tiles(share, ["a_3857", "b_3857"])
+            self._write_config_root(repo_root, share_root)
+            self._insert_process_ok(repo_root / "process.db", key, output_dir)
+            tool_python = repo_root / status_server.DEFAULT_UPDATE_PYTHON
+            tool_script = repo_root / status_server.DEFAULT_UPDATE_SCRIPT
+            tool_python.parent.mkdir(parents=True, exist_ok=True)
+            tool_python.write_bytes(b"x")
+            tool_script.parent.mkdir(parents=True, exist_ok=True)
+            tool_script.write_bytes(b"x")
+
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                with patch.object(
+                    status_server.subprocess, "run",
+                    return_value=subprocess.CompletedProcess([], 0, "updated", ""),
+                ):
+                    request = urllib.request.Request(
+                        f"http://127.0.0.1:{port}/api/db_updated/import",
+                        data=json.dumps({"dataset_key": key}).encode("utf-8"),
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with urllib.request.urlopen(request, timeout=10) as response:
+                        payload = json.loads(response.read().decode("utf-8"))
+                    self.assertTrue(payload["ok"])
+                    self.assertEqual(payload["state"], "running")
+
+                    state = {"state": "running"}
+                    for _ in range(200):
+                        with urllib.request.urlopen(
+                            f"http://127.0.0.1:{port}/api/db_updated/import-status"
+                            "?dataset_key=Europe%7CSan_Marino%7CSan_Marino",
+                            timeout=10,
+                        ) as response:
+                            state = json.loads(response.read().decode("utf-8"))
+                        if state.get("state") != "running":
+                            break
+                        time.sleep(0.02)
+                self.assertEqual(state["state"], "done")
+                marks = status_server.load_db_update_marks(repo_root / "data" / "db_update_status.json")
+                self.assertTrue(marks[key]["updated"])
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_db_updated_import_blocked_when_inconsistent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            key = "Europe|San_Marino|San_Marino"
+            output_dir = "Tools/Oneshp_pipline_qgis/out_data/san_marino_pipeline"
+            self._make_tiles(repo_root / output_dir / "final", ["a_3857", "b_3857"])
+            share_root = repo_root / "share"
+            share = share_root / "Europe" / "San_Marino" / "San_Marino"
+            self._make_tiles(share, ["a_3857"])
+            self._write_config_root(repo_root, share_root)
+            self._insert_process_ok(repo_root / "process.db", key, output_dir)
+
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                with patch.object(status_server.subprocess, "run") as mocked:
+                    request = urllib.request.Request(
+                        f"http://127.0.0.1:{port}/api/db_updated/import",
+                        data=json.dumps({"dataset_key": key}).encode("utf-8"),
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with urllib.request.urlopen(request, timeout=10) as response:
+                        payload = json.loads(response.read().decode("utf-8"))
+                self.assertFalse(payload["ok"])
+                self.assertFalse(payload["consistent"])
+                self.assertIn("b_3857", payload["missing"])
+                mocked.assert_not_called()
+            finally:
+                server.shutdown()
+                server.server_close()
+
     def test_load_dashboard_config_defaults(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)

@@ -3,3 +3,8 @@
 [SELECT] 256 个任务待执行（状态过滤=['PENDING', 'RUNNING']）
 --- [1/256] 亚洲|中国|吉林省 ---
 [RUN] 亚洲|中国|吉林省 -> F:\建筑数据下载\DownloadGBA\data\亚洲\中国\吉林省
+[SHP] 亚洲|中国|吉林省 -> 5 个分卷
+[PROCESS] 已登记处理队列: 亚洲|中国|吉林省 added=0 updated=1
+[OK] 亚洲|中国|吉林省 features=4005853 elapsed=14568s
+--- [2/256] Oceania|Australia|Australia ---
+[RUN] Oceania|Australia|Australia -> F:\建筑数据下载\DownloadGBA\data\Oceania\Australia\Australia
