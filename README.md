@@ -429,7 +429,7 @@ python -u scripts/status_server.py --port 8765
 - 后台常驻：`Start-Process python -ArgumentList "-u","scripts/status_server.py","--port","8765" -WorkingDirectory "E:\LoD1" -WindowStyle Hidden`
 - 局域网首次访问需放行防火墙：`New-NetFirewallRule -DisplayName "GBA Status" -Direction Inbound -LocalPort 8765 -Protocol TCP -Action Allow`
 - 局域网防误操作（可选）：加 `--action-token <令牌>`，重启操作需在页面输入该令牌
-- 「最近完成」表格含「下载目录」列：显示该任务的下载数据目录；点该行「置顶」会**永久删除该目录**并把任务重置为待执行队首（同时重置下游数据处理任务），请谨慎操作
+- 「最近完成」表格含「下载目录」列：显示该任务的下载数据目录；点该行「重新下载」会**永久删除该目录**并把任务重置为待执行队首（同时重置下游数据处理任务、删除其「库表更新」记录），请谨慎操作
 
 完整说明见 `docs/status_page.md`。
 
