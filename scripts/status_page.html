@@ -43,6 +43,18 @@
   .merge-msg.running { color:var(--muted); }
   .merge-msg.ok { color:var(--ok); }
   .merge-msg.error { color:var(--err); }
+  .msg-toast-wrap { position:fixed; top:20px; right:20px; z-index:9999; display:flex; flex-direction:column; align-items:flex-end; gap:10px; pointer-events:none; }
+  .msg-toast { min-width:220px; max-width:520px; padding:10px 16px; border-radius:6px; background:#fff; color:#1f2328; font-size:14px; line-height:1.5; box-shadow:0 2px 12px rgba(0,0,0,.15); border:1px solid #ebeef5; opacity:0; transform:translateX(16px); transition:opacity .25s ease, transform .25s ease; }
+  .msg-toast.show { opacity:1; transform:translateX(0); }
+  .msg-toast--success { border-color:#e1f3d8; background:#f0f9eb; color:#529b2e; }
+  .msg-toast--error { border-color:#fde2e2; background:#fef0f0; color:#c45656; }
+  .msg-toast--info { border-color:#e9e9eb; background:#f4f4f5; color:#909399; }
+  @media (prefers-color-scheme: dark) {
+    .msg-toast { background:#171a21; color:#e5e7eb; border-color:#2a2f3a; }
+    .msg-toast--success { background:#1c2b1a; border-color:#2f4a2c; color:#4ade80; }
+    .msg-toast--error { background:#2b1c1c; border-color:#4a2f2f; color:#f87171; }
+    .msg-toast--info { background:#20242c; border-color:#2a2f3a; color:#9ca3af; }
+  }
   .panel[hidden] { display:none; }
   .plain-list { margin:0; padding-left:18px; color:var(--muted); font-size:13px; }
   .plain-list li { margin-bottom:6px; }
@@ -298,10 +310,11 @@
 
         <section>
           <h2>库表更新</h2>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
-            <span class="muted">对已完成处理的任务手动标记是否已更新到数据库表，保存后写入 <code>data/db_update_status.json</code>。</span>
-            <button id="d-save" type="button" style="padding:4px 12px;cursor:pointer;">保存修改</button>
-            <span id="d-message" class="muted"></span>
+          <div style="color:var(--err);font-size:13px;font-weight:600;margin:0 0 10px;">
+            提示：请先将「数据处理」后的成果拷贝到对应的共享目录 <code>&lt;共享目录&gt;\&lt;洲&gt;\&lt;国家&gt;\&lt;区域&gt;\</code>，再点下方「更新到库」。
+          </div>
+          <div class="muted" style="margin-bottom:10px;">
+            对已完成处理的任务点「更新到库」写入数据库；备注可直接编辑（失焦自动保存），更新时间由入库自动填入。
           </div>
           <div class="subtabs">
             <button type="button" class="subtab active" data-dfilter="pending">未更新到库（<span id="d-count-pending">0</span>）</button>
@@ -411,6 +424,24 @@ const noteState = { editingKey: null };
 const queueState = { page: 1, pageSize: 15, total: 0, search: "" };
 const processingRecentState = { page: 1, pageSize: 10, total: 0 };
 const mergeMsgState = {};
+
+function showMessage(text, type = "info", duration = 3000) {
+  let wrap = document.querySelector(".msg-toast-wrap");
+  if (!wrap) {
+    wrap = document.createElement("div");
+    wrap.className = "msg-toast-wrap";
+    document.body.appendChild(wrap);
+  }
+  const toast = document.createElement("div");
+  toast.className = `msg-toast msg-toast--${type}`;
+  toast.textContent = text;
+  wrap.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add("show"));
+  setTimeout(() => {
+    toast.classList.remove("show");
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
+}
 
 function esc(value) {
   return String(value === null || value === undefined ? "" : value)
@@ -1288,36 +1319,27 @@ function renderProcessing(processing) {
   renderProcessingFailed(processing);
 }
 
-const dbUpdateState = { edits: {}, page: 1, pageSize: 15, rows: [], filter: "pending" };
+const dbUpdateState = { page: 1, pageSize: 15, rows: [], filter: "pending" };
 const dbImportMsgState = {};
 const dbImportChecked = {};
-
-function dbUpdateStamp() {
-  const now = new Date();
-  const pad = (value) => String(value).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
-    + `T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-}
-
-function dbUpdateEffectiveRow(item) {
-  const edit = dbUpdateState.edits[item.dataset_key];
-  return edit ? { ...item, ...edit } : item;
-}
+const dbNoteState = { editingKey: null };
 
 function dbUpdateFilteredRows() {
   const allRows = dbUpdateState.rows || [];
-  return allRows.filter(item => {
-    const updated = !!dbUpdateEffectiveRow(item).updated;
-    return dbUpdateState.filter === "updated" ? updated : !updated;
-  });
+  return allRows.filter(item =>
+    dbUpdateState.filter === "updated" ? !!item.updated : !item.updated
+  );
 }
 
 function renderDbUpdateTable() {
   const box = document.getElementById("d-table");
+  if (dbNoteState.editingKey && box.querySelector(`input[data-note-key="${dbNoteState.editingKey}"]`)) {
+    return;
+  }
   const allRows = dbUpdateState.rows || [];
   let updatedCount = 0;
   for (const item of allRows) {
-    if (dbUpdateEffectiveRow(item).updated) updatedCount += 1;
+    if (item.updated) updatedCount += 1;
   }
   document.getElementById("d-count-updated").textContent = updatedCount;
   document.getElementById("d-count-pending").textContent = allRows.length - updatedCount;
@@ -1347,35 +1369,35 @@ function renderDbUpdateTable() {
   const pageRows = rows.slice(start, start + pageSize);
   const showAction = dbUpdateState.filter !== "updated";
   const showDetail = dbUpdateState.filter === "updated";
+  const showUpdatedAt = dbUpdateState.filter === "updated";
   const actionHeader = showAction ? "<th>操作</th>" : "";
   const detailHeader = showDetail ? "<th>更新详情</th>" : "";
+  const updatedAtHeader = showUpdatedAt ? "<th>更新时间</th>" : "";
   box.innerHTML = `
     <table>
-      <thead><tr><th>数据集</th><th>命名前缀</th><th>处理完成时间</th><th>输出目录</th><th>更新时间</th><th>备注</th>${detailHeader}${actionHeader}</tr></thead>
+      <thead><tr><th>数据集</th><th>命名前缀</th><th>处理完成时间</th><th>输出目录</th>${updatedAtHeader}<th>备注</th>${detailHeader}${actionHeader}</tr></thead>
       <tbody>${pageRows.map(item => {
-        const row = dbUpdateEffectiveRow(item);
+        const row = item;
         const det = row.import_detail;
         const detText = det && (det.deleted != null || det.inserted != null)
           ? `删除 ${det.deleted ?? "-"} 条 / 新增 ${det.inserted ?? "-"} 个 SHP` + (det.skipped ? ` / 跳过 ${det.skipped}` : "")
           : "-";
         const detTitle = det ? `${det.state || ""} ${det.updated_at || ""}`.trim() : "";
         const detailCell = showDetail ? `<td title="${esc(detTitle)}">${esc(detText)}</td>` : "";
-        const imp = dbImportMsgState[row.dataset_key];
-        const impBusy = !!(imp && imp.busy);
-        const impText = imp ? imp.text : "";
-        const impKind = imp ? imp.kind : "";
-        const impDetail = imp ? (imp.detail || imp.text || "") : "";
+        const updatedAtCell = showUpdatedAt ? `<td class="mono">${esc(row.updated_at || "-")}</td>` : "";
+        const busy = !!(dbImportMsgState[row.dataset_key] && dbImportMsgState[row.dataset_key].busy);
         const actionCell = showAction
-          ? `<td><button type="button" class="mini" data-import-db="${esc(row.dataset_key)}" title="先检查共享目录与处理产物是否一致，再执行入库" ${impBusy ? "disabled" : ""}>更新到库</button><span class="merge-msg ${impKind}" data-import-msg="${esc(row.dataset_key)}" title="${esc(impDetail)}">${esc(impText)}</span></td>`
+          ? `<td><button type="button" class="mini" data-import-db="${esc(row.dataset_key)}" title="先检查共享目录与处理产物是否一致，再执行入库" ${busy ? "disabled" : ""}>更新到库</button></td>`
           : "";
+        const note = row.note || "";
         return `
-        <tr data-dkey="${esc(row.dataset_key)}" data-updated="${row.updated ? "1" : "0"}">
+        <tr data-dkey="${esc(row.dataset_key)}" data-updated="${row.updated ? "1" : "0"}" data-updated-at="${esc(row.updated_at || "")}">
           <td class="mono">${esc(row.display_name || row.dataset_key)}</td>
           <td class="mono">${esc(row.process_name_prefix || "-")}</td>
           <td>${esc(row.finished_at || "-")}</td>
           <td class="mono">${esc(row.output_dir || "-")}</td>
-          <td><input type="text" class="cell-input" data-field="updated_at" value="${esc(row.updated_at || "")}" placeholder="YYYY-MM-DDTHH:MM:SS"></td>
-          <td><input type="text" class="cell-input" data-field="note" value="${esc(row.note || "")}" placeholder="备注"></td>
+          ${updatedAtCell}
+          <td><input class="note-input" type="text" maxlength="200" placeholder="添加备注" data-note-key="${esc(row.dataset_key)}" data-saved="${esc(note)}" value="${esc(note)}"></td>
           ${detailCell}
           ${actionCell}
         </tr>`;
@@ -1393,18 +1415,8 @@ function importRowButton(key) {
   return found;
 }
 
-function setImportRowMessage(button, state) {
-  if (!button || !button.parentElement) return;
-  const span = button.parentElement.querySelector(".merge-msg");
-  if (!span) return;
-  span.textContent = state ? (state.text || "") : "";
-  span.className = "merge-msg " + (state ? (state.kind || "") : "");
-  span.title = state ? (state.detail || state.text || "") : "";
-}
-
 async function restoreImportStates(rows) {
-  for (const item of rows) {
-    const row = dbUpdateEffectiveRow(item);
+  for (const row of rows) {
     if (row.updated) continue;
     const key = row.dataset_key;
     if (dbImportChecked[key]) continue;
@@ -1416,19 +1428,9 @@ async function restoreImportStates(rows) {
       );
       const data = await response.json();
       if (data.state === "running") {
-        dbImportMsgState[key] = { text: "入库中…", kind: "running", busy: true, detail: "入库中…" };
-      } else if (data.state === "done") {
-        dbImportMsgState[key] = { text: "已录入", kind: "ok", busy: false, detail: "入库完成，已登记为已更新" };
-      } else if (data.state === "error") {
-        const detail = data.message || data.error || "未知错误";
-        dbImportMsgState[key] = { text: "失败", kind: "error", busy: false, detail: detail };
-      } else {
-        continue;
-      }
-      const button = importRowButton(key);
-      if (button) {
-        button.disabled = !!dbImportMsgState[key].busy;
-        setImportRowMessage(button, dbImportMsgState[key]);
+        dbImportMsgState[key] = { busy: true };
+        const button = importRowButton(key);
+        if (button) button.disabled = true;
       }
     } catch (error) {
       /* 忽略恢复失败 */
@@ -1450,7 +1452,6 @@ function renderDbUpdated(snapshot) {
   document.getElementById("d-pending").textContent = counts.pending ?? 0;
 
   dbUpdateState.rows = snapshot.rows || [];
-  if (Object.keys(dbUpdateState.edits).length > 0) return;
   renderDbUpdateTable();
 }
 
@@ -1482,24 +1483,57 @@ document.querySelectorAll(".subtab").forEach((button) => {
   });
 });
 
-function collectDbUpdateRow(rowElement) {
-  return {
-    updated: rowElement.dataset.updated === "1",
-    updated_at: rowElement.querySelector('input[data-field="updated_at"]').value.trim(),
-    note: rowElement.querySelector('input[data-field="note"]').value.trim(),
-  };
-}
-
-function markDbUpdateMessage(text) {
-  document.getElementById("d-message").textContent = text;
-}
-
-document.getElementById("d-table").addEventListener("input", (event) => {
-  const input = event.target.closest('input[data-field="updated_at"], input[data-field="note"]');
-  if (!input) return;
+async function saveDbNote(input) {
   const rowElement = input.closest("tr");
-  dbUpdateState.edits[rowElement.dataset.dkey] = collectDbUpdateRow(rowElement);
-  markDbUpdateMessage(`有 ${Object.keys(dbUpdateState.edits).length} 条未保存修改`);
+  const key = input.dataset.noteKey;
+  const value = (input.value || "").trim();
+  if (value === (input.dataset.saved || "")) return;
+  const updated = rowElement.dataset.updated === "1";
+  const updatedAt = rowElement.dataset.updatedAt || "";
+  try {
+    const response = await fetch("/api/db_updated", {
+      method: "POST",
+      headers: actionHeaders(),
+      body: JSON.stringify({ rows: [{ dataset_key: key, updated, updated_at: updatedAt, note: value }] }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      input.value = input.dataset.saved || "";
+      showMessage("备注保存失败：" + (data.error || response.status), "error");
+      return;
+    }
+    input.value = value;
+    input.dataset.saved = value;
+    showMessage("备注已保存", "success");
+  } catch (error) {
+    input.value = input.dataset.saved || "";
+    showMessage("备注保存失败：" + error, "error");
+  }
+}
+
+document.getElementById("d-table").addEventListener("focusin", (event) => {
+  const input = event.target.closest("input[data-note-key]");
+  if (!input) return;
+  dbNoteState.editingKey = input.dataset.noteKey;
+});
+
+document.getElementById("d-table").addEventListener("focusout", (event) => {
+  const input = event.target.closest("input[data-note-key]");
+  if (!input) return;
+  dbNoteState.editingKey = null;
+  saveDbNote(input);
+});
+
+document.getElementById("d-table").addEventListener("keydown", (event) => {
+  const input = event.target.closest("input[data-note-key]");
+  if (!input) return;
+  if (event.key === "Enter") {
+    event.preventDefault();
+    input.blur();
+  } else if (event.key === "Escape") {
+    input.value = input.dataset.saved || "";
+    input.blur();
+  }
 });
 
 function pollDbImport(datasetKey, button, originalText) {
@@ -1511,30 +1545,22 @@ function pollDbImport(datasetKey, button, originalText) {
       );
       const data = await response.json();
       if (data.state === "running") {
-        dbImportMsgState[datasetKey] = { text: "入库中…", kind: "running", busy: true, detail: "入库中…" };
-        setImportRowMessage(button, dbImportMsgState[datasetKey]);
         return;
       }
       clearInterval(timer);
+      dbImportMsgState[datasetKey] = { busy: false };
       if (data.state === "done") {
-        dbImportMsgState[datasetKey] = { text: "已录入", kind: "ok", busy: false, detail: "入库完成，已登记为已更新" };
-        setImportRowMessage(button, dbImportMsgState[datasetKey]);
+        showMessage("入库完成，已登记为已更新", "success");
         await refreshDbUpdated();
       } else {
-        dbImportMsgState[datasetKey] = {
-          text: "失败",
-          kind: "error",
-          busy: false,
-          detail: "失败：" + (data.message || data.error || "未知错误"),
-        };
-        setImportRowMessage(button, dbImportMsgState[datasetKey]);
+        showMessage("入库失败：" + (data.message || data.error || "未知错误"), "error");
         button.disabled = false;
         button.textContent = originalText;
       }
     } catch (error) {
       clearInterval(timer);
-      dbImportMsgState[datasetKey] = { text: "失败", kind: "error", busy: false, detail: "失败：" + error };
-      setImportRowMessage(button, dbImportMsgState[datasetKey]);
+      dbImportMsgState[datasetKey] = { busy: false };
+      showMessage("入库失败：" + error, "error");
       button.disabled = false;
       button.textContent = originalText;
     }
@@ -1546,10 +1572,9 @@ async function importToDb(datasetKey, button) {
     return;
   }
   const originalText = button.textContent;
-  dbImportMsgState[datasetKey] = { text: "检查中…", kind: "running", busy: true, detail: "检查中…" };
+  dbImportMsgState[datasetKey] = { busy: true };
   button.disabled = true;
   button.textContent = "入库中…";
-  setImportRowMessage(button, dbImportMsgState[datasetKey]);
   try {
     const response = await fetch("/api/db_updated/import", {
       method: "POST",
@@ -1558,8 +1583,8 @@ async function importToDb(datasetKey, button) {
     });
     const data = await response.json();
     if (!response.ok) {
-      dbImportMsgState[datasetKey] = { text: "失败", kind: "error", busy: false, detail: "失败：" + (data.error || response.status) };
-      setImportRowMessage(button, dbImportMsgState[datasetKey]);
+      dbImportMsgState[datasetKey] = { busy: false };
+      showMessage("入库失败：" + (data.error || response.status), "error");
       button.disabled = false;
       button.textContent = originalText;
       return;
@@ -1570,16 +1595,16 @@ async function importToDb(datasetKey, button) {
       if (data.extra && data.extra.length) lines.push(`多余（${data.extra.length}）：` + data.extra.slice(0, 8).join("、"));
       if (data.share_dir) lines.push(`共享目录：${data.share_dir}`);
       window.alert(lines.join("\n"));
-      dbImportMsgState[datasetKey] = { text: "不一致", kind: "error", busy: false, detail: lines.join("\n") };
-      setImportRowMessage(button, dbImportMsgState[datasetKey]);
+      dbImportMsgState[datasetKey] = { busy: false };
+      showMessage("内容不一致，请手动检查共享目录", "error");
       button.disabled = false;
       button.textContent = originalText;
       return;
     }
     pollDbImport(datasetKey, button, originalText);
   } catch (error) {
-    dbImportMsgState[datasetKey] = { text: "失败", kind: "error", busy: false, detail: "失败：" + error };
-    setImportRowMessage(button, dbImportMsgState[datasetKey]);
+    dbImportMsgState[datasetKey] = { busy: false };
+    showMessage("入库失败：" + error, "error");
     button.disabled = false;
     button.textContent = originalText;
   }
@@ -1590,36 +1615,6 @@ document.getElementById("d-table").addEventListener("click", (event) => {
   if (!button || button.disabled) return;
   importToDb(button.dataset.importDb, button);
 });
-
-async function saveDbUpdated() {
-  const entries = Object.entries(dbUpdateState.edits);
-  if (entries.length === 0) {
-    markDbUpdateMessage("没有需要保存的修改");
-    return;
-  }
-  markDbUpdateMessage("正在保存…");
-  try {
-    const response = await fetch("/api/db_updated", {
-      method: "POST",
-      headers: actionHeaders(),
-      body: JSON.stringify({
-        rows: entries.map(([datasetKey, value]) => ({ dataset_key: datasetKey, ...value })),
-      }),
-    });
-    const data = await response.json();
-    if (!response.ok || !data.ok) {
-      markDbUpdateMessage("保存失败：" + (data.error || response.status));
-      return;
-    }
-    dbUpdateState.edits = {};
-    markDbUpdateMessage(`已保存 ${data.saved ?? entries.length} 条`);
-    await refreshDbUpdated();
-  } catch (error) {
-    markDbUpdateMessage("保存请求失败：" + error);
-  }
-}
-
-document.getElementById("d-save").addEventListener("click", saveDbUpdated);
 
 async function loadConfig() {
   const message = document.getElementById("cfg-message");
