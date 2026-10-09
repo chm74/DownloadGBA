@@ -15,6 +15,7 @@ python main3_region.py --continent 亚洲 --country 中国 --region 北京市
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import re
@@ -252,6 +253,21 @@ def refresh_region_data(root: Path, target: TargetRegion, logger: logging.Logger
         deleted_count,
         inserted_count,
         skipped_count,
+    )
+    print(
+        "__IMPORT_SUMMARY__ "
+        + json.dumps(
+            {
+                "continent": continent,
+                "country": country,
+                "region": region,
+                "deleted": deleted_count,
+                "inserted": inserted_count,
+                "skipped": skipped_count,
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
     )
 
 

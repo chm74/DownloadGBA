@@ -25,7 +25,6 @@ DEFAULT_PAGE = "scripts/status_page.html"
 DEFAULT_BOUNDARIES_DIR = "data/boundaries"
 DEFAULT_RUN_LOG = "data/world_tasks_run.log"
 DEFAULT_RUN_ERR_LOG = "data/world_tasks_run.err.log"
-DEFAULTS_FILE = "data/status_defaults.json"
 DEFAULT_CONFIG_FILE = "data/config.json"
 DEFAULT_UPDATE_DB = {
     "host": "172.16.1.145",
@@ -35,9 +34,11 @@ DEFAULT_UPDATE_DB = {
     "password": "frontfree",
 }
 DEFAULT_RESULT_ROOT = r"\\192.168.2.121\BuildingData\AutoGenerate"
+DEFAULT_QGIS_DIR = r"D:\QGIS"
 DEFAULT_UPDATE_PYTHON = "updateTools/twopyshp2pgsql/.venv/Scripts/python.exe"
 DEFAULT_UPDATE_SCRIPT = "updateTools/twopyshp2pgsql/main3_region.py"
 DEFAULT_UPDATE_LOG_DIR = "updateTools/twopyshp2pgsql/logs"
+DEFAULT_DB_IMPORT_STATUS = "data/db_import_status.json"
 RUNNER_MARKER = "run_world_building_tasks.py"
 WORKER_MARKER = "download_gba_lod1_wfs"
 PROCESS_RUNNER_MARKER = "run_shp_process_tasks.py"
@@ -46,8 +47,7 @@ PROCESS_WORKER_DIR = "Oneshp_pipline_qgis"
 DEFAULT_PROCESS_PYTHON = "Tools/Oneshp_pipline_qgis/.venv/Scripts/python.exe"
 DEFAULT_PROCESS_LOG = "data/process_run.log"
 DEFAULT_PROCESS_ERR_LOG = "data/process_run.err.log"
-MIN_TILE_WORKERS = 1
-MAX_TILE_WORKERS = 6
+DEFAULT_TILE_WORKERS = 2
 CONTROL_LOCK = threading.Lock()
 
 PRESERVED_VALUE_FLAGS = (
@@ -944,14 +944,21 @@ def check_db_update_consistency(config: dict, dataset_key: str) -> dict:
     }
     if not expected_dir.is_dir():
         return {**base, "consistent": False, "message": f"处理产物缺失：{expected_dir}"}
-    expected = {path.stem for path in expected_dir.glob("*_3857.shp")}
+    try:
+        expected = {path.stem for path in expected_dir.glob("*_3857.shp")}
+    except OSError as exc:
+        return {**base, "consistent": False, "message": f"处理产物目录不可读：{exc}"}
     base["expected"] = sorted(expected)
     share_dir = Path(result_root) / continent / country / region
     base["share_dir"] = str(share_dir)
     if not share_dir.is_dir():
         return {**base, "consistent": False, "missing": sorted(expected),
                 "message": f"共享目录不存在：{share_dir}"}
-    actual = {path.stem for path in share_dir.glob("*.shp")}
+    try:
+        actual = {path.stem for path in share_dir.glob("*.shp")}
+    except OSError as exc:
+        return {**base, "consistent": False, "missing": sorted(expected),
+                "message": f"共享目录不可读：{exc}"}
     base["actual"] = sorted(actual)
     missing = sorted(expected - actual)
     extra = sorted(actual - expected)
@@ -962,12 +969,59 @@ def check_db_update_consistency(config: dict, dataset_key: str) -> dict:
             "message": "一致" if consistent else "内容不一致，请手动检查共享目录"}
 
 
-def build_db_import_status(dataset_key: str) -> dict:
+def parse_import_summary(text: str) -> dict | None:
+    if not text:
+        return None
+    marker = "__IMPORT_SUMMARY__"
+    for line in reversed(text.splitlines()):
+        stripped = line.strip()
+        if stripped.startswith(marker):
+            try:
+                data = json.loads(stripped[len(marker):].strip())
+            except ValueError:
+                continue
+            if isinstance(data, dict):
+                return data
+    match = re.search(r"删除=(\d+).*?新增=(\d+).*?跳过=(\d+)", text)
+    if match:
+        return {"deleted": int(match.group(1)), "inserted": int(match.group(2)), "skipped": int(match.group(3))}
+    return None
+
+
+def _load_db_import_records(path: Path) -> dict:
+    path = Path(path)
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_db_import_record(path: Path, dataset_key: str, record: dict) -> None:
+    path = Path(path)
+    records = _load_db_import_records(path)
+    records[dataset_key] = record
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(f".{path.name}.tmp")
+        temporary.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
+        temporary.replace(path)
+    except OSError:
+        pass
+
+
+def build_db_import_status(repo_root: Path, dataset_key: str) -> dict:
     with DB_IMPORT_LOCK:
         job = DB_IMPORT_JOBS.get(dataset_key)
-        if job is None:
+        snapshot = dict(job) if job is not None else None
+    if snapshot is None:
+        records = _load_db_import_records(Path(repo_root) / DEFAULT_DB_IMPORT_STATUS)
+        record = records.get(dataset_key)
+        if record is None:
             return {"ok": True, "dataset_key": dataset_key, "state": "idle"}
-        snapshot = dict(job)
+        snapshot = dict(record)
     snapshot["ok"] = snapshot.get("state") != "error"
     snapshot["dataset_key"] = dataset_key
     return snapshot
@@ -1026,10 +1080,39 @@ def start_db_import_job(config: dict, dataset_key: str) -> dict:
         "PYTHONIOENCODING": "utf-8",
     })
 
+    status_file = repo_root / DEFAULT_DB_IMPORT_STATUS
+
+    def finish(state: str, message: str, error: str | None, tail: str, summary: dict | None = None) -> None:
+        now = datetime.now().isoformat(timespec="seconds")
+        with DB_IMPORT_LOCK:
+            DB_IMPORT_JOBS[dataset_key].update(
+                state=state, message=message, error=error, log_tail=tail, updated_at=now,
+            )
+        record = {"state": state, "message": message, "error": error, "log_tail": tail, "updated_at": now}
+        if summary:
+            for field in ("deleted", "inserted", "skipped"):
+                if summary.get(field) is not None:
+                    record[field] = summary[field]
+        _save_db_import_record(status_file, dataset_key, record)
+        try:
+            event_store = process_queue.ProcessStore(Path(config["process_db"]))
+            try:
+                event_store.add_event(
+                    dataset_key,
+                    "PROCESS_DB_IMPORT_DONE" if state == "done" else "PROCESS_DB_IMPORT_FAIL",
+                    (message or "")[:500],
+                )
+            finally:
+                event_store.close()
+        except Exception:  # noqa: BLE001
+            pass
+
     def worker() -> None:
         try:
             proc = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", env=env)
-            tail = ((proc.stdout or "") + (proc.stderr or ""))[-2000:]
+            combined = (proc.stdout or "") + (proc.stderr or "")
+            tail = combined[-2000:]
+            summary = parse_import_summary(combined)
             if proc.returncode == 0:
                 marks = load_db_update_marks(Path(config["db_update_file"]))
                 note = (marks.get(dataset_key) or {}).get("note") or ""
@@ -1038,24 +1121,11 @@ def start_db_import_job(config: dict, dataset_key: str) -> dict:
                     [{"dataset_key": dataset_key, "updated": True,
                       "updated_at": datetime.now().isoformat(timespec="seconds"), "note": note}],
                 )
-                with DB_IMPORT_LOCK:
-                    DB_IMPORT_JOBS[dataset_key].update(
-                        state="done", message="入库完成，已登记为已更新", error=None, log_tail=tail,
-                        updated_at=datetime.now().isoformat(timespec="seconds"),
-                    )
+                finish("done", "入库完成，已登记为已更新", None, tail, summary)
             else:
-                with DB_IMPORT_LOCK:
-                    DB_IMPORT_JOBS[dataset_key].update(
-                        state="error", message=f"入库失败（退出码 {proc.returncode}）",
-                        error=tail, log_tail=tail,
-                        updated_at=datetime.now().isoformat(timespec="seconds"),
-                    )
+                finish("error", f"入库失败（退出码 {proc.returncode}）", tail, tail, summary)
         except Exception as exc:  # noqa: BLE001
-            with DB_IMPORT_LOCK:
-                DB_IMPORT_JOBS[dataset_key].update(
-                    state="error", message=f"入库异常：{exc}", error=str(exc),
-                    updated_at=datetime.now().isoformat(timespec="seconds"),
-                )
+            finish("error", f"入库异常：{exc}", str(exc), "")
 
     threading.Thread(target=worker, name=f"db-import-{dataset_key}", daemon=True).start()
     return {"ok": True, "state": "running"}
@@ -1095,10 +1165,21 @@ def build_db_update_snapshot(repo_root: Path, process_db: Path, marks_file: Path
     finally:
         connection.close()
 
+    import_records = _load_db_import_records(repo_root / DEFAULT_DB_IMPORT_STATUS)
     rows = []
     for row in records:
         key = row["dataset_key"]
         mark = marks.get(key, {})
+        record = import_records.get(key)
+        import_detail = None
+        if isinstance(record, dict):
+            import_detail = {
+                "deleted": record.get("deleted"),
+                "inserted": record.get("inserted"),
+                "skipped": record.get("skipped"),
+                "state": record.get("state"),
+                "updated_at": record.get("updated_at"),
+            }
         rows.append(
             {
                 "dataset_key": key,
@@ -1113,6 +1194,7 @@ def build_db_update_snapshot(repo_root: Path, process_db: Path, marks_file: Path
                 "updated": bool(mark.get("updated")),
                 "updated_at": mark.get("updated_at") or "",
                 "note": mark.get("note") or "",
+                "import_detail": import_detail,
             }
         )
     snapshot["rows"] = rows
@@ -1133,16 +1215,6 @@ def parse_int_query(query: dict, name: str, default: int, minimum: int, maximum:
     except (TypeError, ValueError):
         return default
     return max(minimum, min(value, maximum))
-
-
-def normalize_tile_workers(value: object) -> int:
-    try:
-        workers = int(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("tile_workers 必须是整数") from exc
-    if not (MIN_TILE_WORKERS <= workers <= MAX_TILE_WORKERS):
-        raise ValueError(f"tile_workers 必须在 {MIN_TILE_WORKERS}~{MAX_TILE_WORKERS} 之间")
-    return workers
 
 
 def normalize_reorder_payload(payload: dict) -> tuple[str, str]:
@@ -1312,11 +1384,14 @@ def build_process_start_command(python_exe: str, repo_root: Path, limit: int, wa
     )
 
 
-def start_process_batch(repo_root: Path, command: list[str]) -> dict:
+def start_process_batch(repo_root: Path, command: list[str], extra_env: dict | None = None) -> dict:
     log_path = Path(repo_root) / DEFAULT_PROCESS_LOG
     error_log_path = Path(repo_root) / DEFAULT_PROCESS_ERR_LOG
     log_path.parent.mkdir(parents=True, exist_ok=True)
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    env = lib.child_process_env()
+    if extra_env:
+        env.update(extra_env)
     with log_path.open("w", encoding="utf-8") as out_handle, error_log_path.open("w", encoding="utf-8") as err_handle:
         process = subprocess.Popen(
             command,
@@ -1324,7 +1399,7 @@ def start_process_batch(repo_root: Path, command: list[str]) -> dict:
             stdout=out_handle,
             stderr=err_handle,
             creationflags=creationflags,
-            env=lib.child_process_env(),
+            env=env,
         )
     return {"pid": process.pid, "command": command}
 
@@ -1394,7 +1469,9 @@ def start_process_action(config: dict, limit: int, wait_resources: bool) -> dict
             }
         python_exe = resolve_process_python(config)
         command = build_process_start_command(python_exe, config["repo_root"], limit, wait_resources)
-        started = start_process_batch(config["repo_root"], command)
+        qgis_dir = load_dashboard_config(config["repo_root"]).get("qgis_dir") or ""
+        extra_env = {"QGIS_DIR": qgis_dir} if qgis_dir else None
+        started = start_process_batch(config["repo_root"], command, extra_env)
         return {
             "ok": True,
             "runner_pid": started["pid"],
@@ -1575,25 +1652,6 @@ def start_batch(repo_root: Path, command: list[str]) -> dict:
     return {"pid": process.pid, "command": command}
 
 
-def _save_defaults(repo_root: Path, tile_workers: int) -> None:
-    path = Path(repo_root) / DEFAULTS_FILE
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"tile_workers": tile_workers}, ensure_ascii=False, indent=2), encoding="utf-8")
-    except OSError:
-        pass
-
-
-def load_defaults(repo_root: Path) -> dict:
-    path = Path(repo_root) / DEFAULTS_FILE
-    if not path.exists():
-        return {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-
-
 def _normalize_config_port(value: object, default: int | None) -> int | None:
     try:
         port = int(value)
@@ -1622,7 +1680,8 @@ def load_dashboard_config(repo_root: Path) -> dict:
         "password": str(db.get("password") if db.get("password") is not None else DEFAULT_UPDATE_DB["password"]),
     }
     result_root = str(stored.get("result_root") or DEFAULT_RESULT_ROOT)
-    return {"database": database, "result_root": result_root}
+    qgis_dir = str(stored.get("qgis_dir") or DEFAULT_QGIS_DIR)
+    return {"database": database, "result_root": result_root, "qgis_dir": qgis_dir}
 
 
 def save_dashboard_config(repo_root: Path, config: dict) -> dict:
@@ -1631,6 +1690,7 @@ def save_dashboard_config(repo_root: Path, config: dict) -> dict:
     dbname = str(db.get("dbname") or "").strip()
     user = str(db.get("user") or "").strip()
     result_root = str(config.get("result_root") or "").strip()
+    qgis_dir = str(config.get("qgis_dir") or "").strip()
     if not host:
         raise ValueError("数据库主机不能为空")
     if not dbname:
@@ -1652,6 +1712,7 @@ def save_dashboard_config(repo_root: Path, config: dict) -> dict:
             "password": "" if raw_password is None else str(raw_password),
         },
         "result_root": result_root,
+        "qgis_dir": qgis_dir,
     }
     path = Path(repo_root) / DEFAULT_CONFIG_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1661,18 +1722,96 @@ def save_dashboard_config(repo_root: Path, config: dict) -> dict:
     return payload
 
 
+def _probe_python_version(python_exe: Path) -> str | None:
+    try:
+        proc = subprocess.run(
+            [str(python_exe), "-c", "import sys; print(sys.version.split()[0])"],
+            capture_output=True, text=True, encoding="utf-8", timeout=20,
+        )
+    except Exception:  # noqa: BLE001
+        return None
+    if proc.returncode == 0:
+        return (proc.stdout or "").strip() or None
+    return None
+
+
+def build_env_snapshot(config: dict) -> dict:
+    repo_root = Path(config["repo_root"])
+    update_python = repo_root / DEFAULT_UPDATE_PYTHON
+    update_script = repo_root / DEFAULT_UPDATE_SCRIPT
+    update_log_dir = repo_root / DEFAULT_UPDATE_LOG_DIR
+    process_python = Path(config.get("process_python_exe") or (repo_root / DEFAULT_PROCESS_PYTHON))
+    qgis_dir = load_dashboard_config(repo_root).get("qgis_dir") or DEFAULT_QGIS_DIR
+    qgis_bat = Path(qgis_dir) / "bin" / "qgis_process-qgis.bat"
+    update_python_exists = update_python.is_file()
+    return {
+        "repo_root": str(repo_root),
+        "update_python": str(update_python),
+        "update_python_exists": update_python_exists,
+        "update_python_version": _probe_python_version(update_python) if update_python_exists else None,
+        "update_script": str(update_script),
+        "update_script_exists": update_script.is_file(),
+        "update_log_dir": str(update_log_dir),
+        "update_log_dir_exists": update_log_dir.is_dir(),
+        "process_python": str(process_python),
+        "process_python_exists": Path(process_python).is_file(),
+        "qgis_dir": str(qgis_dir),
+        "qgis_process_bat": str(qgis_bat),
+        "qgis_process_bat_exists": qgis_bat.is_file(),
+    }
+
+
+def _probe_imports(python_exe: Path, modules: list[str]) -> dict:
+    code = "import " + ", ".join(modules)
+    try:
+        proc = subprocess.run(
+            [str(python_exe), "-c", code],
+            capture_output=True, text=True, encoding="utf-8", timeout=30,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "detail": str(exc)}
+    if proc.returncode == 0:
+        return {"ok": True, "detail": ""}
+    return {"ok": False, "detail": ((proc.stderr or proc.stdout or "").strip()[-200:])}
+
+
+def check_environment(config: dict) -> dict:
+    repo_root = Path(config["repo_root"])
+    cfg = load_dashboard_config(repo_root)
+    qgis_dir = cfg.get("qgis_dir") or DEFAULT_QGIS_DIR
+    process_python = Path(config.get("process_python_exe") or (repo_root / DEFAULT_PROCESS_PYTHON))
+
+    items: list[dict] = []
+
+    def add(label: str, path: Path, kind: str = "file", modules: list[str] | None = None) -> None:
+        exists = path.is_file() if kind == "file" else path.is_dir()
+        ok = exists
+        detail = ""
+        if exists and modules:
+            probe = _probe_imports(path, modules)
+            ok = probe["ok"]
+            detail = probe["detail"]
+        items.append({"label": label, "path": str(path), "exists": exists, "ok": ok, "detail": detail})
+
+    add("入库工具解释器", repo_root / DEFAULT_UPDATE_PYTHON, "file", ["geopandas", "psycopg2", "dotenv"])
+    add("入库脚本", repo_root / DEFAULT_UPDATE_SCRIPT)
+    add("入库日志目录", repo_root / DEFAULT_UPDATE_LOG_DIR, "dir")
+    add("处理工具解释器", process_python, "file", ["geopandas", "shapely", "pyproj"])
+    add("QGIS", Path(qgis_dir) / "bin" / "qgis_process-qgis.bat")
+
+    missing = [item["label"] for item in items if not item["ok"]]
+    return {"ok": not missing, "missing": missing, "items": items}
+
+
 def build_control_snapshot(config: dict) -> dict:
     detected = detect_batch()
-    defaults = load_defaults(config["repo_root"])
-    current = detected["tile_workers"] or int(defaults.get("tile_workers") or 2)
+    current = detected["tile_workers"] or DEFAULT_TILE_WORKERS
     return {
         "running": detected["runner"] is not None,
         "runner_pid": detected["runner"]["pid"] if detected["runner"] else None,
         "runner_count": detected.get("runner_count", 1 if detected["runner"] else 0),
         "worker_pids": [item["pid"] for item in detected["workers"]],
         "tile_workers": current,
-        "min_tile_workers": MIN_TILE_WORKERS,
-        "max_tile_workers": MAX_TILE_WORKERS,
         "action_token_required": bool(config.get("action_token")),
     }
 
@@ -1758,7 +1897,6 @@ def restart_batch(config: dict, tile_workers: int) -> dict:
             base_command_line,
         )
         started = start_batch(config["repo_root"], command)
-        _save_defaults(config["repo_root"], tile_workers)
         return {
             "ok": True,
             "tile_workers": tile_workers,
@@ -1845,12 +1983,18 @@ class StatusHandler(BaseHTTPRequestHandler):
             self._send(200, body, "application/json; charset=utf-8")
             return
         if path == "/api/config":
-            body = json.dumps(load_dashboard_config(config["repo_root"]), ensure_ascii=False).encode("utf-8")
+            snapshot = load_dashboard_config(config["repo_root"])
+            snapshot["env"] = build_env_snapshot(config)
+            body = json.dumps(snapshot, ensure_ascii=False).encode("utf-8")
+            self._send(200, body, "application/json; charset=utf-8")
+            return
+        if path == "/api/env":
+            body = json.dumps(check_environment(config), ensure_ascii=False).encode("utf-8")
             self._send(200, body, "application/json; charset=utf-8")
             return
         if path == "/api/db_updated/import-status":
             dataset_key = (parse_qs(urlparse(self.path).query).get("dataset_key") or [""])[0]
-            body = json.dumps(build_db_import_status(dataset_key), ensure_ascii=False).encode("utf-8")
+            body = json.dumps(build_db_import_status(config["repo_root"], dataset_key), ensure_ascii=False).encode("utf-8")
             self._send(200, body, "application/json; charset=utf-8")
             return
         if path == "/api/db_updated":
@@ -2421,17 +2565,7 @@ class StatusHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            tile_workers = normalize_tile_workers(payload.get("tile_workers"))
-        except ValueError as exc:
-            self._send(
-                400,
-                json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8"),
-                "application/json; charset=utf-8",
-            )
-            return
-
-        try:
-            result = restart_batch(config, tile_workers)
+            result = restart_batch(config, DEFAULT_TILE_WORKERS)
         except Exception as exc:  # noqa: BLE001
             self._send(
                 500,

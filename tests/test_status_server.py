@@ -680,15 +680,6 @@ class ControlTests(unittest.TestCase):
         self.assertEqual(detected["runner_count"], 2)
         self.assertEqual([item["pid"] for item in detected["workers"]], [30])
 
-    def test_normalize_tile_workers(self):
-        self.assertEqual(status_server.normalize_tile_workers(3), 3)
-        with self.assertRaises(ValueError):
-            status_server.normalize_tile_workers(0)
-        with self.assertRaises(ValueError):
-            status_server.normalize_tile_workers(7)
-        with self.assertRaises(ValueError):
-            status_server.normalize_tile_workers("abc")
-
     def test_build_restart_command_preserves_filters(self):
         base = (
             r"python.exe -u E:\LoD1\scripts\run_world_building_tasks.py --sleep-seconds 2 "
@@ -739,11 +730,11 @@ class ControlTests(unittest.TestCase):
                 with patch.object(
                     status_server,
                     "restart_batch",
-                    return_value={"ok": True, "tile_workers": 3, "runner_pid": 123, "stopped_pids": [1]},
+                    return_value={"ok": True, "tile_workers": 2, "runner_pid": 123, "stopped_pids": [1]},
                 ) as restart:
                     request = urllib.request.Request(
                         f"http://127.0.0.1:{port}/api/restart",
-                        data=json.dumps({"tile_workers": 3}).encode("utf-8"),
+                        data=json.dumps({}).encode("utf-8"),
                         headers={"Content-Type": "application/json"},
                         method="POST",
                     )
@@ -751,26 +742,7 @@ class ControlTests(unittest.TestCase):
                         payload = json.loads(response.read().decode("utf-8"))
                 self.assertTrue(payload["ok"])
                 restart.assert_called_once()
-                self.assertEqual(restart.call_args[0][1], 3)
-            finally:
-                server.shutdown()
-                server.server_close()
-
-    def test_restart_endpoint_rejects_bad_value(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            repo_root = Path(tmp)
-            server = self._make_server(repo_root)
-            port = server.server_address[1]
-            try:
-                request = urllib.request.Request(
-                    f"http://127.0.0.1:{port}/api/restart",
-                    data=json.dumps({"tile_workers": 0}).encode("utf-8"),
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
-                )
-                with self.assertRaises(urllib.error.HTTPError) as context:
-                    urllib.request.urlopen(request, timeout=10)
-                self.assertEqual(context.exception.code, 400)
+                self.assertEqual(restart.call_args[0][1], 2)
             finally:
                 server.shutdown()
                 server.server_close()
@@ -783,7 +755,7 @@ class ControlTests(unittest.TestCase):
             try:
                 request = urllib.request.Request(
                     f"http://127.0.0.1:{port}/api/restart",
-                    data=json.dumps({"tile_workers": 2}).encode("utf-8"),
+                    data=json.dumps({}).encode("utf-8"),
                     headers={"Content-Type": "application/json"},
                     method="POST",
                 )
@@ -2467,7 +2439,11 @@ class ControlTests(unittest.TestCase):
             try:
                 with patch.object(
                     status_server.subprocess, "run",
-                    return_value=subprocess.CompletedProcess([], 0, "updated", ""),
+                    return_value=subprocess.CompletedProcess(
+                        [], 0,
+                        '__IMPORT_SUMMARY__ {"deleted": 9, "inserted": 3, "skipped": 1}\n',
+                        "",
+                    ),
                 ):
                     request = urllib.request.Request(
                         f"http://127.0.0.1:{port}/api/db_updated/import",
@@ -2494,6 +2470,11 @@ class ControlTests(unittest.TestCase):
                 self.assertEqual(state["state"], "done")
                 marks = status_server.load_db_update_marks(repo_root / "data" / "db_update_status.json")
                 self.assertTrue(marks[key]["updated"])
+                records = status_server._load_db_import_records(repo_root / status_server.DEFAULT_DB_IMPORT_STATUS)
+                self.assertEqual(records[key]["state"], "done")
+                self.assertEqual(records[key]["deleted"], 9)
+                self.assertEqual(records[key]["inserted"], 3)
+                self.assertEqual(records[key]["skipped"], 1)
             finally:
                 server.shutdown()
                 server.server_close()
@@ -2530,6 +2511,157 @@ class ControlTests(unittest.TestCase):
                 server.shutdown()
                 server.server_close()
 
+    def test_db_import_status_falls_back_to_persisted_record(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            key = "Europe|San_Marino|San_Marino"
+            self.assertEqual(
+                status_server.build_db_import_status(repo_root, key)["state"], "idle"
+            )
+            status_server._save_db_import_record(
+                repo_root / status_server.DEFAULT_DB_IMPORT_STATUS, key,
+                {"state": "error", "message": "入库失败（退出码 1）", "error": "boom", "log_tail": "", "updated_at": "t"},
+            )
+            result = status_server.build_db_import_status(repo_root, key)
+            self.assertEqual(result["state"], "error")
+            self.assertFalse(result["ok"])
+
+    def test_check_db_update_consistency_missing_share_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            key = "Europe|San_Marino|San_Marino"
+            output_dir = "Tools/Oneshp_pipline_qgis/out_data/san_marino_pipeline"
+            self._make_tiles(repo_root / output_dir / "final", ["a_3857"])
+            self._write_config_root(repo_root, repo_root / "share")
+            self._insert_process_ok(repo_root / "process.db", key, output_dir)
+            config = {"repo_root": repo_root, "process_db": repo_root / "process.db"}
+            result = status_server.check_db_update_consistency(config, key)
+            self.assertFalse(result["consistent"])
+            self.assertIn("共享目录不存在", result["message"])
+
+    def test_merge_size_check_is_per_component(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            source_dir = repo_root / "data" / "Asia" / "China" / "Test"
+            source_dir.mkdir(parents=True)
+            part1 = source_dir / "Test_buildings_height_gba_part1.shp"
+            part2 = source_dir / "Test_buildings_height_gba_part2.shp"
+            for path in (part1, part2):
+                path.write_bytes(b"0" * 100)
+                path.with_suffix(".dbf").write_bytes(b"0" * 200)
+                path.with_suffix(".shx").write_bytes(b"0" * 100)
+            process_db = repo_root / "process.db"
+            self._register_merge_task(
+                process_db,
+                [lib.repo_relative(repo_root, part1), lib.repo_relative(repo_root, part2)],
+                run_shp_process_tasks.PROCESS_PENDING,
+            )
+
+            # 单组件最大 ≈400B(dbf)，合计 ≈600B；阈值 500B：按组件应通过，按合计会被拒。
+            with patch.object(run_shp_process_tasks, "resolve_ogr2ogr", return_value="ogr2ogr"), \
+                 patch.object(
+                     run_shp_process_tasks.subprocess, "run",
+                     return_value=subprocess.CompletedProcess([], 0, "", ""),
+                 ):
+                result = run_shp_process_tasks.merge_task_shp_parts(
+                    repo_root, process_db, "Asia|China|Test",
+                    sync=False, max_output_gb=500 / (1 << 30),
+                )
+            self.assertTrue(result["ok"])
+
+    def test_merge_size_check_rejects_oversized_component(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            source_dir = repo_root / "data" / "Asia" / "China" / "Test"
+            source_dir.mkdir(parents=True)
+            part1 = source_dir / "Test_buildings_height_gba_part1.shp"
+            part2 = source_dir / "Test_buildings_height_gba_part2.shp"
+            for path in (part1, part2):
+                path.write_bytes(b"0" * 100)
+                path.with_suffix(".dbf").write_bytes(b"0" * 200)
+                path.with_suffix(".shx").write_bytes(b"0" * 100)
+            process_db = repo_root / "process.db"
+            self._register_merge_task(
+                process_db,
+                [lib.repo_relative(repo_root, part1), lib.repo_relative(repo_root, part2)],
+                run_shp_process_tasks.PROCESS_PENDING,
+            )
+            with self.assertRaises(ValueError):
+                run_shp_process_tasks.merge_task_shp_parts(
+                    repo_root, process_db, "Asia|China|Test",
+                    sync=False, max_output_gb=300 / (1 << 30),
+                )
+
+    def test_parse_import_summary(self):
+        self.assertIsNone(status_server.parse_import_summary(""))
+        self.assertIsNone(status_server.parse_import_summary("没有汇总信息"))
+        marker = '__IMPORT_SUMMARY__ {"region": "x", "deleted": 12, "inserted": 5, "skipped": 1}\n'
+        parsed = status_server.parse_import_summary("log line\n" + marker)
+        self.assertEqual((parsed["deleted"], parsed["inserted"], parsed["skipped"]), (12, 5, 1))
+        fallback = status_server.parse_import_summary("更新完成: region=x, 删除=3, 新增=7, 跳过=0")
+        self.assertEqual((fallback["deleted"], fallback["inserted"], fallback["skipped"]), (3, 7, 0))
+
+    def test_build_db_update_snapshot_import_detail(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            process_db = build_process_fixture(repo_root)
+            status_server._save_db_import_record(
+                repo_root / status_server.DEFAULT_DB_IMPORT_STATUS,
+                "Europe|San_Marino|San_Marino",
+                {"state": "done", "deleted": 4, "inserted": 2, "skipped": 0,
+                 "message": "", "error": None, "log_tail": "", "updated_at": "t"},
+            )
+            snapshot = status_server.build_db_update_snapshot(repo_root, process_db, repo_root / "marks.json")
+            row = snapshot["rows"][0]
+            self.assertEqual(row["import_detail"]["deleted"], 4)
+            self.assertEqual(row["import_detail"]["inserted"], 2)
+
+    def test_check_environment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            config = {"repo_root": repo_root, "process_python_exe": str(repo_root / "nope.exe")}
+            result = status_server.check_environment(config)
+            self.assertFalse(result["ok"])
+            self.assertIn("入库工具解释器", result["missing"])
+            qgis = next(item for item in result["items"] if item["label"] == "QGIS")
+            expected = (Path(status_server.DEFAULT_QGIS_DIR) / "bin" / "qgis_process-qgis.bat").is_file()
+            self.assertEqual(qgis["exists"], expected)
+
+    def test_env_endpoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/env", timeout=30) as response:
+                    data = json.loads(response.read().decode("utf-8"))
+                self.assertIn("items", data)
+                self.assertFalse(data["ok"])
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_build_env_snapshot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            config = {"repo_root": repo_root, "process_python_exe": str(repo_root / "nope.exe")}
+            env = status_server.build_env_snapshot(config)
+            self.assertEqual(env["repo_root"], str(repo_root))
+            self.assertFalse(env["update_python_exists"])
+            self.assertFalse(env["update_script_exists"])
+            self.assertFalse(env["update_log_dir_exists"])
+            self.assertFalse(env["process_python_exists"])
+
+            python_exe = repo_root / status_server.DEFAULT_UPDATE_PYTHON
+            python_exe.parent.mkdir(parents=True, exist_ok=True)
+            python_exe.write_bytes(b"x")
+            script = repo_root / status_server.DEFAULT_UPDATE_SCRIPT
+            script.parent.mkdir(parents=True, exist_ok=True)
+            script.write_bytes(b"x")
+            env = status_server.build_env_snapshot(config)
+            self.assertTrue(env["update_python_exists"])
+            self.assertTrue(env["update_script_exists"])
+
     def test_load_dashboard_config_defaults(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)
@@ -2547,15 +2679,18 @@ class ControlTests(unittest.TestCase):
                     "database": {"host": "10.0.0.5", "port": "5433", "dbname": "gis",
                                  "user": "u1", "password": "p1"},
                     "result_root": "\\\\srv\\share\\AutoGenerte",
+                    "qgis_dir": "E:\\QGIS",
                 },
             )
             self.assertEqual(saved["database"]["port"], 5433)
+            self.assertEqual(saved["qgis_dir"], "E:\\QGIS")
             config = status_server.load_dashboard_config(repo_root)
             self.assertEqual(config["database"]["host"], "10.0.0.5")
             self.assertEqual(config["database"]["port"], 5433)
             self.assertEqual(config["database"]["dbname"], "gis")
             self.assertEqual(config["database"]["password"], "p1")
             self.assertEqual(config["result_root"], "\\\\srv\\share\\AutoGenerte")
+            self.assertEqual(config["qgis_dir"], "E:\\QGIS")
             self.assertTrue((repo_root / "data" / "config.json").exists())
 
     def test_config_endpoint_get_and_post(self):

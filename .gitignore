@@ -3,6 +3,7 @@
 /data/*/
 !/data/boundaries/
 !/data/boundaries/**
+/data/config.json
 
 /Tools/Oneshp_pipline_qgis/out_data/
 /repair_staging/

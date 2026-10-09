@@ -35,6 +35,14 @@
   .cfg-field input { width:100%; padding:6px 8px; font:inherit; font-size:13px; border:1px solid var(--line); border-radius:6px; background:transparent; color:var(--text); }
   .cfg-field input:focus { outline:1px solid var(--accent); border-color:var(--accent); }
   .cfg-actions { display:flex; gap:12px; align-items:center; }
+  .cfg-nav { display:flex; flex-direction:column; gap:2px; }
+  .cfg-nav-item { text-align:left; background:none; border:none; border-left:3px solid transparent; padding:8px 12px; cursor:pointer; color:var(--muted); font:inherit; font-size:14px; border-radius:0 6px 6px 0; }
+  .cfg-nav-item:hover { background:rgba(127,127,127,.08); }
+  .cfg-nav-item.active { color:var(--accent); font-weight:600; border-left-color:var(--accent); background:rgba(127,127,127,.06); }
+  .merge-msg { margin-left:8px; font-size:12px; white-space:nowrap; cursor:default; }
+  .merge-msg.running { color:var(--muted); }
+  .merge-msg.ok { color:var(--ok); }
+  .merge-msg.error { color:var(--err); }
   .panel[hidden] { display:none; }
   .plain-list { margin:0; padding-left:18px; color:var(--muted); font-size:13px; }
   .plain-list li { margin-bottom:6px; }
@@ -95,7 +103,7 @@
   <nav class="tabs">
     <button type="button" class="tab active" data-tab="download">建筑数据下载</button>
     <button type="button" class="tab" data-tab="processing">数据处理</button>
-    <button type="button" class="tab" data-tab="dbupdated">数据库表更新记录</button>
+    <button type="button" class="tab" data-tab="dbupdated">库表更新</button>
     <button type="button" class="tab" data-tab="config">配置</button>
   </nav>
 
@@ -114,7 +122,7 @@
   <section>
     <h2>批处理控制</h2>
     <div class="muted" style="margin-bottom:10px;">
-      重启会停止当前批处理并按新并发参数重新启动；已完成分块全部复用，任务从断点继续（约几秒中断）。
+      重启会停止当前批处理并重新启动（并发固定 2）；已完成分块全部复用，任务从断点继续（约几秒中断）。
     </div>
     <div class="stats">
       <span>批处理：<b id="ctl-running">-</b></span>
@@ -123,11 +131,7 @@
       <span>runner 数量：<b id="ctl-runner-count">-</b></span>
     </div>
     <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-      <label class="muted">tile-workers
-        <input id="ctl-workers" type="number" min="1" max="6" step="1" value="2"
-               style="width:80px;margin-left:6px;padding:4px 6px;">
-      </label>
-      <button id="ctl-restart" style="padding:6px 14px;cursor:pointer;">保存并重启批处理</button>
+      <button id="ctl-restart" style="padding:6px 14px;cursor:pointer;">重启批处理</button>
       <button id="ctl-stop" style="padding:6px 14px;cursor:pointer;color:#b91c1c;border-color:#b91c1c;">停止下载任务</button>
       <span id="ctl-message" class="muted"></span>
     </div>
@@ -293,15 +297,15 @@
         <div id="d-error" class="error-banner" style="display:none"></div>
 
         <section>
-          <h2>数据库表更新记录</h2>
+          <h2>库表更新</h2>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
             <span class="muted">对已完成处理的任务手动标记是否已更新到数据库表，保存后写入 <code>data/db_update_status.json</code>。</span>
             <button id="d-save" type="button" style="padding:4px 12px;cursor:pointer;">保存修改</button>
             <span id="d-message" class="muted"></span>
           </div>
           <div class="subtabs">
-            <button type="button" class="subtab active" data-dfilter="updated">更新到库（<span id="d-count-updated">0</span>）</button>
-            <button type="button" class="subtab" data-dfilter="pending">未更新到库（<span id="d-count-pending">0</span>）</button>
+            <button type="button" class="subtab active" data-dfilter="pending">未更新到库（<span id="d-count-pending">0</span>）</button>
+            <button type="button" class="subtab" data-dfilter="updated">更新到库（<span id="d-count-updated">0</span>）</button>
           </div>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
             <span id="d-summary" class="muted">-</span>
@@ -328,15 +332,18 @@
 
   <div class="panel" id="panel-config" hidden>
     <div class="layout">
+      <aside class="sidebar">
+        <nav class="cfg-nav">
+          <button type="button" class="cfg-nav-item active" data-cfgtab="db">数据库连接</button>
+          <button type="button" class="cfg-nav-item" data-cfgtab="root">区域成果共享目录</button>
+          <button type="button" class="cfg-nav-item" data-cfgtab="qgis">QGIS</button>
+          <button type="button" class="cfg-nav-item" data-cfgtab="env">环境 / 诊断</button>
+        </nav>
+      </aside>
       <main class="main">
         <section>
-          <h2>配置</h2>
-          <div class="muted" style="margin-bottom:14px;">
-            配置数据库连接与区域成果 SHP 共享目录（保存功能待补充）。
-          </div>
-
-          <div class="cfg-subsection">
-            <div class="cfg-section-title">数据库连接</div>
+          <div class="cfg-pane" data-cfgpane="db">
+            <h2>数据库连接</h2>
             <div class="cfg-grid">
               <div class="cfg-field"><label>主机</label><input id="cfg-db-host" type="text" value="172.16.1.145" placeholder="127.0.0.1"></div>
               <div class="cfg-field"><label>端口</label><input id="cfg-db-port" type="number" min="1" max="65535" value="5432"></div>
@@ -346,17 +353,44 @@
             </div>
           </div>
 
-          <div class="cfg-subsection">
-            <div class="cfg-section-title">区域成果 SHP 共享目录</div>
+          <div class="cfg-pane" data-cfgpane="root" hidden>
+            <h2>区域成果 SHP 共享目录</h2>
             <div class="cfg-grid">
               <div class="cfg-field" style="grid-column:1/-1;">
                 <label>共享目录（UNC）</label>
                 <input id="cfg-result-root" type="text" value="\\192.168.2.121\BuildingData\AutoGenerate" placeholder="\\<服务器>\BuildingData\AutoGenerte">
               </div>
             </div>
+            <div class="muted" style="margin-top:6px;">「更新到库」会读取该目录与处理产物比对。</div>
           </div>
 
-          <div class="cfg-actions">
+          <div class="cfg-pane" data-cfgpane="qgis" hidden>
+            <h2>QGIS</h2>
+            <div class="cfg-grid">
+              <div class="cfg-field" style="grid-column:1/-1;">
+                <label>QGIS 安装目录</label>
+                <input id="cfg-qgis-dir" type="text" value="D:\QGIS" placeholder="D:\QGIS">
+              </div>
+            </div>
+            <div class="muted" style="margin-top:6px;">用于数据处理的 QGIS；启动处理队列时会以此设置注入环境变量 <code>QGIS_DIR</code>。</div>
+          </div>
+
+          <div class="cfg-pane" data-cfgpane="env" hidden>
+            <h2 style="display:flex;align-items:center;justify-content:space-between;">
+              <span>环境 / 诊断</span>
+              <button id="env-check" type="button" class="mini" style="padding:4px 12px;cursor:pointer;">检测环境</button>
+            </h2>
+            <div class="cfg-grid">
+              <div class="cfg-field" style="grid-column:1/-1;">
+                <label>仓库根目录</label>
+                <input id="env-repo-root" type="text" readonly>
+              </div>
+            </div>
+            <div id="env-summary" class="muted" style="margin-top:8px;"></div>
+            <div id="env-checks" style="margin-top:10px;font-size:13px;line-height:1.9;"></div>
+          </div>
+
+          <div class="cfg-actions" style="margin-top:16px;">
             <button id="cfg-save" type="button" style="padding:6px 16px;cursor:pointer;">保存</button>
             <span id="cfg-message" class="muted"></span>
           </div>
@@ -372,10 +406,11 @@
 const REFRESH_MS = %%REFRESH_MS%%;
 let countdownTimer = null;
 let refreshSequence = 0;
-const controlState = { actionTokenRequired: false, inputDirty: false };
+const controlState = { actionTokenRequired: false };
 const noteState = { editingKey: null };
 const queueState = { page: 1, pageSize: 15, total: 0, search: "" };
 const processingRecentState = { page: 1, pageSize: 10, total: 0 };
+const mergeMsgState = {};
 
 function esc(value) {
   return String(value === null || value === undefined ? "" : value)
@@ -813,6 +848,10 @@ function renderProcessingQueue(processing) {
         const isLast = index === items.length - 1;
         const key = esc(item.dataset_key);
         const note = item.note || "";
+        const merge = mergeMsgState[item.dataset_key];
+        const mergeBusy = !!(merge && merge.busy);
+        const mergeText = merge ? merge.text : "";
+        const mergeKind = merge ? merge.kind : "";
         return `
         <tr>
           <td class="order-cell">
@@ -829,7 +868,10 @@ function renderProcessingQueue(processing) {
           <td>待处理</td>
           <td><input class="note-input" type="text" maxlength="200" placeholder="添加备注"
                      data-note-key="${key}" data-saved="${esc(note)}" value="${esc(note)}"></td>
-          <td><button type="button" class="mini" title="可以通过点击该按钮，自动合并为一个SHP" data-auto-merge="${key}" data-source-dir="${esc(item.source_dir || "")}" data-shp-count="${esc(item.shp_count ?? 0)}" ${(item.shp_count ?? 0) > 1 ? "" : "disabled"}>自动合并</button></td>
+          <td>
+            <button type="button" class="mini" title="可以通过点击该按钮，自动合并为一个SHP" data-auto-merge="${key}" data-source-dir="${esc(item.source_dir || "")}" data-shp-count="${esc(item.shp_count ?? 0)}" ${((item.shp_count ?? 0) > 1 && !mergeBusy) ? "" : "disabled"}>自动合并</button>
+            <span class="merge-msg ${mergeKind}" data-merge-msg="${key}" title="${esc(mergeText)}">${esc(mergeText)}</span>
+          </td>
         </tr>`;
       }).join("")}
       </tbody>
@@ -915,28 +957,50 @@ async function reorderProcessing(datasetKey, direction) {
   }
 }
 
+function setMergeRowMessage(button, state) {
+  if (!button || !button.parentElement) return;
+  const span = button.parentElement.querySelector(".merge-msg");
+  if (!span) return;
+  span.textContent = state ? (state.text || "") : "";
+  span.className = "merge-msg " + (state ? (state.kind || "") : "");
+  span.title = state ? (state.detail || state.text || "") : "";
+}
+
 function pollProcessingMerge(datasetKey, button, originalText) {
-  const message = document.getElementById("p-queue-message");
   const timer = setInterval(async () => {
     try {
       const response = await fetch(`/api/process/merge-status?dataset_key=${encodeURIComponent(datasetKey)}`, { cache: "no-store" });
       const data = await response.json();
       if (data.state === "running") {
-        if (message) message.textContent = `合并中：${data.message || ""}`;
+        mergeMsgState[datasetKey] = {
+          text: `合并中 ${data.done || 0}/${data.total || "?"}…`,
+          kind: "running",
+          busy: true,
+          detail: data.message || "合并中…",
+        };
+        setMergeRowMessage(button, mergeMsgState[datasetKey]);
         return;
       }
       clearInterval(timer);
       if (data.state === "done") {
-        if (message) message.textContent = `已合并为单个 SHP 并同步队列：${datasetKey}`;
+        mergeMsgState[datasetKey] = { text: "已合并", kind: "ok", busy: false, detail: "已合并为单个 SHP 并同步队列" };
+        setMergeRowMessage(button, mergeMsgState[datasetKey]);
         await refresh();
       } else {
-        if (message) message.textContent = "合并失败：" + (data.error || "未知错误");
+        mergeMsgState[datasetKey] = {
+          text: "失败",
+          kind: "error",
+          busy: false,
+          detail: "失败：" + (data.error || data.message || "未知错误"),
+        };
+        setMergeRowMessage(button, mergeMsgState[datasetKey]);
         button.disabled = false;
         button.textContent = originalText;
       }
     } catch (error) {
       clearInterval(timer);
-      if (message) message.textContent = "查询合并状态失败：" + error;
+      mergeMsgState[datasetKey] = { text: "失败", kind: "error", busy: false, detail: "失败：" + error };
+      setMergeRowMessage(button, mergeMsgState[datasetKey]);
       button.disabled = false;
       button.textContent = originalText;
     }
@@ -944,15 +1008,15 @@ function pollProcessingMerge(datasetKey, button, originalText) {
 }
 
 async function autoMergeParts(datasetKey, button) {
-  const message = document.getElementById("p-queue-message");
   const count = button.dataset.shpCount || "?";
   if (!window.confirm(`确认将“${datasetKey}”的 ${count} 个分卷自动合并为一个 SHP？\n将删除原分卷，并同步处理队列。`)) {
     return;
   }
   const originalText = button.textContent;
+  mergeMsgState[datasetKey] = { text: "合并中…", kind: "running", busy: true, detail: "合并中…" };
   button.disabled = true;
   button.textContent = "合并中…";
-  if (message) message.textContent = "正在启动合并…";
+  setMergeRowMessage(button, mergeMsgState[datasetKey]);
   try {
     const response = await fetch("/api/process/merge-parts", {
       method: "POST",
@@ -965,14 +1029,21 @@ async function autoMergeParts(datasetKey, button) {
     });
     const data = await response.json();
     if (!response.ok || !data.ok) {
-      if (message) message.textContent = "合并启动失败：" + (data.error || response.status);
+      mergeMsgState[datasetKey] = {
+        text: "失败",
+        kind: "error",
+        busy: false,
+        detail: "失败：" + (data.error || response.status),
+      };
+      setMergeRowMessage(button, mergeMsgState[datasetKey]);
       button.disabled = false;
       button.textContent = originalText;
       return;
     }
     pollProcessingMerge(datasetKey, button, originalText);
   } catch (error) {
-    if (message) message.textContent = "合并请求失败：" + error;
+    mergeMsgState[datasetKey] = { text: "失败", kind: "error", busy: false, detail: "失败：" + error };
+    setMergeRowMessage(button, mergeMsgState[datasetKey]);
     button.disabled = false;
     button.textContent = originalText;
   }
@@ -1217,7 +1288,9 @@ function renderProcessing(processing) {
   renderProcessingFailed(processing);
 }
 
-const dbUpdateState = { edits: {}, page: 1, pageSize: 15, rows: [], filter: "updated" };
+const dbUpdateState = { edits: {}, page: 1, pageSize: 15, rows: [], filter: "pending" };
+const dbImportMsgState = {};
+const dbImportChecked = {};
 
 function dbUpdateStamp() {
   const now = new Date();
@@ -1273,14 +1346,27 @@ function renderDbUpdateTable() {
   const start = (dbUpdateState.page - 1) * pageSize;
   const pageRows = rows.slice(start, start + pageSize);
   const showAction = dbUpdateState.filter !== "updated";
+  const showDetail = dbUpdateState.filter === "updated";
   const actionHeader = showAction ? "<th>操作</th>" : "";
+  const detailHeader = showDetail ? "<th>更新详情</th>" : "";
   box.innerHTML = `
     <table>
-      <thead><tr><th>数据集</th><th>命名前缀</th><th>处理完成时间</th><th>输出目录</th><th>更新时间</th><th>备注</th>${actionHeader}</tr></thead>
+      <thead><tr><th>数据集</th><th>命名前缀</th><th>处理完成时间</th><th>输出目录</th><th>更新时间</th><th>备注</th>${detailHeader}${actionHeader}</tr></thead>
       <tbody>${pageRows.map(item => {
         const row = dbUpdateEffectiveRow(item);
+        const det = row.import_detail;
+        const detText = det && (det.deleted != null || det.inserted != null)
+          ? `删除 ${det.deleted ?? "-"} 条 / 新增 ${det.inserted ?? "-"} 个 SHP` + (det.skipped ? ` / 跳过 ${det.skipped}` : "")
+          : "-";
+        const detTitle = det ? `${det.state || ""} ${det.updated_at || ""}`.trim() : "";
+        const detailCell = showDetail ? `<td title="${esc(detTitle)}">${esc(detText)}</td>` : "";
+        const imp = dbImportMsgState[row.dataset_key];
+        const impBusy = !!(imp && imp.busy);
+        const impText = imp ? imp.text : "";
+        const impKind = imp ? imp.kind : "";
+        const impDetail = imp ? (imp.detail || imp.text || "") : "";
         const actionCell = showAction
-          ? `<td><button type="button" class="mini" data-import-db="${esc(row.dataset_key)}" title="先检查共享目录与处理产物是否一致，再执行入库">更新到库</button></td>`
+          ? `<td><button type="button" class="mini" data-import-db="${esc(row.dataset_key)}" title="先检查共享目录与处理产物是否一致，再执行入库" ${impBusy ? "disabled" : ""}>更新到库</button><span class="merge-msg ${impKind}" data-import-msg="${esc(row.dataset_key)}" title="${esc(impDetail)}">${esc(impText)}</span></td>`
           : "";
         return `
         <tr data-dkey="${esc(row.dataset_key)}" data-updated="${row.updated ? "1" : "0"}">
@@ -1290,11 +1376,64 @@ function renderDbUpdateTable() {
           <td class="mono">${esc(row.output_dir || "-")}</td>
           <td><input type="text" class="cell-input" data-field="updated_at" value="${esc(row.updated_at || "")}" placeholder="YYYY-MM-DDTHH:MM:SS"></td>
           <td><input type="text" class="cell-input" data-field="note" value="${esc(row.note || "")}" placeholder="备注"></td>
+          ${detailCell}
           ${actionCell}
         </tr>`;
       }).join("")}
       </tbody>
     </table>`;
+  if (showAction) restoreImportStates(pageRows);
+}
+
+function importRowButton(key) {
+  let found = null;
+  document.querySelectorAll("#d-table button[data-import-db]").forEach((button) => {
+    if (button.dataset.importDb === key) found = button;
+  });
+  return found;
+}
+
+function setImportRowMessage(button, state) {
+  if (!button || !button.parentElement) return;
+  const span = button.parentElement.querySelector(".merge-msg");
+  if (!span) return;
+  span.textContent = state ? (state.text || "") : "";
+  span.className = "merge-msg " + (state ? (state.kind || "") : "");
+  span.title = state ? (state.detail || state.text || "") : "";
+}
+
+async function restoreImportStates(rows) {
+  for (const item of rows) {
+    const row = dbUpdateEffectiveRow(item);
+    if (row.updated) continue;
+    const key = row.dataset_key;
+    if (dbImportChecked[key]) continue;
+    dbImportChecked[key] = true;
+    try {
+      const response = await fetch(
+        `/api/db_updated/import-status?dataset_key=${encodeURIComponent(key)}`,
+        { cache: "no-store" }
+      );
+      const data = await response.json();
+      if (data.state === "running") {
+        dbImportMsgState[key] = { text: "入库中…", kind: "running", busy: true, detail: "入库中…" };
+      } else if (data.state === "done") {
+        dbImportMsgState[key] = { text: "已录入", kind: "ok", busy: false, detail: "入库完成，已登记为已更新" };
+      } else if (data.state === "error") {
+        const detail = data.message || data.error || "未知错误";
+        dbImportMsgState[key] = { text: "失败", kind: "error", busy: false, detail: detail };
+      } else {
+        continue;
+      }
+      const button = importRowButton(key);
+      if (button) {
+        button.disabled = !!dbImportMsgState[key].busy;
+        setImportRowMessage(button, dbImportMsgState[key]);
+      }
+    } catch (error) {
+      /* 忽略恢复失败 */
+    }
+  }
 }
 
 function renderDbUpdated(snapshot) {
@@ -1364,7 +1503,6 @@ document.getElementById("d-table").addEventListener("input", (event) => {
 });
 
 function pollDbImport(datasetKey, button, originalText) {
-  const message = document.getElementById("d-message");
   const timer = setInterval(async () => {
     try {
       const response = await fetch(
@@ -1373,22 +1511,30 @@ function pollDbImport(datasetKey, button, originalText) {
       );
       const data = await response.json();
       if (data.state === "running") {
-        if (message) message.textContent = `入库中：${datasetKey}`;
+        dbImportMsgState[datasetKey] = { text: "入库中…", kind: "running", busy: true, detail: "入库中…" };
+        setImportRowMessage(button, dbImportMsgState[datasetKey]);
         return;
       }
       clearInterval(timer);
       if (data.state === "done") {
-        if (message) message.textContent = "入库完成，已登记为已更新";
+        dbImportMsgState[datasetKey] = { text: "已录入", kind: "ok", busy: false, detail: "入库完成，已登记为已更新" };
+        setImportRowMessage(button, dbImportMsgState[datasetKey]);
         await refreshDbUpdated();
       } else {
-        if (message) message.textContent = "入库失败：" + (data.message || data.error || "未知错误");
-        if (data.error) window.alert("入库失败：" + data.error);
+        dbImportMsgState[datasetKey] = {
+          text: "失败",
+          kind: "error",
+          busy: false,
+          detail: "失败：" + (data.message || data.error || "未知错误"),
+        };
+        setImportRowMessage(button, dbImportMsgState[datasetKey]);
         button.disabled = false;
         button.textContent = originalText;
       }
     } catch (error) {
       clearInterval(timer);
-      if (message) message.textContent = "查询入库状态失败：" + error;
+      dbImportMsgState[datasetKey] = { text: "失败", kind: "error", busy: false, detail: "失败：" + error };
+      setImportRowMessage(button, dbImportMsgState[datasetKey]);
       button.disabled = false;
       button.textContent = originalText;
     }
@@ -1396,14 +1542,14 @@ function pollDbImport(datasetKey, button, originalText) {
 }
 
 async function importToDb(datasetKey, button) {
-  const message = document.getElementById("d-message");
   if (!window.confirm(`确认对“${datasetKey}”执行“更新到库”？\n将先检查共享目录与处理产物是否一致，一致后才执行入库。`)) {
     return;
   }
   const originalText = button.textContent;
+  dbImportMsgState[datasetKey] = { text: "检查中…", kind: "running", busy: true, detail: "检查中…" };
   button.disabled = true;
   button.textContent = "入库中…";
-  if (message) message.textContent = "正在检查并入库…";
+  setImportRowMessage(button, dbImportMsgState[datasetKey]);
   try {
     const response = await fetch("/api/db_updated/import", {
       method: "POST",
@@ -1412,7 +1558,8 @@ async function importToDb(datasetKey, button) {
     });
     const data = await response.json();
     if (!response.ok) {
-      if (message) message.textContent = "入库失败：" + (data.error || response.status);
+      dbImportMsgState[datasetKey] = { text: "失败", kind: "error", busy: false, detail: "失败：" + (data.error || response.status) };
+      setImportRowMessage(button, dbImportMsgState[datasetKey]);
       button.disabled = false;
       button.textContent = originalText;
       return;
@@ -1423,14 +1570,16 @@ async function importToDb(datasetKey, button) {
       if (data.extra && data.extra.length) lines.push(`多余（${data.extra.length}）：` + data.extra.slice(0, 8).join("、"));
       if (data.share_dir) lines.push(`共享目录：${data.share_dir}`);
       window.alert(lines.join("\n"));
-      if (message) message.textContent = data.message || "内容不一致，请手动检查";
+      dbImportMsgState[datasetKey] = { text: "不一致", kind: "error", busy: false, detail: lines.join("\n") };
+      setImportRowMessage(button, dbImportMsgState[datasetKey]);
       button.disabled = false;
       button.textContent = originalText;
       return;
     }
     pollDbImport(datasetKey, button, originalText);
   } catch (error) {
-    if (message) message.textContent = "入库请求失败：" + error;
+    dbImportMsgState[datasetKey] = { text: "失败", kind: "error", busy: false, detail: "失败：" + error };
+    setImportRowMessage(button, dbImportMsgState[datasetKey]);
     button.disabled = false;
     button.textContent = originalText;
   }
@@ -1484,11 +1633,85 @@ async function loadConfig() {
     document.getElementById("cfg-db-user").value = db.user || "";
     document.getElementById("cfg-db-password").value = db.password || "";
     document.getElementById("cfg-result-root").value = data.result_root || "";
+    document.getElementById("cfg-qgis-dir").value = data.qgis_dir || "";
+    renderConfigEnv(data.env || {});
     if (message) message.textContent = "";
   } catch (error) {
     if (message) message.textContent = "读取配置失败：" + error;
   }
 }
+
+function renderConfigEnv(env) {
+  const root = document.getElementById("env-repo-root");
+  if (root) root.value = env.repo_root || "";
+  const box = document.getElementById("env-checks");
+  if (!box) return;
+  const mark = (ok) => ok
+    ? '<span style="color:var(--ok);">存在</span>'
+    : '<span style="color:var(--err);">缺失</span>';
+  const rows = [
+    ["入库工具解释器", env.update_python, env.update_python_exists, env.update_python_version ? `（Python ${esc(env.update_python_version)}）` : ""],
+    ["入库脚本", env.update_script, env.update_script_exists, ""],
+    ["入库日志目录", env.update_log_dir, env.update_log_dir_exists, ""],
+    ["处理工具解释器", env.process_python, env.process_python_exists, ""],
+    ["QGIS（qgis_process）", env.qgis_process_bat, env.qgis_process_bat_exists, ""],
+  ];
+  box.innerHTML = rows.map(([label, path, ok, extra]) =>
+    `<div>${esc(label)}：${mark(ok)} <span class="muted mono">${esc(path || "-")}</span>${extra}</div>`
+  ).join("");
+}
+
+async function checkEnv() {
+  const button = document.getElementById("env-check");
+  const summary = document.getElementById("env-summary");
+  const box = document.getElementById("env-checks");
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "检测中…";
+  if (summary) summary.textContent = "正在检测环境…";
+  try {
+    const response = await fetch("/api/env", { cache: "no-store" });
+    const data = await response.json();
+    const items = data.items || [];
+    if (box) {
+      box.innerHTML = items.map((item) => {
+        const mark = item.ok
+          ? '<span style="color:var(--ok);">正常</span>'
+          : '<span style="color:var(--err);">缺失/异常</span>';
+        const detail = item.detail ? ` <span class="muted">（${esc(item.detail)}）</span>` : "";
+        return `<div>${esc(item.label)}：${mark} <span class="muted mono">${esc(item.path || "-")}</span>${detail}</div>`;
+      }).join("");
+    }
+    if (summary) {
+      if (data.ok) {
+        summary.innerHTML = '<span style="color:var(--ok);">环境正常</span>';
+      } else {
+        summary.innerHTML = '<span style="color:var(--err);">缺失/异常：' + esc((data.missing || []).join("、")) + "</span>";
+      }
+    }
+  } catch (error) {
+    if (summary) summary.textContent = "检测失败：" + error;
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+}
+
+document.getElementById("env-check").addEventListener("click", checkEnv);
+
+function switchConfigPane(name) {
+  const target = name || "db";
+  document.querySelectorAll(".cfg-nav-item").forEach((button) => {
+    button.classList.toggle("active", button.dataset.cfgtab === target);
+  });
+  document.querySelectorAll(".cfg-pane").forEach((pane) => {
+    pane.hidden = pane.dataset.cfgpane !== target;
+  });
+}
+
+document.querySelectorAll(".cfg-nav-item").forEach((button) => {
+  button.addEventListener("click", () => switchConfigPane(button.dataset.cfgtab));
+});
 
 async function saveConfig() {
   const message = document.getElementById("cfg-message");
@@ -1501,6 +1724,7 @@ async function saveConfig() {
       password: document.getElementById("cfg-db-password").value,
     },
     result_root: document.getElementById("cfg-result-root").value.trim(),
+    qgis_dir: document.getElementById("cfg-qgis-dir").value.trim(),
   };
   if (message) message.textContent = "正在保存…";
   try {
@@ -1573,28 +1797,16 @@ async function refreshControl() {
     runnerCountEl.style.color = runnerCount > 1 ? "var(--err)" : "";
     if (runnerCount > 1) {
       document.getElementById("ctl-message").textContent =
-        "检测到多个 runner 进程，建议点击「保存并重启批处理」清理";
-    }
-    if (!controlState.inputDirty) {
-      document.getElementById("ctl-workers").value = data.tile_workers || 2;
+        "检测到多个 runner 进程，建议点击「重启批处理」清理";
     }
   } catch (error) {
     document.getElementById("ctl-running").textContent = "查询失败";
   }
 }
 
-document.getElementById("ctl-workers").addEventListener("input", () => {
-  controlState.inputDirty = true;
-});
-
 document.getElementById("ctl-restart").addEventListener("click", async () => {
   const message = document.getElementById("ctl-message");
-  const workers = parseInt(document.getElementById("ctl-workers").value, 10);
-  if (!Number.isFinite(workers) || workers < 1 || workers > 6) {
-    message.textContent = "tile-workers 必须是 1~6 的整数";
-    return;
-  }
-  if (!window.confirm(`确认重启批处理并使用 tile-workers=${workers}？\n已完成分块会复用，任务从断点继续。`)) {
+  if (!window.confirm("确认重启批处理？（并发固定 2）\n已完成分块会复用，任务从断点继续。")) {
     return;
   }
   message.textContent = "正在重启…";
@@ -1602,7 +1814,7 @@ document.getElementById("ctl-restart").addEventListener("click", async () => {
     const response = await fetch("/api/restart", {
       method: "POST",
       headers: actionHeaders(),
-      body: JSON.stringify({ tile_workers: workers }),
+      body: JSON.stringify({}),
     });
     const data = await response.json();
     if (!response.ok || !data.ok) {
@@ -1610,7 +1822,6 @@ document.getElementById("ctl-restart").addEventListener("click", async () => {
       return;
     }
     message.textContent = `已重启：runner PID=${data.runner_pid}，tile-workers=${data.tile_workers}`;
-    controlState.inputDirty = false;
     await refreshControl();
   } catch (error) {
     message.textContent = "重启请求失败：" + error;
@@ -1619,7 +1830,7 @@ document.getElementById("ctl-restart").addEventListener("click", async () => {
 
 document.getElementById("ctl-stop").addEventListener("click", async () => {
   const message = document.getElementById("ctl-message");
-  if (!window.confirm("确认停止当前下载任务？\n已完成分块会保留，之后可用「保存并重启批处理」恢复续跑。")) {
+  if (!window.confirm("确认停止当前下载任务？\n已完成分块会保留，之后可用「重启批处理」恢复续跑。")) {
     return;
   }
   message.textContent = "正在停止…";

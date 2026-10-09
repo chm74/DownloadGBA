@@ -28,3 +28,47 @@ Traceback (most recent call last):
   File "pyogrio/_io.pyx", line 1412, in pyogrio._io.ogr_read
   File "pyogrio/_io.pyx", line 262, in pyogrio._io.ogr_open
 pyogrio.errors.DataSourceError: Unable to open \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\吉林省\jilin_001_001_3857.shx or \\172.16.0.116\BuildingData\AutoGenerte\亚洲\中国\吉林省\jilin_001_001_3857.SHX. Set SHAPE_RESTORE_SHX config option to YES to restore or create it.
+2026-10-09 14:04:40,989 - INFO - 目标目录: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省
+2026-10-09 14:04:41,044 - INFO - 识别区域: 亚洲 / 中国 / 吉林省
+2026-10-09 14:04:41,045 - INFO - 共发现 39 个 shp 文件
+2026-10-09 14:04:41,183 - INFO - 已删除旧数据 156 条
+2026-10-09 14:04:41,183 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_001_3857.shp
+2026-10-09 14:04:45,003 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_002_3857.shp
+2026-10-09 14:04:47,210 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_003_3857.shp
+2026-10-09 14:04:50,166 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_004_3857.shp
+2026-10-09 14:04:52,879 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_005_3857.shp
+2026-10-09 14:04:56,862 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_006_3857.shp
+2026-10-09 14:05:00,275 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_007_3857.shp
+2026-10-09 14:05:05,014 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_008_3857.shp
+2026-10-09 14:05:08,014 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_009_3857.shp
+2026-10-09 14:05:09,297 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_010_3857.shp
+2026-10-09 14:05:10,584 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_011_3857.shp
+2026-10-09 14:05:14,923 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_012_3857.shp
+2026-10-09 14:05:19,774 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_013_3857.shp
+2026-10-09 14:05:21,430 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_014_3857.shp
+2026-10-09 14:05:23,280 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_015_3857.shp
+2026-10-09 14:05:27,648 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_016_3857.shp
+2026-10-09 14:05:31,313 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_017_3857.shp
+2026-10-09 14:05:32,838 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_018_3857.shp
+2026-10-09 14:05:35,048 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_019_3857.shp
+2026-10-09 14:05:40,111 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_020_3857.shp
+2026-10-09 14:05:44,268 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_021_3857.shp
+2026-10-09 14:05:46,808 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_022_3857.shp
+2026-10-09 14:05:49,238 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_023_3857.shp
+2026-10-09 14:05:50,860 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_024_3857.shp
+2026-10-09 14:05:54,900 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_025_3857.shp
+2026-10-09 14:05:57,188 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_026_3857.shp
+2026-10-09 14:05:58,793 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_027_3857.shp
+2026-10-09 14:06:00,582 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_028_3857.shp
+2026-10-09 14:06:03,338 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_029_3857.shp
+2026-10-09 14:06:06,347 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_030_3857.shp
+2026-10-09 14:06:07,867 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_031_3857.shp
+2026-10-09 14:06:09,459 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_032_3857.shp
+2026-10-09 14:06:11,252 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_033_3857.shp
+2026-10-09 14:06:13,277 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_034_3857.shp
+2026-10-09 14:06:15,800 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_035_3857.shp
+2026-10-09 14:06:17,406 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_036_3857.shp
+2026-10-09 14:06:21,878 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_037_3857.shp
+2026-10-09 14:06:25,221 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_038_3857.shp
+2026-10-09 14:06:26,723 - INFO - 处理文件: \\192.168.2.121\BuildingData\AutoGenerate\亚洲\中国\吉林省\jilin_001_039_3857.shp
+2026-10-09 14:06:29,185 - INFO - 更新完成: region=吉林省, 删除=156, 新增=39, 跳过=0

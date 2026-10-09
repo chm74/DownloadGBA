@@ -64,7 +64,7 @@ PROGRESS_WRITE_INTERVAL = 5.0
 RESOURCE_WAIT_SECONDS = 60.0
 
 MERGE_ENGINE_OGR2OGR = "ogr2ogr"
-DEFAULT_MERGE_MAX_GB = 1.8
+DEFAULT_MERGE_MAX_GB = 1.9
 OGR2OGR_CANDIDATES = (
     r"D:\QGIS\bin\ogr2ogr.exe",
     r"C:\Program Files\QGIS 3.34.8\bin\ogr2ogr.exe",
@@ -968,10 +968,10 @@ def resolve_ogr2ogr(explicit: str | None = None) -> str:
     raise ValueError("未找到 ogr2ogr，请用 --ogr2ogr 指定路径（QGIS 自带：<QGIS>\\bin\\ogr2ogr.exe）")
 
 
-def _shp_component_bytes(shp: Path) -> int:
+def _component_bytes(parts: list[Path], suffix: str) -> int:
     total = 0
-    for suffix in (".shp", ".dbf"):
-        component = Path(shp).with_suffix(suffix)
+    for part in parts:
+        component = Path(part).with_suffix(suffix)
         if component.is_file():
             total += component.stat().st_size
     return total
@@ -1037,12 +1037,28 @@ def merge_task_shp_parts(
     if len(parts) < 2:
         raise ValueError("该任务只有一个 SHP，无需合并")
 
-    total_bytes = sum(_shp_component_bytes(part) for part in parts)
-    if total_bytes > max_output_gb * (1 << 30):
-        raise ValueError(
-            f"分卷合计 {total_bytes / (1 << 30):.2f}GB 超过 {max_output_gb:g}GB；"
-            "Shapefile 单文件上限约 2GB，建议改用 GPKG"
-        )
+    # 按组件分别预估合并后的单文件大小（Shapefile 的 2GB 上限是对单个文件而言）。
+    estimated = {"shp": _component_bytes(parts, ".shp"), "dbf": _component_bytes(parts, ".dbf")}
+    limit_bytes = max_output_gb * (1 << 30)
+
+    def add_event(event: str, detail: str) -> None:
+        try:
+            event_store = ProcessStore(process_db)
+            try:
+                event_store.add_event(dataset_key, event, detail[:500])
+            finally:
+                event_store.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+    for suffix, size in estimated.items():
+        if size > limit_bytes:
+            message = (
+                f"合并后 .{suffix} 预计 {size / (1 << 30):.2f}GB 超过 {max_output_gb:g}GB"
+                "（Shapefile 单文件上限约 2GB），无法合并为一个 SHP"
+            )
+            add_event("PROCESS_MERGE_REJECT", message)
+            raise ValueError(message)
 
     ogr2ogr = resolve_ogr2ogr(ogr2ogr_exe)
     final_shp = source_dir / f"{prefix}_buildings_height_gba.shp"
@@ -1084,8 +1100,10 @@ def merge_task_shp_parts(
                 part.with_suffix(suffix).unlink(missing_ok=True)
             deleted += 1
         log(f"[MERGE] 合并完成: {final_shp.name}，已删除 {deleted} 个原分卷")
-    except Exception:
+        add_event("PROCESS_MERGE_DONE", f"merged={final_shp.name}; parts={len(parts)}")
+    except Exception as exc:  # noqa: BLE001
         remove_components(tmp_base)
+        add_event("PROCESS_MERGE_FAIL", str(exc))
         raise
 
     result = {
