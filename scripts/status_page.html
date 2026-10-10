@@ -88,6 +88,7 @@
   th { color:var(--muted); font-weight:500; font-size:12px; }
   tr:last-child td { border-bottom:none; }
   #queue-table thead th { position:sticky; top:var(--queue-head-top, 104px); z-index:9; background:var(--card); box-shadow:inset 0 -1px 0 var(--line); }
+  #p-recent-table thead th { position:sticky; top:var(--recent-head-top, 104px); z-index:9; background:var(--card); box-shadow:inset 0 -1px 0 var(--line); }
   td.mono { font-family:Consolas, monospace; font-size:12px; word-break:break-all; }
   .cell-input { width:100%; min-width:110px; padding:3px 6px; font:inherit; font-size:12px; }
   .cell-check { width:16px; height:16px; cursor:pointer; }
@@ -683,6 +684,7 @@ function switchTab(name) {
   Object.entries(TAB_PANELS).forEach(([key, panelId]) => {
     document.getElementById(panelId).hidden = key !== target;
   });
+  if (typeof updateStickyHeadOffsets === "function") updateStickyHeadOffsets();
   if (target === "config") loadConfig();
   try {
     localStorage.setItem("gba_tab", target);
@@ -2070,13 +2072,18 @@ checkStartupConfig();
 refresh();
 setInterval(refresh, REFRESH_MS);
 
-function updateQueueHeadOffset() {
-  const bar = document.querySelector(".queue-toolbar");
-  if (!bar || bar.offsetParent === null) return;
-  document.documentElement.style.setProperty("--queue-head-top", (40 + bar.offsetHeight + 1) + "px");
+function updateStickyHeadOffsets() {
+  const queueBar = document.querySelector(".queue-toolbar");
+  if (queueBar && queueBar.offsetParent !== null) {
+    document.documentElement.style.setProperty("--queue-head-top", (40 + queueBar.offsetHeight + 1) + "px");
+  }
+  const processBar = document.querySelector(".sticky-toolbar");
+  if (processBar && processBar.offsetParent !== null) {
+    document.documentElement.style.setProperty("--recent-head-top", (40 + processBar.offsetHeight + 1) + "px");
+  }
 }
-window.addEventListener("resize", updateQueueHeadOffset);
-updateQueueHeadOffset();
+window.addEventListener("resize", updateStickyHeadOffsets);
+updateStickyHeadOffsets();
 </script>
 </body>
 </html>
