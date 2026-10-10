@@ -1,7 +1,0 @@
-& "F:\建筑数据下载\DownloadGBA\Tools\Twopyshp2pgsql\.venv\Scripts\python.exe" `
-  "F:\建筑数据下载\DownloadGBA\Tools\Twopyshp2pgsql\main3_region.py" `
-  --continent "亚洲" `
-  --country "中国" `
-  --region "台湾" `
-  --root "\\172.16.0.116\BuildingData\AutoGenerte" `
-  --log-dir "F:\建筑数据下载\DownloadGBA\data\logs\update"
