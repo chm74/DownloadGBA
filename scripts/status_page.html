@@ -141,7 +141,7 @@
   <section>
     <h2>批处理控制</h2>
     <div class="muted" style="margin-bottom:10px;">
-      重启会停止当前批处理并重新启动（并发固定 2）；已完成分块全部复用，任务从断点继续（约几秒中断）。
+      重启会停止当前批处理并重新启动；已完成分块全部复用，任务从断点继续（约几秒中断）。
     </div>
     <div class="stats">
       <span>批处理：<b id="ctl-running">-</b></span>
@@ -1804,7 +1804,7 @@ async function refreshControl() {
 
 document.getElementById("ctl-restart").addEventListener("click", async () => {
   const message = document.getElementById("ctl-message");
-  if (!window.confirm("确认重启批处理？（并发固定 2）\n已完成分块会复用，任务从断点继续。")) {
+  if (!window.confirm("确认重启批处理？\n已完成分块会复用，任务从断点继续。")) {
     return;
   }
   message.textContent = "正在重启…";
