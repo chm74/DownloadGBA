@@ -4,6 +4,12 @@
 
 这个项目用于从 `GlobalBuildingAtlas LoD1 WFS` 服务导出带高度字段的建筑数据，输出为 GIS 可直接使用的 `SHP` 或 `GPKG` 文件。
 
+## 获取代码
+
+- 仓库地址：`https://github.com/chm74/DownloadGBA.git`
+- 首次克隆：`git clone https://github.com/chm74/DownloadGBA.git`
+- 更新：`git -c http.proxy=http://127.0.0.1:7890 pull --ff-only origin main`（无代理时删掉 `-c http.proxy=...`）
+
 当前项目保留三类下载脚本，并新增一套任务清单驱动的批量下载链路：
 
 - `scripts/download_gba_lod1_wfs.py`
