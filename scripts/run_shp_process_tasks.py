@@ -1533,6 +1533,19 @@ def select_tasks(store: ProcessStore, only_tokens: list[str], retry_failed: bool
     return tasks
 
 
+def split_runnable_tasks(rows: list[dict]) -> tuple[list[dict], list[tuple[dict, int]]]:
+    """把 SHP 分卷数 >=2 的任务分离出来（这些任务需先合并分卷才能处理）。"""
+    runnable: list[dict] = []
+    needs_merge: list[tuple[dict, int]] = []
+    for row in rows:
+        shp_count = len(json.loads(row["shp_files"] or "[]"))
+        if shp_count >= 2:
+            needs_merge.append((row, shp_count))
+        else:
+            runnable.append(row)
+    return runnable, needs_merge
+
+
 def reset_running_tasks(store: ProcessStore) -> int:
     reset = 0
     for row in store.all_tasks():
@@ -1691,9 +1704,24 @@ def main() -> int:
             reset_count = reset_running_tasks(store)
             if reset_count:
                 print(f"[RESET] 已把 {reset_count} 个中断的 RUNNING 任务重置为 PENDING", flush=True)
-            tasks = select_tasks(store, only_tokens, args.retry_failed, args.force, args.limit)
+            tasks = select_tasks(store, only_tokens, args.retry_failed, args.force, 0)
+            runnable, skipped_needs_merge = split_runnable_tasks(tasks)
+            for row, shp_count in skipped_needs_merge:
+                print(
+                    f"[SKIP] {row['dataset_key']} 分卷={shp_count}，需先合并分卷后再处理",
+                    flush=True,
+                )
+            if args.limit > 0:
+                runnable = runnable[: args.limit]
+            tasks = runnable
             if not tasks:
-                print("[PLAN] 没有可执行的处理任务", flush=True)
+                if skipped_needs_merge:
+                    print(
+                        f"[PLAN] 没有可执行的处理任务：存在 {len(skipped_needs_merge)} 个需先合并分卷的任务",
+                        flush=True,
+                    )
+                else:
+                    print("[PLAN] 没有可执行的处理任务", flush=True)
                 print_summary(store)
                 return 0
             for index, row in enumerate(tasks, start=1):

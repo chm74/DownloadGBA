@@ -2616,6 +2616,23 @@ class ControlTests(unittest.TestCase):
             self.assertEqual(row["import_detail"]["deleted"], 4)
             self.assertEqual(row["import_detail"]["inserted"], 2)
 
+    def test_split_runnable_tasks_skips_multi_part(self):
+        rows = [
+            {"dataset_key": "A|B|Single", "shp_files": json.dumps(["data/a.shp"])},
+            {"dataset_key": "A|B|Single2", "shp_files": json.dumps(["data/a.shp"])},
+            {"dataset_key": "A|B|Multi", "shp_files": json.dumps(["data/p1.shp", "data/p2.shp"])},
+            {"dataset_key": "A|B|Empty", "shp_files": "[]"},
+        ]
+        runnable, needs_merge = run_shp_process_tasks.split_runnable_tasks(rows)
+        self.assertEqual(
+            [row["dataset_key"] for row in runnable],
+            ["A|B|Single", "A|B|Single2", "A|B|Empty"],
+        )
+        self.assertEqual(len(needs_merge), 1)
+        row, shp_count = needs_merge[0]
+        self.assertEqual(row["dataset_key"], "A|B|Multi")
+        self.assertEqual(shp_count, 2)
+
     def test_check_environment(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)

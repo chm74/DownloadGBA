@@ -218,7 +218,7 @@ python scripts/run_world_building_tasks.py --summary
 python scripts/run_world_building_tasks.py --running
 ```
 
-`--running` 会打印当前正在执行的任务、尝试次数、开始时间、任务目录与分块进度（已完成分块 / 总格网）。实时日志可用 `Get-Content data\world_tasks_run.log -Tail 20 -Wait` 查看。
+`--running` 会打印当前正在执行的任务、尝试次数、开始时间、任务目录与分块进度（已完成分块 / 总格网）。实时日志可用 `Get-Content data\logs\download\run.log -Tail 20 -Wait` 查看。
 
 预览执行计划（不解析范围、不下载、不改状态）：
 

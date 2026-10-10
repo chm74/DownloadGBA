@@ -23,8 +23,9 @@ DEFAULT_PROCESS_DB = "data/shp_process_state.db"
 DEFAULT_DB_UPDATE_FILE = "data/db_update_status.json"
 DEFAULT_PAGE = "scripts/status_page.html"
 DEFAULT_BOUNDARIES_DIR = "data/boundaries"
-DEFAULT_RUN_LOG = "data/world_tasks_run.log"
-DEFAULT_RUN_ERR_LOG = "data/world_tasks_run.err.log"
+DEFAULT_LOG_ROOT = "data/logs"
+DEFAULT_RUN_LOG = "data/logs/download/run.log"
+DEFAULT_RUN_ERR_LOG = "data/logs/download/run.err.log"
 DEFAULT_CONFIG_FILE = "data/config.json"
 DEFAULT_UPDATE_DB = {
     "host": "172.16.1.145",
@@ -37,7 +38,7 @@ DEFAULT_RESULT_ROOT = r"\\192.168.2.121\BuildingData\AutoGenerate"
 DEFAULT_QGIS_DIR = r"D:\QGIS"
 DEFAULT_UPDATE_PYTHON = "updateTools/twopyshp2pgsql/.venv/Scripts/python.exe"
 DEFAULT_UPDATE_SCRIPT = "updateTools/twopyshp2pgsql/main3_region.py"
-DEFAULT_UPDATE_LOG_DIR = "updateTools/twopyshp2pgsql/logs"
+DEFAULT_UPDATE_LOG_DIR = "data/logs/update"
 DEFAULT_DB_IMPORT_STATUS = "data/db_import_status.json"
 RUNNER_MARKER = "run_world_building_tasks.py"
 WORKER_MARKER = "download_gba_lod1_wfs"
@@ -45,8 +46,8 @@ PROCESS_RUNNER_MARKER = "run_shp_process_tasks.py"
 PROCESS_WORKER_MARKER = "pipeline.py"
 PROCESS_WORKER_DIR = "Oneshp_pipline_qgis"
 DEFAULT_PROCESS_PYTHON = "Tools/Oneshp_pipline_qgis/.venv/Scripts/python.exe"
-DEFAULT_PROCESS_LOG = "data/process_run.log"
-DEFAULT_PROCESS_ERR_LOG = "data/process_run.err.log"
+DEFAULT_PROCESS_LOG = "data/logs/process/run.log"
+DEFAULT_PROCESS_ERR_LOG = "data/logs/process/run.err.log"
 DEFAULT_TILE_WORKERS = 2
 CONTROL_LOCK = threading.Lock()
 
@@ -2585,6 +2586,11 @@ class StatusHandler(BaseHTTPRequestHandler):
         return
 
 
+def ensure_log_dirs(repo_root: Path) -> None:
+    for sub in ("download", "download/province", "process", "update", "server", "legacy"):
+        (Path(repo_root) / DEFAULT_LOG_ROOT / sub).mkdir(parents=True, exist_ok=True)
+
+
 def create_server(args: argparse.Namespace, repo_root: Path) -> ThreadingHTTPServer:
     state_db = Path(args.state_db)
     if not state_db.is_absolute():
@@ -2627,6 +2633,7 @@ def create_server(args: argparse.Namespace, repo_root: Path) -> ThreadingHTTPSer
 def main() -> int:
     args = parse_args()
     repo_root = Path(args.repo_root).resolve() if args.repo_root else Path(__file__).resolve().parents[1]
+    ensure_log_dirs(repo_root)
     server = create_server(args, repo_root)
     print(f"状态看板已启动: http://127.0.0.1:{args.port}/  (监听 {args.host}:{args.port})")
     print(f"状态库: {server.config['state_db']}")

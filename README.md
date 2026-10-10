@@ -452,7 +452,7 @@ python -u scripts/status_server.py --port 8765
   输入副本 `<prefix>.shp` 或 `<prefix>_partNN.shp`，输出目录 `<prefix>_pipeline`，最终 3857 分片 `<prefix>_xxx_xxx_3857.shp`
 - `--run` 执行：资源护栏（可用内存/磁盘不足时不启动）、隔离输入目录、调用处理工具、每 5 秒写阶段与分片进度、产物校验（CRS=3857 + 分片要素数）、写 `_PROCESS_DONE.json`、回写下载库 `processed_3857_dir`
 - 手动排序：待处理队列支持 `queue_order` 顺序，可用 `--move-up / --move-down / --move-top` 或 `--order` 调整；看板「数据处理」页签的「排序」列提供 ↑/↓/⤒ 按钮，改动在下次 `--run` 生效
-- 页面控制：看板「数据处理」页签支持「开始执行 / 停止处理」；开始可填数量（0=全部）与是否等待资源，停止会把 RUNNING 任务重置为 PENDING；执行器日志 `data/process_run.log`
+- 页面控制：看板「数据处理」页签支持「开始执行 / 停止处理」；开始可填数量（0=全部）与是否等待资源，停止会把 RUNNING 任务重置为 PENDING；执行器日志 `data/logs/process/run.log`
 - 队列备注：待处理队列每行可编辑备注（≤200 字符，失焦/回车自动保存，存 `process_tasks.note`），重跑与 sync 不会清空
 - 断点续跑：中断的 RUNNING 自动重置为 PENDING；`--retry-failed` 重试失败项；`--force` 强制重跑
 - `--summary / --running`：CLI 查看队列统计与当前处理任务（与看板「数据处理」页签同源）

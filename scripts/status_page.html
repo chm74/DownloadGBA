@@ -43,6 +43,7 @@
   .merge-msg.running { color:var(--muted); }
   .merge-msg.ok { color:var(--ok); }
   .merge-msg.error { color:var(--err); }
+  .merge-hint { color:var(--warn); font-size:12px; margin-right:6px; }
   .msg-toast-wrap { position:fixed; top:20px; right:20px; z-index:9999; display:flex; flex-direction:column; align-items:flex-end; gap:10px; pointer-events:none; }
   .msg-toast { min-width:220px; max-width:520px; padding:10px 16px; border-radius:6px; background:#fff; color:#1f2328; font-size:14px; line-height:1.5; box-shadow:0 2px 12px rgba(0,0,0,.15); border:1px solid #ebeef5; opacity:0; transform:translateX(16px); transition:opacity .25s ease, transform .25s ease; }
   .msg-toast.show { opacity:1; transform:translateX(0); }
@@ -295,7 +296,7 @@
             <li>处理工具：<code>Tools/Oneshp_pipline_qgis</code>，产物为 <code>out_data/&lt;数据集&gt;_pipeline/final/*_3857.shp</code></li>
             <li>队列命令：<code>python scripts/run_shp_process_tasks.py --sync / --dry-run / --run / --summary / --running</code></li>
             <li>下载完成的任务会自动登记到待处理队列（<code>run_world_building_tasks.py</code> 默认开启，<code>--no-process-sync</code> 关闭）；「同步队列」按钮等价于手动执行一次 <code>--sync</code>。</li>
-            <li>页面「开始执行/停止处理」控制的执行器日志：<code>data/process_run.log</code>；处理库为 <code>data/shp_process_state.db</code></li>
+            <li>页面「开始执行/停止处理」控制的执行器日志：<code>data/logs/process/run.log</code>；处理库为 <code>data/shp_process_state.db</code></li>
           </ul>
         </section>
       </main>
@@ -418,7 +419,7 @@
     </div>
   </div>
 
-  <footer>只读看板 ｜ 数据源：SQLite 状态库 ｜ API：<a href="/api/status">/api/status</a></footer>
+  <footer>只读看板 ｜ 数据源：SQLite 状态库</footer>
 </div>
 
 <script>
@@ -889,6 +890,10 @@ function renderProcessingQueue(processing) {
         const mergeBusy = !!(merge && merge.busy);
         const mergeText = merge ? merge.text : "";
         const mergeKind = merge ? merge.kind : "";
+        const shpCount = Number(item.shp_count ?? 0);
+        const needsMerge = shpCount >= 2;
+        const mergeHint = needsMerge ? `<span class="merge-hint">⚠ 需先合并（${shpCount} 个分卷）后方可处理</span>` : "";
+        const mergeTitle = needsMerge ? "点击自动合并为单个 SHP" : "仅 1 个 SHP，无需合并";
         return `
         <tr>
           <td class="order-cell">
@@ -906,7 +911,7 @@ function renderProcessingQueue(processing) {
           <td><input class="note-input" type="text" maxlength="200" placeholder="添加备注"
                      data-note-key="${key}" data-saved="${esc(note)}" value="${esc(note)}"></td>
           <td>
-            <button type="button" class="mini" title="可以通过点击该按钮，自动合并为一个SHP" data-auto-merge="${key}" data-source-dir="${esc(item.source_dir || "")}" data-shp-count="${esc(item.shp_count ?? 0)}" ${((item.shp_count ?? 0) > 1 && !mergeBusy) ? "" : "disabled"}>自动合并</button>
+            ${mergeHint}<button type="button" class="mini" title="${mergeTitle}" data-auto-merge="${key}" data-source-dir="${esc(item.source_dir || "")}" data-shp-count="${esc(item.shp_count ?? 0)}" ${(needsMerge && !mergeBusy) ? "" : "disabled"}>自动合并</button>
             <span class="merge-msg ${mergeKind}" data-merge-msg="${key}" title="${esc(mergeText)}">${esc(mergeText)}</span>
           </td>
         </tr>`;

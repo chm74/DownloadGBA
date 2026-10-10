@@ -3,6 +3,8 @@
 /data/*/
 !/data/boundaries/
 !/data/boundaries/**
+!/data/logs/
+!/data/logs/**
 /data/config.json
 
 /Tools/Oneshp_pipline_qgis/out_data/

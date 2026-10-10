@@ -17,7 +17,9 @@ echo Open http://127.0.0.1:8765/ in your browser.
 echo Press Ctrl+C to stop the server.
 echo.
 
-python -u scripts\status_server.py --port 8765
+if not exist "data\logs\server" mkdir "data\logs\server"
+
+python -u scripts\status_server.py --port 8765 > "data\logs\server\server.log" 2> "data\logs\server\server.err.log"
 
 echo.
 echo The status server has stopped.

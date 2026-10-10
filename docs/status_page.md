@@ -85,7 +85,7 @@ New-NetFirewallRule -DisplayName "GBA Status" -Direction Inbound -LocalPort 8765
 
 数据来源为独立处理库 `data/shp_process_state.db`，由 `scripts/run_shp_process_tasks.py` 维护：
 
-- 处理控制：显示运行状态 / 执行器 PID / 当前任务；可填「数量」（0=全部待处理）并勾选「资源不足时等待」，点「开始执行」在后台启动处理队列；点「停止处理」会连同 pipeline 子进程一起停止，并把 RUNNING 任务重置为「待处理」（可再次开始续跑）；点「同步队列」手动扫描下载完成的数据并加入待处理队列（等价于 `--sync`）。执行器日志 `data/process_run.log`
+- 处理控制：显示运行状态 / 执行器 PID / 当前任务；可填「数量」（0=全部待处理）并勾选「资源不足时等待」，点「开始执行」在后台启动处理队列；点「停止处理」会连同 pipeline 子进程一起停止，并把 RUNNING 任务重置为「待处理」（可再次开始续跑）；点「同步队列」手动扫描下载完成的数据并加入待处理队列（等价于 `--sync`）。执行器日志 `data/logs/process/run.log`
   - 注意：启动后为独立后台进程，重启看板不影响它；与下载解耦，处理前建议先在「建筑数据下载」页签停止下载
   - 下载完成的任务默认会自动登记进处理队列（由 `run_world_building_tasks.py` 在任务成功后写入，`--no-process-sync` 可关闭）；看板启动前的历史完成数据可点「同步队列」补登记
   - 对已处理完成（`OK`）的数据集，同步会比较下载完成时间及源 SHP 文件指纹；发现源数据晚于处理完成时间或文件指纹变化时，自动恢复为 `PENDING`。队列顺序和备注保留，旧尝试次数、阶段、进度、日志、错误和完成时间清空
@@ -139,7 +139,7 @@ python scripts/run_shp_process_tasks.py --move-top "宁夏"          # 置顶
 
 1. 先停 runner 并等待其退出（避免 runner 因 worker 退出触发自动重试再起新 worker）
 2. 再停所有 worker（会重新探测，覆盖刚被 runner 拉起的 worker）
-3. 启动批处理（并发固定 `tile-workers=2`），日志覆盖写入 `data/world_tasks_run.log`
+3. 启动批处理（并发固定 `tile-workers=2`），日志覆盖写入 `data/logs/download/run.log`
 
 停止逻辑（服务端）：与重启的停机步骤一致（先 runner 后 worker），不重新启动；中断的任务在下次启动批处理时自动从断点续跑（分块复用）。
 
