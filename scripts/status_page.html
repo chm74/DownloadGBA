@@ -406,7 +406,6 @@
                 <input id="env-repo-root" type="text" readonly>
               </div>
             </div>
-            <div id="env-summary" class="muted" style="margin-top:8px;"></div>
             <div id="env-checks" style="margin-top:10px;font-size:13px;line-height:1.9;"></div>
           </div>
 
@@ -1665,12 +1664,11 @@ function renderConfigEnv(env) {
 
 async function checkEnv() {
   const button = document.getElementById("env-check");
-  const summary = document.getElementById("env-summary");
   const box = document.getElementById("env-checks");
   const originalText = button.textContent;
   button.disabled = true;
   button.textContent = "检测中…";
-  if (summary) summary.textContent = "正在检测环境…";
+  showMessage("正在检测环境…", "info", 2000);
   try {
     const response = await fetch("/api/env", { cache: "no-store" });
     const data = await response.json();
@@ -1684,15 +1682,13 @@ async function checkEnv() {
         return `<div>${esc(item.label)}：${mark} <span class="muted mono">${esc(item.path || "-")}</span>${detail}</div>`;
       }).join("");
     }
-    if (summary) {
-      if (data.ok) {
-        summary.innerHTML = '<span style="color:var(--ok);">环境正常</span>';
-      } else {
-        summary.innerHTML = '<span style="color:var(--err);">缺失/异常：' + esc((data.missing || []).join("、")) + "</span>";
-      }
+    if (data.ok) {
+      showMessage("环境正常", "success");
+    } else {
+      showMessage("检测到缺失/异常：" + (data.missing || []).join("、"), "error", 5000);
     }
   } catch (error) {
-    if (summary) summary.textContent = "检测失败：" + error;
+    showMessage("检测失败：" + error, "error", 5000);
   } finally {
     button.disabled = false;
     button.textContent = originalText;
