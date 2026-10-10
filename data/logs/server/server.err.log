@@ -1,0 +1,42 @@
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 51751)
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 51750)
+Traceback (most recent call last):
+Traceback (most recent call last):
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\socketserver.py", line 692, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\socketserver.py", line 692, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\socketserver.py", line 761, in __init__
+    self.handle()
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\socketserver.py", line 761, in __init__
+    self.handle()
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\http\server.py", line 424, in handle_one_request
+    method()
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\http\server.py", line 424, in handle_one_request
+    method()
+  File "F:\建筑数据下载\DownloadGBA\scripts\status_server.py", line 1980, in do_GET
+    self._send(200, body, "application/json; charset=utf-8")
+  File "F:\建筑数据下载\DownloadGBA\scripts\status_server.py", line 1984, in do_GET
+    self._send(200, body, "application/json; charset=utf-8")
+  File "F:\建筑数据下载\DownloadGBA\scripts\status_server.py", line 1937, in _send
+    self.wfile.write(body)
+  File "F:\建筑数据下载\DownloadGBA\scripts\status_server.py", line 1937, in _send
+    self.wfile.write(body)
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\socketserver.py", line 840, in write
+    self._sock.sendall(b)
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\socketserver.py", line 840, in write
+    self._sock.sendall(b)
+ConnectionAbortedError: [WinError 10053] 你的主机中的软件中止了一个已建立的连接。
+ConnectionAbortedError: [WinError 10053] 你的主机中的软件中止了一个已建立的连接。
+--------------------------------------------------------------------------------
+

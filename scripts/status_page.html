@@ -22,6 +22,11 @@
   .badge.unknown { background:var(--muted); }
   .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin:0 0 16px; position:sticky; top:0; z-index:20; background:var(--bg); }
   .queue-toolbar, .sticky-toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; padding-bottom:8px; position:sticky; top:40px; z-index:15; background:var(--card); border-bottom:1px solid var(--line); }
+  .queue-toolbar { gap:6px 12px; }
+  .queue-toolbar .qt-group { display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; }
+  .queue-toolbar .qt-left { flex:1 1 auto; min-width:0; }
+  .queue-toolbar .qt-right { margin-left:auto; }
+  .queue-toolbar .qt-hint { flex-basis:100%; font-size:12px; color:var(--muted); }
   .tab { background:none; border:none; border-bottom:2px solid transparent; padding:8px 14px; margin-bottom:-1px; cursor:pointer; color:var(--muted); font:inherit; font-size:14px; }
   .tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
   .subtabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin:0 0 12px; }
@@ -82,6 +87,7 @@
   th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
   th { color:var(--muted); font-weight:500; font-size:12px; }
   tr:last-child td { border-bottom:none; }
+  #queue-table thead th { position:sticky; top:var(--queue-head-top, 104px); z-index:9; background:var(--card); box-shadow:inset 0 -1px 0 var(--line); }
   td.mono { font-family:Consolas, monospace; font-size:12px; word-break:break-all; }
   .cell-input { width:100%; min-width:110px; padding:3px 6px; font:inherit; font-size:12px; }
   .cell-check { width:16px; height:16px; cursor:pointer; }
@@ -165,29 +171,31 @@
   <section>
     <h2>队列（全部待执行任务）</h2>
     <div class="queue-toolbar">
-      <span id="queue-summary" class="muted">-</span>
-      <label class="muted">搜索城市
-        <input id="queue-search" type="text" placeholder="中文或英文，如 安哥拉 / Angola"
-               style="margin-left:4px;padding:4px 6px;width:200px;">
-      </label>
-      <button id="queue-search-button" style="padding:4px 10px;cursor:pointer;">搜索</button>
-      <button id="queue-search-clear" style="padding:4px 10px;cursor:pointer;">清除</button>
-      <label class="muted">每页
-        <select id="queue-page-size" style="margin-left:4px;padding:3px 6px;">
-          <option value="15">15</option>
-          <option value="30">30</option>
-          <option value="50">50</option>
-          <option value="100">100</option>
-          <option value="200">200</option>
-        </select>
-      </label>
-      <button id="queue-first" style="padding:4px 10px;cursor:pointer;">首页</button>
-      <button id="queue-prev" style="padding:4px 10px;cursor:pointer;">上一页</button>
-      <span id="queue-page-label" class="muted">-</span>
-      <button id="queue-next" style="padding:4px 10px;cursor:pointer;">下一页</button>
-      <button id="queue-last" style="padding:4px 10px;cursor:pointer;">末页</button>
-      <span class="muted">｜点「排序」列按钮调整执行顺序（下次启动批处理生效）</span>
-      <span id="queue-reorder-message" class="muted"></span>
+      <div class="qt-group qt-left">
+        <label class="muted">搜索城市
+          <input id="queue-search" type="text" placeholder="中文或英文，如 安哥拉 / Angola"
+                 style="margin-left:4px;padding:4px 6px;width:200px;">
+        </label>
+        <button id="queue-search-button" style="padding:4px 10px;cursor:pointer;">搜索</button>
+        <button id="queue-search-clear" style="padding:4px 10px;cursor:pointer;">清除</button>
+      </div>
+      <div class="qt-group qt-right">
+        <label class="muted">每页
+          <select id="queue-page-size" style="margin-left:4px;padding:3px 6px;">
+            <option value="15">15</option>
+            <option value="30">30</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="200">200</option>
+          </select>
+        </label>
+        <button id="queue-first" style="padding:4px 10px;cursor:pointer;">首页</button>
+        <button id="queue-prev" style="padding:4px 10px;cursor:pointer;">上一页</button>
+        <span id="queue-page-label" class="muted">-</span>
+        <button id="queue-next" style="padding:4px 10px;cursor:pointer;">下一页</button>
+        <button id="queue-last" style="padding:4px 10px;cursor:pointer;">末页</button>
+      </div>
+      <div class="qt-hint">点「排序」列按钮调整执行顺序（下次启动批处理生效）｜<span id="queue-reorder-message"></span></div>
     </div>
     <div id="queue-table"><div class="empty">暂无待执行任务</div></div>
   </section>
@@ -195,7 +203,7 @@
   <section>
     <h2>最近完成</h2>
     <div class="muted" style="margin-bottom:10px;">
-      点“置顶”可删除旧下载数据并将任务重置到队首重下（下次启动批处理生效）｜<span id="recent-message"></span>
+      点「重新下载」可删除旧下载数据并将任务重置到队首重下（下次启动批处理生效）｜<span id="recent-message"></span>
     </div>
     <div id="recent-table"><div class="empty">暂无已完成任务</div></div>
   </section>
@@ -203,7 +211,7 @@
   <section id="failed-section" style="display:none">
     <h2>失败任务</h2>
     <div class="muted" style="margin-bottom:10px;">
-      点「置顶」把失败任务重新排入待执行队首（下次启动批处理生效）｜<span id="failed-message"></span>
+      点「重新入队」把失败任务重新排入待执行队首（下次启动批处理生效）｜<span id="failed-message"></span>
     </div>
     <div id="failed-table"></div>
   </section>
@@ -284,7 +292,7 @@
         <section id="p-failed-section" style="display:none">
           <h2>失败 / 阻塞</h2>
           <div class="muted" style="margin-bottom:10px;">
-            点「置顶」把失败任务重新排入待处理队首（下次执行处理生效）｜<span id="p-failed-message"></span>
+            点「重新入队」把失败任务重新排入待处理队首（下次执行处理生效）｜<span id="p-failed-message"></span>
           </div>
           <div id="p-failed-table"></div>
         </section>
@@ -556,11 +564,6 @@ document.getElementById("running-list").addEventListener("click", async event =>
 
 function renderQueue(items, total, page, pageSize, totalAll) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  let summary = `共 ${total} 条待执行`;
-  if (queueState.search) {
-    summary += `（搜索「${queueState.search}」${totalAll ? `，未过滤共 ${totalAll} 条` : ""}）`;
-  }
-  document.getElementById("queue-summary").textContent = summary;
   document.getElementById("queue-page-label").textContent = `第 ${page}/${totalPages} 页`;
   document.getElementById("queue-first").disabled = page <= 1;
   document.getElementById("queue-prev").disabled = page <= 1;
@@ -779,7 +782,7 @@ async function requeueDownload(taskId, position, button, messageId = "failed-mes
 async function requeueCompletedDownload(taskId, button) {
   const dir = button.dataset.downloadDir || "未记录";
   const confirmed = window.confirm(
-    `确认将“${taskId}”重新加入待执行队首？\n` +
+    `确认将“${taskId}”重新下载？\n` +
     `将永久删除下载目录：${dir}\n` +
     `（含分片、完成标记、合并产物），并重置对应的数据处理任务。\n` +
     `删除后无法恢复。`
@@ -787,7 +790,7 @@ async function requeueCompletedDownload(taskId, button) {
   if (!confirmed) return;
   const message = document.getElementById("recent-message");
   button.disabled = true;
-  message.textContent = "正在删除下载数据并置顶…";
+  message.textContent = "正在删除下载数据并退回下载队列…";
   try {
     const response = await fetch("/api/queue/requeue-completed", {
       method: "POST",
@@ -800,14 +803,14 @@ async function requeueCompletedDownload(taskId, button) {
     });
     const data = await response.json();
     if (!response.ok || !data.ok) {
-      message.textContent = (data.queue ? "" : "置顶失败：") + (data.error || response.status);
+      message.textContent = (data.queue ? "" : "重新下载失败：") + (data.error || response.status);
       if (data.queue) refresh();
       return;
     }
-    message.textContent = `已删除旧下载数据并加入待执行队首（待执行 ${data.pending_total} 条，下次启动批处理生效）`;
+    message.textContent = `已删除旧下载数据并退回下载队列（待执行 ${data.pending_total} 条，下次启动批处理生效）`;
     refresh();
   } catch (error) {
-    message.textContent = "置顶请求失败：" + error;
+    message.textContent = "重新下载请求失败：" + error;
   } finally {
     button.disabled = false;
   }
@@ -821,7 +824,7 @@ document.getElementById("recent-table").addEventListener("click", (event) => {
   }
   const button = event.target.closest("button[data-requeue]");
   if (!button || button.disabled) return;
-  if (!window.confirm(`确认将完成任务“${button.dataset.requeue}”重新加入下载队列并置顶？`)) {
+  if (!window.confirm(`确认将完成任务“${button.dataset.requeue}”重新入队？`)) {
     return;
   }
   requeueDownload(button.dataset.requeue, "top", button, "recent-message");
@@ -1140,10 +1143,10 @@ function renderProcessingRecent(processing) {
 async function requeueCompletedProcessing(datasetKey, button) {
   const outputDir = button.dataset.outputDir || "未记录";
   const inputDir = button.dataset.inputDir || "未记录或不存在";
-  if (!window.confirm(`确认将“${datasetKey}”重新加入待处理队首？\n将永久删除处理输出：${outputDir}\n以及处理输入副本：${inputDir}\n原始下载数据保留。删除后无法恢复。`)) return;
+  if (!window.confirm(`确认将“${datasetKey}”重做处理？\n将永久删除处理输出：${outputDir}\n以及处理输入副本：${inputDir}\n原始下载数据保留。删除后无法恢复。`)) return;
   const message = document.getElementById("p-recent-message");
   button.disabled = true;
-  message.textContent = "正在删除处理产物并置顶…";
+  message.textContent = "正在删除处理产物并重新排入待处理队首…";
   try {
     const response = await fetch("/api/process/requeue-completed", {
       method: "POST",
@@ -1156,14 +1159,14 @@ async function requeueCompletedProcessing(datasetKey, button) {
     });
     const data = await response.json();
     if (!response.ok || !data.ok) {
-      message.textContent = (data.queue ? "" : "置顶失败：") + (data.error || response.status);
+      message.textContent = (data.queue ? "" : "重做处理失败：") + (data.error || response.status);
       if (data.queue) refresh();
       return;
     }
-    message.textContent = `已删除处理产物并加入待处理队首（待处理 ${data.pending_total} 条，下次执行处理生效）`;
+    message.textContent = `已删除处理产物并重新排入待处理队首（待处理 ${data.pending_total} 条，下次执行处理生效）`;
     refresh();
   } catch (error) {
-    message.textContent = "置顶请求失败：" + error;
+    message.textContent = "重做处理请求失败：" + error;
   } finally {
     button.disabled = false;
   }
@@ -2066,6 +2069,14 @@ document.getElementById("config-warning-close").addEventListener("click", () => 
 checkStartupConfig();
 refresh();
 setInterval(refresh, REFRESH_MS);
+
+function updateQueueHeadOffset() {
+  const bar = document.querySelector(".queue-toolbar");
+  if (!bar || bar.offsetParent === null) return;
+  document.documentElement.style.setProperty("--queue-head-top", (40 + bar.offsetHeight + 1) + "px");
+}
+window.addEventListener("resize", updateQueueHeadOffset);
+updateQueueHeadOffset();
 </script>
 </body>
 </html>

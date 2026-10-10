@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-09T17:57:33",
+  "updated_at": "2026-10-10T14:45:19",
   "rows": {
     "亚洲|中国|广西壮族自治区": {
       "updated": true,
@@ -101,6 +101,11 @@
       "updated": true,
       "updated_at": "2026-10-09T14:06:29",
       "note": "自动更新2"
+    },
+    "亚洲|中国|山东省": {
+      "updated": false,
+      "updated_at": "",
+      "note": "已更新了"
     }
   }
 }

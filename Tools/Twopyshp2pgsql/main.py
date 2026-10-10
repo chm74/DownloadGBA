@@ -11,8 +11,9 @@ import shutil
 from pathlib import Path
 
 import geopandas as gpd
-import psycopg2
 import rarfile
+
+from world_building import TABLE, get_conn
 import subprocess
 import logging
 
@@ -29,18 +30,8 @@ logger.addHandler(file_handler)
 
 
 # ---------- 配置 ----------
-DB_CFG = dict(
-    dbname="building",
-    user="postgres",
-    password="frontfree",
-    host="172.16.1.145",
-    port=5432,
-)
-TABLE = "world_building"
+# 数据库连接与表名统一由 world_building 模块提供（TABLE / get_conn）
 # --------------------------
-
-def get_conn():
-    return psycopg2.connect(**DB_CFG)
 
 
 def create_table_if_not_exists():

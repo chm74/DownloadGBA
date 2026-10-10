@@ -10,4 +10,11 @@
 /Tools/Oneshp_pipline_qgis/out_data/
 /repair_staging/
 
+# 工具虚拟环境与运行时产物（不入库）
+.venv/
+__pycache__/
+/Tools/Twopyshp2pgsql/.env
+/Tools/Twopyshp2pgsql/logs/
+/Tools/Twopyshp2pgsql/dist/
+
 /拉取更新.txt

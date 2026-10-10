@@ -1,6 +1,7 @@
 import argparse
 import csv
 import io
+import json
 import os
 import shutil
 import subprocess
@@ -8,6 +9,33 @@ from pathlib import Path, PureWindowsPath
 
 
 DEFAULT_OUTPUT = Path("data/world_building_download_tasks.csv")
+DEFAULT_CONFIG_FILE = "data/config.json"
+
+# 表名与看板/入库工具保持一致（world_building）。
+TABLE = "world_building"
+
+
+def repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def load_config_defaults(config_path: Path) -> dict:
+    """从看板配置文件读取数据库连接默认值（不存在或损坏时返回空）。"""
+    stored: dict = {}
+    if config_path.exists():
+        try:
+            raw = json.loads(config_path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict) and isinstance(raw.get("database"), dict):
+                stored = raw["database"]
+        except (OSError, ValueError):
+            stored = {}
+    return {
+        "dbname": str(stored.get("dbname") or ""),
+        "user": str(stored.get("user") or ""),
+        "host": str(stored.get("host") or ""),
+        "port": stored.get("port"),
+        "password": str(stored.get("password") or ""),
+    }
 OUTPUT_HEADER = (
     "continent",
     "country",
@@ -50,13 +78,20 @@ def parse_args() -> argparse.Namespace:
             "world_building as a download task CSV with a derived download directory."
         )
     )
-    parser.add_argument("--dbname", default="building", help="PostgreSQL database name.")
-    parser.add_argument("--user", default="postgres", help="PostgreSQL user name.")
-    parser.add_argument("--host", default="127.0.0.1", help="PostgreSQL server host.")
-    parser.add_argument("--port", type=int, default=5432, help="PostgreSQL server port.")
+    parser.add_argument("--dbname", default=None, help="PostgreSQL database name（默认取 data/config.json）。")
+    parser.add_argument("--user", default=None, help="PostgreSQL user name（默认取 data/config.json）。")
+    parser.add_argument("--host", default=None, help="PostgreSQL server host（默认取 data/config.json）。")
+    parser.add_argument("--port", type=int, default=None, help="PostgreSQL server port（默认取 data/config.json）。")
     parser.add_argument(
         "--password",
-        help="Database password. Prefer setting PGPASSWORD instead of using this option.",
+        default=None,
+        help="Database password. 默认取 data/config.json；也可用 PGPASSWORD 环境变量。",
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help=f"看板配置文件路径，默认 {DEFAULT_CONFIG_FILE}。",
     )
     parser.add_argument(
         "--psql",
@@ -196,20 +231,45 @@ def write_tasks(output_path: Path, tasks: list[tuple[str, str, str, str]]) -> No
             temporary_path.unlink()
 
 
+def resolve_db_args(args: argparse.Namespace) -> dict:
+    """连接参数优先级：CLI 参数 > PG_* 环境变量 > data/config.json > 内置默认。"""
+    repo = repo_root()
+    config_path = Path(args.config) if args.config else (repo / DEFAULT_CONFIG_FILE)
+    if not config_path.is_absolute():
+        config_path = repo / config_path
+    defaults = load_config_defaults(config_path)
+    port = args.port or os.environ.get("PG_PORT") or defaults.get("port") or 5432
+    return {
+        "dbname": args.dbname or os.environ.get("PG_DBNAME") or defaults.get("dbname") or "building",
+        "user": args.user or os.environ.get("PG_USER") or defaults.get("user") or "postgres",
+        "host": args.host or os.environ.get("PG_HOST") or defaults.get("host") or "127.0.0.1",
+        "port": int(port),
+        "password": (
+            args.password
+            or os.environ.get("PGPASSWORD")
+            or os.environ.get("PG_PASSWORD")
+            or defaults.get("password")
+            or ""
+        ),
+    }
+
+
 def main() -> None:
     args = parse_args()
-    password = args.password or os.environ.get("PGPASSWORD")
-    if not password:
-        raise SystemExit("Set PGPASSWORD or pass --password to connect to PostgreSQL.")
+    db = resolve_db_args(args)
+    if not db["password"]:
+        raise SystemExit(
+            "未提供数据库密码：请在 data/config.json 配置，或设置环境变量 PGPASSWORD，或使用 --password。"
+        )
 
     psql = find_psql(args.psql)
     tasks = fetch_tasks(
         psql,
-        dbname=args.dbname,
-        user=args.user,
-        host=args.host,
-        port=args.port,
-        password=password,
+        dbname=db["dbname"],
+        user=db["user"],
+        host=db["host"],
+        port=db["port"],
+        password=db["password"],
     )
     write_tasks(args.output, tasks)
     print(f"Exported {len(tasks)} grouped download tasks to {args.output.resolve()}")

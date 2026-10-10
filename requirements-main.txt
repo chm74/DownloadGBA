@@ -1,0 +1,6 @@
+geopandas
+shapely
+pyogrio
+pandas
+requests
+osmnx

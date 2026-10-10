@@ -36,8 +36,8 @@ DEFAULT_UPDATE_DB = {
 }
 DEFAULT_RESULT_ROOT = r"\\192.168.2.121\BuildingData\AutoGenerate"
 DEFAULT_QGIS_DIR = r"D:\QGIS"
-DEFAULT_UPDATE_PYTHON = "updateTools/twopyshp2pgsql/.venv/Scripts/python.exe"
-DEFAULT_UPDATE_SCRIPT = "updateTools/twopyshp2pgsql/main3_region.py"
+DEFAULT_UPDATE_PYTHON = "Tools/Twopyshp2pgsql/.venv/Scripts/python.exe"
+DEFAULT_UPDATE_SCRIPT = "Tools/Twopyshp2pgsql/main3_region.py"
 DEFAULT_UPDATE_LOG_DIR = "data/logs/update"
 DEFAULT_DB_IMPORT_STATUS = "data/db_import_status.json"
 RUNNER_MARKER = "run_world_building_tasks.py"

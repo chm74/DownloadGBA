@@ -77,7 +77,7 @@ New-NetFirewallRule -DisplayName "GBA Status" -Direction Inbound -LocalPort 8765
 - `GET /api/env`：环境检测——逐项检查入库工具解释器（存在 + 能否 `import geopandas, psycopg2, dotenv`）、入库脚本、入库日志目录、处理工具解释器（存在 + `import geopandas, shapely, pyproj`）、QGIS（`<qgis_dir>/bin/qgis_process-qgis.bat`）；返回 `{"ok": bool, "missing": [...], "items": [...]}`
 - `POST /api/db_updated/import`：对某区域执行“更新到库”。请求体 `{"dataset_key": "洲|国家|区域"}`；先检查共享目录 `result_root/洲/国家/区域/*.shp` 与处理产物 `out_data/<前缀>_pipeline/final/*_3857.shp` 是否一致：
   - 不一致 → 返回 `{"ok": false, "consistent": false, "missing": [...], "extra": [...], "message": "内容不一致，请手动检查共享目录"}`，**不执行**；
-  - 一致 → 后台运行 `updateTools/twopyshp2pgsql/main3_region.py`（数据库连接与共享目录取自 `/api/config`，以环境变量注入），成功后自动把该区域登记为「已更新」；受 `--action-token` 保护
+  - 一致 → 后台运行 `Tools/twopyshp2pgsql/main3_region.py`（数据库连接与共享目录取自 `/api/config`，以环境变量注入），成功后自动把该区域登记为「已更新」；受 `--action-token` 保护
 - `GET /api/db_updated/import-status`：查询入库任务状态（`running|done|error|blocked|idle`）
 - 其他路径返回 404
 
@@ -121,7 +121,7 @@ python scripts/run_shp_process_tasks.py --move-top "宁夏"          # 置顶
 - 表格列：数据集、命名前缀、处理完成时间、输出目录、备注（可编辑）；「更新到库」栏额外有「更新时间」（只读，由入库自动填入）与「更新详情」列，「未更新到库」栏额外有「操作」列
 - 「备注」：两栏都可编辑，失焦/回车自动保存（仅内容变化时提交），结果用**浮层（仿 element-ui Message）提示**；失败回退到上次已保存值。编辑中暂停自动刷新以免覆盖。
 - 「更新详情」：该区域最近一次入库的 `删除 X 条 / 新增 Y 个 SHP`（含跳过数），来自 `data/db_import_status.json` 的 `import_detail`；解析 `main3_region.py` 输出的 `__IMPORT_SUMMARY__` JSON 汇总行
-- 「未更新到库」的行提供「操作 → 更新到库」按钮：点击后**先检查**共享目录 `result_root/洲/国家/区域/*.shp` 与处理产物 `out_data/<前缀>_pipeline/final/*_3857.shp` 是否一致（按文件名比对）；不一致则弹窗列出缺失/多余并浮层提示、不执行；一致则后台运行 `updateTools/twopyshp2pgsql/main3_region.py`，成功后自动登记为「已更新」，结果用**浮层提示**；入库进行中按钮保持禁用。数据库连接与共享目录取自「配置」页签；入库结果写入 `data/db_import_status.json`，服务重启/刷新后仍可查询（`GET /api/db_updated/import-status`）
+- 「未更新到库」的行提供「操作 → 更新到库」按钮：点击后**先检查**共享目录 `result_root/洲/国家/区域/*.shp` 与处理产物 `out_data/<前缀>_pipeline/final/*_3857.shp` 是否一致（按文件名比对）；不一致则弹窗列出缺失/多余并浮层提示、不执行；一致则后台运行 `Tools/twopyshp2pgsql/main3_region.py`，成功后自动登记为「已更新」，结果用**浮层提示**；入库进行中按钮保持禁用。数据库连接与共享目录取自「配置」页签；入库结果写入 `data/db_import_status.json`，服务重启/刷新后仍可查询（`GET /api/db_updated/import-status`）
 - 表格分页：默认每页 15 条，可切换 15/30/50/100/200，支持首页/上一页/下一页/末页
 - 不再有「保存修改」按钮：更新时间由系统写入，备注自动保存
 - 重做会同步标记：处理页「最近完成」的「重做处理」会把该数据集标记重置为「未更新」；下载页「最近完成」的「重新下载」会删除该数据集标记（任务转 PENDING 后该行也从本表消失）

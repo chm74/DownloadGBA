@@ -533,24 +533,26 @@ python scripts/run_shp_process_tasks.py --move-top "宁夏"
 
 ```powershell
 # 主下载链（装到系统 Python）
-python -m pip install geopandas shapely pyogrio pandas requests osmnx
+python -m pip install -r requirements-main.txt
 # 处理工具
 uv sync --project Tools\Oneshp_pipline_qgis
 # SHP 入库工具
 uv sync --project Tools\Twopyshp2pgsql
-# （可选）入库工具副本
-uv sync --project updateTools\twopyshp2pgsql
+# 一键安装（等价于以上 + 提示后续配置）
+powershell -ExecutionPolicy Bypass -File setup.ps1
 ```
 
 可选：`pip install pytest`（跑测试）。
+
+> `.venv` 不可跨机复制，克隆/拷贝到新机器后按上面重建即可（不纳入版本控制）。
 
 ### 需修改 / 配置
 
 | 配置 | 位置 | 说明 |
 |---|---|---|
 | git 代理 | `拉取更新.txt` | 改成新机器代理（如 `http.proxy=http://127.0.0.1:7890`），无代理则删 |
-| 数据库 + 共享目录 | `Tools/Twopyshp2pgsql/.env`、`updateTools/twopyshp2pgsql/.env` | `PG_DBNAME/PG_USER/PG_PASSWORD/PG_HOST/PG_PORT`、`DATA_ROOT` |
-| 导出清单口令 | 环境变量 `PGPASSWORD` | 运行 `export_world_building_tasks.py` 时用 |
+| 数据库 + 共享目录 | `data/config.json`（看板「配置」页保存）；直跑工具时用 `Tools/Twopyshp2pgsql/.env` | `PG_DBNAME/PG_USER/PG_PASSWORD/PG_HOST/PG_PORT`、`DATA_ROOT` |
+| 导出清单口令 | `data/config.json` 优先；可选环境变量 `PGPASSWORD` | `export_world_building_tasks.py` 默认读 `data/config.json` |
 | 看板端口 | 防火墙入站 `8765` | 局域网访问需放行 |
 | （可选）限速 | 环境变量 `GBA_WFS_MIN_INTERVAL` | 默认 1.05 秒/请求 |
 

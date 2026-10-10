@@ -21,18 +21,9 @@ from pathlib import Path
 from typing import Iterable
 
 import geopandas as gpd
-import psycopg2
 
+from world_building import TABLE, get_conn
 
-DB_CFG = dict(
-    dbname="building",
-    user="postgres",
-    password="frontfree",
-    host="127.0.0.1",
-    port=5432,
-)
-
-TABLE = "world_building"
 DATA_ROOT = Path(r"\\192.168.2.121\BuildingData\AutoGenerate")
 TARGET_CITY = "北京市"
 TARGET_CONTINENT: str | None = "亚洲"
@@ -58,10 +49,6 @@ def setup_logger(log_path: Path) -> logging.Logger:
     logger.addHandler(console_handler)
 
     return logger
-
-
-def get_conn():
-    return psycopg2.connect(**DB_CFG)
 
 
 def iter_city_dirs(root: Path) -> Iterable[tuple[str, str, str, Path]]:
