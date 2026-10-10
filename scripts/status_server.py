@@ -1681,7 +1681,12 @@ def load_dashboard_config(repo_root: Path) -> dict:
     }
     result_root = str(stored.get("result_root") or DEFAULT_RESULT_ROOT)
     qgis_dir = str(stored.get("qgis_dir") or DEFAULT_QGIS_DIR)
-    return {"database": database, "result_root": result_root, "qgis_dir": qgis_dir}
+    return {
+        "configured": path.exists(),
+        "database": database,
+        "result_root": result_root,
+        "qgis_dir": qgis_dir,
+    }
 
 
 def save_dashboard_config(repo_root: Path, config: dict) -> dict:

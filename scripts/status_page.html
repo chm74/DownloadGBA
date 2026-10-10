@@ -90,6 +90,7 @@
   input.note-input { width:100%; min-width:140px; padding:3px 6px; font:inherit; font-size:12px; border:1px solid var(--line); border-radius:4px; background:transparent; color:var(--text); }
   input.note-input:focus { outline:1px solid var(--accent); border-color:var(--accent); }
   .error-banner { background:rgba(220,38,38,.12); border:1px solid var(--err); color:var(--err); border-radius:8px; padding:10px 12px; margin-bottom:16px; }
+  .config-warning { display:flex; gap:12px; align-items:center; flex-wrap:wrap; background:rgba(220,38,38,.12); border:1px solid var(--err); color:var(--err); border-radius:8px; padding:10px 12px; margin-bottom:16px; font-size:13px; }
   .empty { color:var(--muted); font-size:13px; }
   footer { color:var(--muted); font-size:12px; text-align:center; margin-top:8px; }
   a { color:var(--accent); }
@@ -111,6 +112,12 @@
   </header>
 
   <div id="error-banner" class="error-banner" style="display:none"></div>
+
+  <div id="config-warning" class="config-warning" style="display:none;">
+    <span id="config-warning-text" style="flex:1 1 auto;"></span>
+    <button id="config-warning-go" type="button" style="padding:4px 12px;cursor:pointer;">去配置</button>
+    <button id="config-warning-close" type="button" style="padding:4px 12px;cursor:pointer;">关闭</button>
+  </div>
 
   <nav class="tabs">
     <button type="button" class="tab active" data-tab="download">建筑数据下载</button>
@@ -2008,6 +2015,54 @@ async function refresh() {
   }
 }
 
+function checkStartupConfig() {
+  try {
+    if (sessionStorage.getItem("gba_config_warning_dismissed") === "1") return;
+  } catch (error) {
+    /* sessionStorage 不可用则继续 */
+  }
+  fetch("/api/config", { cache: "no-store" })
+    .then((response) => response.json())
+    .then((data) => {
+      const env = data.env || {};
+      const reasons = [];
+      if (!data.configured) {
+        reasons.push("尚未填写配置（未找到 data/config.json）");
+      }
+      const envChecks = [
+        ["update_python_exists", "入库工具解释器"],
+        ["update_script_exists", "入库脚本"],
+        ["update_log_dir_exists", "入库日志目录"],
+        ["process_python_exists", "处理工具解释器"],
+        ["qgis_process_bat_exists", "QGIS"],
+      ];
+      const envMissing = envChecks.filter(([flag]) => env[flag] === false).map(([, label]) => label);
+      if (envMissing.length) {
+        reasons.push("环境缺失：" + envMissing.join("、"));
+      }
+      if (reasons.length === 0) return;
+      document.getElementById("config-warning-text").textContent =
+        "请先检查配置项是否正确 —— " + reasons.join("；") + "。可到「配置」页确认并点「检测环境」。";
+      document.getElementById("config-warning").style.display = "";
+    })
+    .catch(() => {
+      /* 忽略自检失败 */
+    });
+}
+
+document.getElementById("config-warning-go").addEventListener("click", () => {
+  switchTab("config");
+});
+document.getElementById("config-warning-close").addEventListener("click", () => {
+  document.getElementById("config-warning").style.display = "none";
+  try {
+    sessionStorage.setItem("gba_config_warning_dismissed", "1");
+  } catch (error) {
+    /* ignore */
+  }
+});
+
+checkStartupConfig();
 refresh();
 setInterval(refresh, REFRESH_MS);
 </script>

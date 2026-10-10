@@ -2666,6 +2666,7 @@ class ControlTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)
             config = status_server.load_dashboard_config(repo_root)
+            self.assertFalse(config["configured"])
             self.assertEqual(config["database"]["host"], status_server.DEFAULT_UPDATE_DB["host"])
             self.assertEqual(config["database"]["port"], status_server.DEFAULT_UPDATE_DB["port"])
             self.assertEqual(config["result_root"], status_server.DEFAULT_RESULT_ROOT)
@@ -2685,6 +2686,7 @@ class ControlTests(unittest.TestCase):
             self.assertEqual(saved["database"]["port"], 5433)
             self.assertEqual(saved["qgis_dir"], "E:\\QGIS")
             config = status_server.load_dashboard_config(repo_root)
+            self.assertTrue(config["configured"])
             self.assertEqual(config["database"]["host"], "10.0.0.5")
             self.assertEqual(config["database"]["port"], 5433)
             self.assertEqual(config["database"]["dbname"], "gis")
