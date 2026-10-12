@@ -1964,12 +1964,11 @@ def list_log_files(repo_root: Path, process_db: Path | None = None) -> dict:
         for path in matches:
             if path.is_file():
                 item = entry(path)
-                if item:
+                if item and item["size"] > 0:
                     out.append(item)
         return out
 
-    # 建筑数据下载：执行器日志 + 按任务（data/<洲>/<国家>/<区域>/run.log(.err.log)）
-    download_global = collect("data/logs/download/*.log") + collect("data/logs/download/province/*.log")
+    # 建筑数据下载：按任务（data/<洲>/<国家>/<区域>/run.log(.err.log)）
     download_tasks: dict[str, dict] = {}
     for region_dir in sorted(repo_root.glob("data/*/*/*")):
         parts = region_dir.relative_to(repo_root).parts
@@ -1980,14 +1979,13 @@ def list_log_files(repo_root: Path, process_db: Path | None = None) -> dict:
             candidate = region_dir / name
             if candidate.is_file():
                 item = entry(candidate)
-                if item:
+                if item and item["size"] > 0:
                     files.append(item)
         if files:
             key = "/".join(parts[1:])
             download_tasks[key] = {"key": key, "label": key, "files": files}
 
-    # 数据处理：执行器日志 + 按区域统一任务（merge_<前缀>.log 与 <前缀>_pipeline/stdout.log）
-    process_global = collect("data/logs/process/*.log")
+    # 数据处理：按区域统一任务（merge_<前缀>.log 与 <前缀>_pipeline/stdout.log）
     out_root = repo_root / "Tools" / "Oneshp_pipline_qgis" / "out_data"
     process_tasks: dict[str, dict] = {}
 
@@ -2002,7 +2000,7 @@ def list_log_files(repo_root: Path, process_db: Path | None = None) -> dict:
         if not path.is_file():
             return
         item = entry(path)
-        if item and all(existing["path"] != item["path"] for existing in task["files"]):
+        if item and item["size"] > 0 and all(existing["path"] != item["path"] for existing in task["files"]):
             task["files"].append(item)
 
     prefix_to_region: dict[str, str] = {}
@@ -2051,7 +2049,11 @@ def list_log_files(repo_root: Path, process_db: Path | None = None) -> dict:
     # 库表更新：data/logs/update/*.log（每个文件作为一条任务）
     update_tasks: dict[str, dict] = {}
     for item in collect("data/logs/update/*.log"):
-        update_tasks[item["path"]] = {"key": item["path"], "label": item["name"], "files": [item]}
+        name = item["name"]
+        label = name[len("log_main3_"):] if name.startswith("log_main3_") else name
+        file_entry = dict(item)
+        file_entry["label"] = label
+        update_tasks[item["path"]] = {"key": item["path"], "label": label, "files": [file_entry]}
 
     def sort_tasks(tasks: dict[str, dict]) -> list[dict]:
         return sorted(
@@ -2065,13 +2067,13 @@ def list_log_files(repo_root: Path, process_db: Path | None = None) -> dict:
             {
                 "key": "download",
                 "label": "建筑数据下载",
-                "global": download_global,
+                "global": [],
                 "tasks": sort_tasks(download_tasks),
             },
             {
                 "key": "process",
                 "label": "数据处理",
-                "global": process_global,
+                "global": [],
                 "tasks": sort_tasks(process_tasks),
             },
             {

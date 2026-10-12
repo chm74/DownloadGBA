@@ -453,9 +453,8 @@
   <div class="panel" id="panel-logs" hidden>
     <div class="layout">
       <aside class="sidebar" style="flex:0 0 320px;">
-        <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;">
-          <input id="log-search" type="text" placeholder="搜索日志文件名" style="flex:1 1 auto;min-width:0;padding:4px 6px;">
-          <button id="log-refresh-list" type="button" style="padding:4px 10px;cursor:pointer;">刷新</button>
+        <div style="margin-bottom:10px;">
+          <button id="log-refresh-list" type="button" style="padding:4px 10px;cursor:pointer;">刷新列表</button>
         </div>
         <div id="log-list"><div class="empty">暂无日志</div></div>
       </aside>
@@ -779,16 +778,9 @@ async function loadLogs() {
 
 function renderLogList() {
   const box = document.getElementById("log-list");
-  const filter = (document.getElementById("log-search").value || "").trim().toLowerCase();
   const groups = (logState.data && logState.data.groups) || [];
   let html = "";
   let any = false;
-
-  const fileMatches = (f) =>
-    !filter
-    || (f.name || "").toLowerCase().includes(filter)
-    || (f.label || "").toLowerCase().includes(filter)
-    || (f.path || "").toLowerCase().includes(filter);
 
   const renderFiles = (files) => files.map((f) => {
     const active = logState.current === f.path ? " active" : "";
@@ -798,32 +790,22 @@ function renderLogList() {
   }).join("");
 
   for (const group of groups) {
-    const globalFiles = (group.global || []).filter(fileMatches);
-    const tasks = (group.tasks || []).map((task) => {
-      const labelHit = !!filter && (task.label || "").toLowerCase().includes(filter);
-      const files = (task.files || []).filter((f) => labelHit || fileMatches(f));
-      return { task, files };
-    }).filter((item) => item.files.length > 0);
+    const tasks = (group.tasks || []).filter((task) => (task.files || []).length > 0);
 
-    if (globalFiles.length === 0 && tasks.length === 0) continue;
+    if (tasks.length === 0) continue;
     any = true;
-    const totalFiles = globalFiles.length + tasks.reduce((sum, item) => sum + item.files.length, 0);
-    const containsCurrent = globalFiles.some((f) => f.path === logState.current)
-      || tasks.some((item) => item.files.some((f) => f.path === logState.current));
-    const groupOpen = containsCurrent || !!filter;
-    html += `<details class="log-group"${groupOpen ? " open" : ""}`
+    const totalFiles = tasks.reduce((sum, task) => sum + task.files.length, 0);
+    const containsCurrent = tasks.some((task) => task.files.some((f) => f.path === logState.current));
+    html += `<details class="log-group"${containsCurrent ? " open" : ""}`
       + `><summary>${esc(group.label)}（${totalFiles}）</summary><div class="log-group-body">`;
-    if (globalFiles.length) {
-      html += `<div class="log-subtitle">执行器日志</div>` + renderFiles(globalFiles);
-    }
-    for (const item of tasks) {
-      const open = item.files.some((f) => f.path === logState.current) ? " open" : "";
-      html += `<details class="log-task"${open}><summary>${esc(item.task.label)}（${item.files.length}）</summary>`
-        + `<div class="log-task-files">${renderFiles(item.files)}</div></details>`;
+    for (const task of tasks) {
+      const open = task.files.some((f) => f.path === logState.current) ? " open" : "";
+      html += `<details class="log-task"${open}><summary>${esc(task.label)}（${task.files.length}）</summary>`
+        + `<div class="log-task-files">${renderFiles(task.files)}</div></details>`;
     }
     html += "</div></details>";
   }
-  box.innerHTML = any ? html : '<div class="empty">没有匹配的日志</div>';
+  box.innerHTML = any ? html : '<div class="empty">暂无日志</div>';
 }
 
 async function reloadCurrentLog() {
@@ -875,7 +857,6 @@ document.getElementById("log-refresh-list").addEventListener("click", loadLogs);
 document.getElementById("log-reload").addEventListener("click", reloadCurrentLog);
 document.getElementById("log-lines").addEventListener("change", reloadCurrentLog);
 document.getElementById("log-auto").addEventListener("change", (event) => setLogAuto(event.target.checked));
-document.getElementById("log-search").addEventListener("input", renderLogList);
 document.getElementById("log-list").addEventListener("click", (event) => {
   const item = event.target.closest(".log-item");
   if (item && item.dataset.logPath) openLog(item.dataset.logPath);
