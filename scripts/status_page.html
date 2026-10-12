@@ -1051,9 +1051,6 @@ function renderProcessingRunning(items) {
 
 function renderProcessingQueue(processing) {
   const box = document.getElementById("p-queue-table");
-  if (noteState.editingKey && box.querySelector("input[data-note-key]")) {
-    return;
-  }
   const items = processing.queue || [];
   if (items.length === 0) {
     box.innerHTML = '<div class="empty">暂无待处理任务</div>';
@@ -1061,12 +1058,11 @@ function renderProcessingQueue(processing) {
   }
   box.innerHTML = `
     <table>
-      <thead><tr><th>排序</th><th>#</th><th>数据集</th><th>命名前缀</th><th>来源目录</th><th>要素数</th><th>SHP</th><th>状态</th><th>备注</th><th>操作</th></tr></thead>
+      <thead><tr><th>排序</th><th>#</th><th>数据集</th><th>命名前缀</th><th>来源目录</th><th>要素数</th><th>SHP</th><th>状态</th><th>操作</th></tr></thead>
       <tbody>${items.map((item, index) => {
         const isFirst = index === 0;
         const isLast = index === items.length - 1;
         const key = esc(item.dataset_key);
-        const note = item.note || "";
         const shpCount = Number(item.shp_count ?? 0);
         const needsMerge = shpCount >= 2;
         let merge = needsMerge ? (mergeMsgState[item.dataset_key] || null) : null;
@@ -1109,8 +1105,6 @@ function renderProcessingQueue(processing) {
           <td>${fmtNumber(item.feature_count)}</td>
           <td>${esc(item.shp_count ?? "-")}</td>
           <td>${statusBadge}</td>
-          <td><input class="note-input" type="text" maxlength="200" placeholder="添加备注"
-                     data-note-key="${key}" data-saved="${esc(note)}" value="${esc(note)}"></td>
           <td>
             <button type="button" class="mini" title="${needsMerge ? "点击自动合并为单个 SHP" : "仅 1 个 SHP，无需合并"}" data-auto-merge="${key}" data-source-dir="${esc(item.source_dir || "")}" data-shp-count="${esc(item.shp_count ?? 0)}" ${(needsMerge && !mergeBusy) ? "" : "disabled"}>自动合并</button>
             ${mergeFailed && item.source_dir ? `<button type="button" class="mini" data-open-folder="${esc(item.source_dir)}" title="在资源管理器中打开该任务的来源目录">打开目录</button>` : ""}
@@ -1329,13 +1323,11 @@ function renderProcessingRecent(processing) {
   }
   box.innerHTML = `
     <table>
-      <thead><tr><th>数据集</th><th>命名前缀</th><th>分片数</th><th>要素数</th><th>耗时</th><th>完成时间</th><th>输出目录</th><th>操作</th></tr></thead>
+      <thead><tr><th>数据集</th><th>命名前缀</th><th>耗时</th><th>完成时间</th><th>输出目录</th><th>操作</th></tr></thead>
       <tbody>${items.map(item => `
         <tr>
           <td class="mono">${esc(item.dataset_key)}</td>
           <td class="mono">${esc(item.process_name_prefix || "-")}</td>
-          <td>${esc(item.tile_count ?? "-")}</td>
-          <td>${fmtNumber(item.feature_count)}</td>
           <td>${fmtDuration(item.duration_seconds)}</td>
           <td>${esc(item.finished_at || "-")}</td>
           <td class="mono">${esc(item.output_dir || "-")}</td>
