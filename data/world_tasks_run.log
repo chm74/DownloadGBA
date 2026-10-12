@@ -8,3 +8,58 @@
 [OK] 亚洲|中国|吉林省 features=4005853 elapsed=14568s
 --- [2/256] Oceania|Australia|Australia ---
 [RUN] Oceania|Australia|Australia -> F:\建筑数据下载\DownloadGBA\data\Oceania\Australia\Australia
+[SHP] Oceania|Australia|Australia -> 11 个分卷
+[PROCESS] 已登记处理队列: Oceania|Australia|Australia added=1 updated=0
+[OK] Oceania|Australia|Australia features=10819092 elapsed=229623s
+--- [3/256] 亚洲|中国|云南省 ---
+[RUN] 亚洲|中国|云南省 -> F:\建筑数据下载\DownloadGBA\data\亚洲\中国\云南省
+[SHP] 亚洲|中国|云南省 -> 9 个分卷
+[PROCESS] 已登记处理队列: 亚洲|中国|云南省 added=0 updated=1
+[OK] 亚洲|中国|云南省 features=8673098 elapsed=29434s
+--- [4/256] 亚洲|中国|安徽省 ---
+[RUN] 亚洲|中国|安徽省 -> F:\建筑数据下载\DownloadGBA\data\亚洲\中国\安徽省
+[SHP] 亚洲|中国|安徽省 -> 8 个分卷
+[PROCESS] 已登记处理队列: 亚洲|中国|安徽省 added=0 updated=1
+[OK] 亚洲|中国|安徽省 features=7582599 elapsed=24738s
+--- [5/256] Europe|Switzerland|Switzerland ---
+[RUN] Europe|Switzerland|Switzerland -> F:\建筑数据下载\DownloadGBA\data\Europe\Switzerland\Switzerland
+[SHP] Europe|Switzerland|Switzerland -> 3 个分卷
+[PROCESS] 已登记处理队列: Europe|Switzerland|Switzerland added=1 updated=0
+[OK] Europe|Switzerland|Switzerland features=2863275 elapsed=3765s
+--- [6/256] Africa|Gabon|Gabon ---
+[RUN] Africa|Gabon|Gabon -> F:\建筑数据下载\DownloadGBA\data\Africa\Gabon\Gabon
+[SHP] Africa|Gabon|Gabon -> 1 个分卷
+[PROCESS] 已登记处理队列: Africa|Gabon|Gabon added=0 updated=1
+[OK] Africa|Gabon|Gabon features=820422 elapsed=7671s
+--- [7/256] Africa|Ghana|Ghana ---
+[RUN] Africa|Ghana|Ghana -> F:\建筑数据下载\DownloadGBA\data\Africa\Ghana\Ghana
+[SHP] Africa|Ghana|Ghana -> 14 个分卷
+[PROCESS] 已登记处理队列: Africa|Ghana|Ghana added=0 updated=1
+[OK] Africa|Ghana|Ghana features=13089852 elapsed=8503s
+--- [8/256] Africa|Guinea|Guinea ---
+[RUN] Africa|Guinea|Guinea -> F:\建筑数据下载\DownloadGBA\data\Africa\Guinea\Guinea
+[SHP] Africa|Guinea|Guinea -> 6 个分卷
+[PROCESS] 已登记处理队列: Africa|Guinea|Guinea added=0 updated=1
+[OK] Africa|Guinea|Guinea features=5699922 elapsed=8103s
+--- [9/256] Africa|Lesotho|Lesotho ---
+[RUN] Africa|Lesotho|Lesotho -> F:\建筑数据下载\DownloadGBA\data\Africa\Lesotho\Lesotho
+[SHP] Africa|Lesotho|Lesotho -> 2 个分卷
+[PROCESS] 已登记处理队列: Africa|Lesotho|Lesotho added=0 updated=1
+[OK] Africa|Lesotho|Lesotho features=1555362 elapsed=2376s
+--- [10/256] Africa|GuineaBissau|GuineaBissau ---
+[RUN] Africa|GuineaBissau|GuineaBissau -> F:\建筑数据下载\DownloadGBA\data\Africa\GuineaBissau\GuineaBissau
+[SHP] Africa|GuineaBissau|GuineaBissau -> 1 个分卷
+[PROCESS] 已登记处理队列: Africa|GuineaBissau|GuineaBissau added=0 updated=1
+[OK] Africa|GuineaBissau|GuineaBissau features=455266 elapsed=1934s
+--- [11/256] Africa|Israel|Israel ---
+[RUN] Africa|Israel|Israel -> F:\建筑数据下载\DownloadGBA\data\Africa\Israel\Israel
+[SHP] Africa|Israel|Israel -> 2 个分卷
+[PROCESS] 已登记处理队列: Africa|Israel|Israel added=0 updated=1
+[OK] Africa|Israel|Israel features=1434052 elapsed=3698s
+--- [12/256] Africa|Liberia|Liberia ---
+[RUN] Africa|Liberia|Liberia -> F:\建筑数据下载\DownloadGBA\data\Africa\Liberia\Liberia
+[SHP] Africa|Liberia|Liberia -> 2 个分卷
+[PROCESS] 已登记处理队列: Africa|Liberia|Liberia added=0 updated=1
+[OK] Africa|Liberia|Liberia features=1351866 elapsed=4211s
+--- [13/256] Africa|Mali|Mali ---
+[RUN] Africa|Mali|Mali -> F:\建筑数据下载\DownloadGBA\data\Africa\Mali\Mali
