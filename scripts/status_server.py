@@ -601,6 +601,41 @@ def _processing_running_entry(
     }
 
 
+MERGE_EVENT_STATES = {
+    "PROCESS_MERGE_REJECT": "error",
+    "PROCESS_MERGE_FAIL": "error",
+    "PROCESS_MERGE_DONE": "done",
+}
+
+
+def _last_merge_event(connection, dataset_key: str) -> dict | None:
+    """取该任务最近一条合并事件（持久在 process_events）。"""
+    try:
+        row = connection.execute(
+            "SELECT event, detail FROM process_events "
+            "WHERE dataset_key = ? "
+            "AND event IN ('PROCESS_MERGE_REJECT', 'PROCESS_MERGE_FAIL', 'PROCESS_MERGE_DONE') "
+            "ORDER BY created_at DESC LIMIT 1",
+            (dataset_key,),
+        ).fetchone()
+    except sqlite3.Error:
+        return None
+    if row is None:
+        return None
+    return {
+        "state": MERGE_EVENT_STATES.get(row["event"], "done"),
+        "detail": row["detail"] or "",
+    }
+
+
+def _merge_log_relpath(row) -> str:
+    prefix = _row_optional(row, "process_name_prefix")
+    source_dir = row["source_dir"]
+    if prefix and source_dir:
+        return f"{source_dir}/merge_{prefix}.log"
+    return ""
+
+
 def build_processing_snapshot(
     repo_root: Path,
     process_db: Path,
@@ -672,22 +707,40 @@ def build_processing_snapshot(
                 ("PENDING", PROCESS_QUEUE_LIMIT),
             ).fetchall()
         snapshot["queue_total"] = counts.get("PENDING", 0)
-        snapshot["queue"] = [
-            {
-                "order": index,
-                "queue_order": _row_optional(row, "queue_order"),
-                "dataset_key": row["dataset_key"],
-                "task_id": row["task_id"],
-                "display_name": row["display_name"] or row["dataset_key"],
-                "process_name_prefix": _row_optional(row, "process_name_prefix"),
-                "source_dir": row["source_dir"],
-                "feature_count": row["feature_count"],
-                "shp_count": _count_json_list(row["shp_files"]),
-                "note": _row_optional(row, "note") or "",
-                "updated_at": row["updated_at"],
-            }
-            for index, row in enumerate(queue_rows, start=1)
-        ]
+        queue_items = []
+        for index, row in enumerate(queue_rows, start=1):
+            shp_count = _count_json_list(row["shp_files"])
+            merge_state = None
+            merge_error = ""
+            if shp_count >= 2:
+                job = MERGE_JOBS.get(row["dataset_key"])
+                if job is not None:
+                    merge_state = job.get("state")
+                    merge_error = job.get("error") or job.get("message") or ""
+                else:
+                    last = _last_merge_event(connection, row["dataset_key"])
+                    if last is not None and last["state"] == "error":
+                        merge_state = "error"
+                        merge_error = last["detail"]
+            queue_items.append(
+                {
+                    "order": index,
+                    "queue_order": _row_optional(row, "queue_order"),
+                    "dataset_key": row["dataset_key"],
+                    "task_id": row["task_id"],
+                    "display_name": row["display_name"] or row["dataset_key"],
+                    "process_name_prefix": _row_optional(row, "process_name_prefix"),
+                    "source_dir": row["source_dir"],
+                    "feature_count": row["feature_count"],
+                    "shp_count": shp_count,
+                    "note": _row_optional(row, "note") or "",
+                    "updated_at": row["updated_at"],
+                    "merge_state": merge_state,
+                    "merge_error": merge_error,
+                    "merge_log": _merge_log_relpath(row) if shp_count >= 2 else "",
+                }
+            )
+        snapshot["queue"] = queue_items
 
         snapshot["recent_done"] = [
             {
@@ -855,8 +908,23 @@ def start_merge_job(config: dict, dataset_key: str, expected_source_dir: str) ->
         shp_count = len(json.loads(row["shp_files"] or "[]"))
         if shp_count < 2:
             raise ValueError("该任务只有一个 SHP，无需合并")
+        source_dir_rel = row["source_dir"]
+        merge_prefix = row.get("process_name_prefix") or process_queue.dataset_slug(dataset_key)
     finally:
         store.close()
+
+    repo_root = Path(config["repo_root"])
+    merge_log_path = lib.resolve_task_dir(repo_root, source_dir_rel) / f"merge_{merge_prefix}.log"
+
+    def append_merge_log(message: str) -> None:
+        try:
+            merge_log_path.parent.mkdir(parents=True, exist_ok=True)
+            with merge_log_path.open("a", encoding="utf-8") as handle:
+                handle.write(f"{datetime.now().isoformat(timespec='seconds')} - {message}\n")
+        except OSError:
+            pass
+
+    append_merge_log(f"===== 开始合并（{shp_count} 个分卷） =====")
 
     with MERGE_LOCK:
         existing = MERGE_JOBS.get(dataset_key)
@@ -892,6 +960,7 @@ def start_merge_job(config: dict, dataset_key: str, expected_source_dir: str) ->
                 ogr2ogr_exe=ogr2ogr_exe,
                 download_db=Path(config["state_db"]),
                 progress_cb=progress,
+                log_cb=append_merge_log,
             )
             with MERGE_LOCK:
                 MERGE_JOBS[dataset_key].update(
@@ -899,6 +968,7 @@ def start_merge_job(config: dict, dataset_key: str, expected_source_dir: str) ->
                     updated_at=datetime.now().isoformat(timespec="seconds"),
                 )
         except Exception as exc:  # noqa: BLE001
+            append_merge_log(f"合并失败：{exc}")
             with MERGE_LOCK:
                 MERGE_JOBS[dataset_key].update(
                     state="error", error=str(exc), message=f"合并失败：{exc}",
@@ -1132,6 +1202,18 @@ def start_db_import_job(config: dict, dataset_key: str) -> dict:
     return {"ok": True, "state": "running"}
 
 
+def _update_log_relpath(dataset_key: str) -> str:
+    """由 dataset_key 推出入库日志相对路径（与 main3_region 命名规则一致）。"""
+    parts = str(dataset_key).split("|")
+    if len(parts) != 3:
+        return ""
+
+    def sanitize(name: str) -> str:
+        return re.sub(r'[<>:"/\\|?*\s]+', "_", name).strip("_") or "region"
+
+    return f"data/logs/update/log_main3_{sanitize(parts[1])}_{sanitize(parts[2])}.log"
+
+
 def build_db_update_snapshot(repo_root: Path, process_db: Path, marks_file: Path) -> dict:
     repo_root = Path(repo_root)
     process_db = Path(process_db)
@@ -1180,6 +1262,7 @@ def build_db_update_snapshot(repo_root: Path, process_db: Path, marks_file: Path
                 "skipped": record.get("skipped"),
                 "state": record.get("state"),
                 "updated_at": record.get("updated_at"),
+                "import_log": _update_log_relpath(key),
             }
         rows.append(
             {
@@ -1809,6 +1892,218 @@ def check_environment(config: dict) -> dict:
     return {"ok": not missing, "missing": missing, "items": items}
 
 
+LOG_CATEGORIES = (
+    ("download", "建筑数据下载"),
+    ("process", "数据处理"),
+)
+
+
+def _resolve_log_path(repo_root: Path, rel_path: str) -> Path | None:
+    """把仓库相对路径解析为白名单内的日志文件；越权返回 None。"""
+    if not rel_path:
+        return None
+    repo_root = Path(repo_root).resolve()
+    candidate = (repo_root / rel_path).resolve()
+    try:
+        rel = candidate.relative_to(repo_root)
+    except ValueError:
+        return None
+    if candidate.is_symlink() or not candidate.is_file():
+        return None
+    parts = rel.parts
+    if len(parts) >= 2 and parts[0] == "data" and parts[1] == "logs":
+        return candidate
+    if len(parts) == 5 and parts[0] == "data" and (
+        parts[-1] in ("run.log", "run.err.log")
+        or (parts[-1].startswith("merge_") and parts[-1].endswith(".log"))
+    ):
+        return candidate
+    if (
+        len(parts) >= 4
+        and parts[0] == "Tools"
+        and parts[1] == "Oneshp_pipline_qgis"
+        and parts[2] == "out_data"
+        and parts[-1] == "stdout.log"
+    ):
+        return candidate
+    return None
+
+
+def _log_entry(repo_root: Path, path: Path) -> dict:
+    stat = path.stat()
+    rel = path.relative_to(repo_root)
+    parts = rel.parts
+    if len(parts) >= 2 and parts[0] == "data" and parts[1] == "logs":
+        label = path.name
+    else:
+        label = "/".join(parts[-4:] if len(parts) >= 4 else parts)
+    return {
+        "path": rel.as_posix(),
+        "name": path.name,
+        "label": label,
+        "size": stat.st_size,
+        "mtime": datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds"),
+    }
+
+
+def list_log_files(repo_root: Path, process_db: Path | None = None) -> dict:
+    repo_root = Path(repo_root)
+
+    def entry(path: Path) -> dict | None:
+        try:
+            return _log_entry(repo_root, path)
+        except OSError:
+            return None
+
+    def collect(pattern: str) -> list[dict]:
+        out: list[dict] = []
+        try:
+            matches = sorted(repo_root.glob(pattern))
+        except OSError:
+            return out
+        for path in matches:
+            if path.is_file():
+                item = entry(path)
+                if item:
+                    out.append(item)
+        return out
+
+    # 建筑数据下载：执行器日志 + 按任务（data/<洲>/<国家>/<区域>/run.log(.err.log)）
+    download_global = collect("data/logs/download/*.log") + collect("data/logs/download/province/*.log")
+    download_tasks: dict[str, dict] = {}
+    for region_dir in sorted(repo_root.glob("data/*/*/*")):
+        parts = region_dir.relative_to(repo_root).parts
+        if len(parts) != 4 or parts[1] == "logs" or not region_dir.is_dir():
+            continue
+        files = []
+        for name in ("run.log", "run.err.log"):
+            candidate = region_dir / name
+            if candidate.is_file():
+                item = entry(candidate)
+                if item:
+                    files.append(item)
+        if files:
+            key = "/".join(parts[1:])
+            download_tasks[key] = {"key": key, "label": key, "files": files}
+
+    # 数据处理：执行器日志 + 按区域统一任务（merge_<前缀>.log 与 <前缀>_pipeline/stdout.log）
+    process_global = collect("data/logs/process/*.log")
+    out_root = repo_root / "Tools" / "Oneshp_pipline_qgis" / "out_data"
+    process_tasks: dict[str, dict] = {}
+
+    def ensure_task(key: str) -> dict:
+        task = process_tasks.get(key)
+        if task is None:
+            task = {"key": key, "label": key, "files": []}
+            process_tasks[key] = task
+        return task
+
+    def add_file(task: dict, path: Path) -> None:
+        if not path.is_file():
+            return
+        item = entry(path)
+        if item and all(existing["path"] != item["path"] for existing in task["files"]):
+            task["files"].append(item)
+
+    prefix_to_region: dict[str, str] = {}
+    rows: list = []
+    if process_db is not None:
+        try:
+            conn = sqlite3.connect(str(process_db))
+            conn.row_factory = sqlite3.Row
+            try:
+                rows = list(conn.execute(
+                    "SELECT dataset_key, process_name_prefix, source_dir FROM process_tasks"
+                ))
+            finally:
+                conn.close()
+        except sqlite3.Error:
+            rows = []
+
+    for row in rows:
+        parts = str(row["dataset_key"] or "").split("|")
+        if len(parts) != 3 or not all(parts):
+            continue
+        region_key = "/".join(parts)
+        prefix = row["process_name_prefix"] or process_queue.dataset_slug(row["dataset_key"])
+        prefix_to_region[prefix] = region_key
+        task = ensure_task(region_key)
+        source_dir = row["source_dir"]
+        if source_dir:
+            add_file(task, lib.resolve_task_dir(repo_root, source_dir) / f"merge_{prefix}.log")
+        add_file(task, out_root / f"{prefix}_pipeline" / "stdout.log")
+
+    # 兜底：磁盘上未被上面覆盖的 merge_*.log 与 *_pipeline/stdout.log
+    for merge_path in sorted(repo_root.glob("data/*/*/*/merge_*.log")):
+        parts = merge_path.relative_to(repo_root).parts
+        if len(parts) != 5 or parts[1] == "logs":
+            continue
+        add_file(ensure_task("/".join(parts[1:4])), merge_path)
+    if out_root.is_dir():
+        for pipeline_dir in sorted(out_root.glob("*_pipeline")):
+            stdout_path = pipeline_dir / "stdout.log"
+            if not stdout_path.is_file():
+                continue
+            prefix = pipeline_dir.name[: -len("_pipeline")]
+            region_key = prefix_to_region.get(prefix)
+            add_file(ensure_task(region_key or pipeline_dir.name), stdout_path)
+
+    # 库表更新：data/logs/update/*.log（每个文件作为一条任务）
+    update_tasks: dict[str, dict] = {}
+    for item in collect("data/logs/update/*.log"):
+        update_tasks[item["path"]] = {"key": item["path"], "label": item["name"], "files": [item]}
+
+    def sort_tasks(tasks: dict[str, dict]) -> list[dict]:
+        return sorted(
+            (task for task in tasks.values() if task["files"]),
+            key=lambda task: task["key"].lower(),
+        )
+
+    return {
+        "ok": True,
+        "groups": [
+            {
+                "key": "download",
+                "label": "建筑数据下载",
+                "global": download_global,
+                "tasks": sort_tasks(download_tasks),
+            },
+            {
+                "key": "process",
+                "label": "数据处理",
+                "global": process_global,
+                "tasks": sort_tasks(process_tasks),
+            },
+            {
+                "key": "update",
+                "label": "库表更新",
+                "global": [],
+                "tasks": sort_tasks(update_tasks),
+            },
+        ],
+    }
+
+
+def read_log_file(repo_root: Path, rel_path: str, lines: int) -> dict:
+    target = _resolve_log_path(repo_root, rel_path)
+    if target is None:
+        raise ValueError("日志文件不存在或不允许访问")
+    text = lib.read_log_text(target)
+    all_lines = text.splitlines()
+    total = len(all_lines)
+    shown = all_lines[-lines:] if lines > 0 else all_lines
+    stat = target.stat()
+    return {
+        "ok": True,
+        "path": rel_path,
+        "size": stat.st_size,
+        "mtime": datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds"),
+        "total_lines": total,
+        "lines": shown,
+        "truncated": total > len(shown),
+    }
+
+
 def build_control_snapshot(config: dict) -> dict:
     detected = detect_batch()
     current = detected["tile_workers"] or DEFAULT_TILE_WORKERS
@@ -1996,6 +2291,26 @@ class StatusHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/env":
             body = json.dumps(check_environment(config), ensure_ascii=False).encode("utf-8")
+            self._send(200, body, "application/json; charset=utf-8")
+            return
+        if path == "/api/logs":
+            body = json.dumps(list_log_files(config["repo_root"], config["process_db"]), ensure_ascii=False).encode("utf-8")
+            self._send(200, body, "application/json; charset=utf-8")
+            return
+        if path == "/api/log":
+            query = parse_qs(urlparse(self.path).query)
+            rel_path = (query.get("path") or [""])[0]
+            lines = parse_int_query(query, "lines", 200, 1, 5000)
+            try:
+                payload = read_log_file(config["repo_root"], rel_path, lines)
+            except ValueError as exc:
+                self._send(
+                    400,
+                    json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+                return
+            body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self._send(200, body, "application/json; charset=utf-8")
             return
         if path == "/api/db_updated/import-status":

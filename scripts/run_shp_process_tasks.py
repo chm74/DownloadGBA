@@ -1057,6 +1057,7 @@ def merge_task_shp_parts(
                 f"合并后 .{suffix} 预计 {size / (1 << 30):.2f}GB 超过 {max_output_gb:g}GB"
                 "（Shapefile 单文件上限约 2GB），无法合并为一个 SHP"
             )
+            log(f"[MERGE] 拒绝：{message}")
             add_event("PROCESS_MERGE_REJECT", message)
             raise ValueError(message)
 

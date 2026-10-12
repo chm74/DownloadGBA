@@ -48,7 +48,10 @@
   .merge-msg.running { color:var(--muted); }
   .merge-msg.ok { color:var(--ok); }
   .merge-msg.error { color:var(--err); }
+  .merge-msg.clickable { cursor:pointer; text-decoration:underline; }
+  .db-import-log { color:var(--err); cursor:pointer; text-decoration:underline; font-size:12px; margin-left:6px; white-space:nowrap; }
   .merge-hint { color:var(--warn); font-size:12px; margin-right:6px; }
+  .merge-advice { color:var(--warn); font-size:12px; margin-top:2px; }
   .msg-toast-wrap { position:fixed; top:20px; right:20px; z-index:9999; display:flex; flex-direction:column; align-items:flex-end; gap:10px; pointer-events:none; }
   .msg-toast { min-width:220px; max-width:520px; padding:10px 16px; border-radius:6px; background:#fff; color:#1f2328; font-size:14px; line-height:1.5; box-shadow:0 2px 12px rgba(0,0,0,.15); border:1px solid #ebeef5; opacity:0; transform:translateX(16px); transition:opacity .25s ease, transform .25s ease; }
   .msg-toast.show { opacity:1; transform:translateX(0); }
@@ -100,6 +103,19 @@
   .error-banner { background:rgba(220,38,38,.12); border:1px solid var(--err); color:var(--err); border-radius:8px; padding:10px 12px; margin-bottom:16px; }
   .config-warning { display:flex; gap:12px; align-items:center; flex-wrap:wrap; background:rgba(220,38,38,.12); border:1px solid var(--err); color:var(--err); border-radius:8px; padding:10px 12px; margin-bottom:16px; font-size:13px; }
   .empty { color:var(--muted); font-size:13px; }
+  .log-group { margin-bottom:12px; }
+  .log-group-title { font-size:12px; color:var(--muted); margin:0 0 6px; font-weight:600; }
+  .log-group > summary { cursor:pointer; font-size:12px; color:var(--muted); font-weight:600; margin:0 0 6px; }
+  .log-group-body { margin:0 0 4px; }
+  .log-item { display:flex; justify-content:space-between; gap:8px; padding:4px 8px; border:1px solid var(--line); border-radius:6px; margin-bottom:4px; cursor:pointer; font-size:12px; }
+  .log-item:hover { background:rgba(127,127,127,.08); }
+  .log-item.active { border-color:var(--accent); color:var(--accent); }
+  .log-item .name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .log-item .meta { color:var(--muted); white-space:nowrap; }
+  .log-subtitle { font-size:11px; color:var(--muted); margin:6px 0 4px; }
+  .log-task { margin:4px 0; }
+  .log-task > summary { cursor:pointer; font-size:12px; padding:2px 4px; }
+  .log-task-files { padding-left:10px; }
   footer { color:var(--muted); font-size:12px; text-align:center; margin-top:8px; }
   a { color:var(--accent); }
   @media (max-width: 760px) {
@@ -131,6 +147,7 @@
     <button type="button" class="tab active" data-tab="download">建筑数据下载</button>
     <button type="button" class="tab" data-tab="processing">数据处理</button>
     <button type="button" class="tab" data-tab="dbupdated">库表更新</button>
+    <button type="button" class="tab" data-tab="logs">日志</button>
     <button type="button" class="tab" data-tab="config">配置</button>
   </nav>
 
@@ -338,6 +355,11 @@
             <button type="button" class="subtab" data-dfilter="updated">更新到库（<span id="d-count-updated">0</span>）</button>
           </div>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+            <label class="muted">搜索
+              <input id="d-search" type="text" placeholder="数据集 / 前缀，如 中国 / jilin" style="margin-left:4px;padding:4px 6px;width:200px;">
+            </label>
+            <button id="d-search-button" type="button" style="padding:4px 10px;cursor:pointer;">搜索</button>
+            <button id="d-search-clear" type="button" style="padding:4px 10px;cursor:pointer;">清除</button>
             <span id="d-summary" class="muted">-</span>
             <label class="muted">每页
               <select id="d-page-size" style="margin-left:4px;padding:3px 6px;">
@@ -423,6 +445,36 @@
             <button id="cfg-save" type="button" style="padding:6px 16px;cursor:pointer;">保存</button>
             <span id="cfg-message" class="muted"></span>
           </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-logs" hidden>
+    <div class="layout">
+      <aside class="sidebar" style="flex:0 0 320px;">
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;">
+          <input id="log-search" type="text" placeholder="搜索日志文件名" style="flex:1 1 auto;min-width:0;padding:4px 6px;">
+          <button id="log-refresh-list" type="button" style="padding:4px 10px;cursor:pointer;">刷新</button>
+        </div>
+        <div id="log-list"><div class="empty">暂无日志</div></div>
+      </aside>
+      <main class="main">
+        <section style="border:none;background:transparent;padding:0;">
+          <div class="sticky-toolbar">
+            <span id="log-current" class="muted">未选择日志</span>
+            <label class="muted">行数
+              <select id="log-lines" style="margin-left:4px;padding:3px 6px;">
+                <option value="100">100</option>
+                <option value="200" selected>200</option>
+                <option value="500">500</option>
+                <option value="2000">2000</option>
+              </select>
+            </label>
+            <label class="muted"><input id="log-auto" type="checkbox"> 自动刷新</label>
+            <button id="log-reload" type="button" style="padding:4px 10px;cursor:pointer;">刷新</button>
+          </div>
+          <pre id="log-view" class="log" style="min-height:320px;max-height:72vh;overflow:auto;white-space:pre;">未选择日志</pre>
         </section>
       </main>
     </div>
@@ -673,6 +725,7 @@ const TAB_PANELS = {
   download: "panel-download",
   processing: "panel-processing",
   dbupdated: "panel-db-updated",
+  logs: "panel-logs",
   config: "panel-config",
 };
 
@@ -686,6 +739,8 @@ function switchTab(name) {
   });
   if (typeof updateStickyHeadOffsets === "function") updateStickyHeadOffsets();
   if (target === "config") loadConfig();
+  if (target === "logs") loadLogs();
+  else setLogAuto(false);
   try {
     localStorage.setItem("gba_tab", target);
   } catch (error) {
@@ -697,6 +752,8 @@ document.querySelectorAll(".tab").forEach((button) => {
   button.addEventListener("click", () => switchTab(button.dataset.tab));
 });
 
+let logState = { current: null, autoTimer: null, data: null };
+
 let initialTab = "download";
 try {
   initialTab = localStorage.getItem("gba_tab") || "download";
@@ -704,6 +761,125 @@ try {
   initialTab = "download";
 }
 switchTab(initialTab);
+
+// ---- 日志看板 ----
+async function loadLogs() {
+  const list = document.getElementById("log-list");
+  if (!list) return;
+  try {
+    const response = await fetch("/api/logs", { cache: "no-store" });
+    if (!response.ok) throw new Error(String(response.status));
+    const data = await response.json();
+    logState.data = data;
+    renderLogList();
+  } catch (error) {
+    list.innerHTML = '<div class="empty">日志列表加载失败：' + esc(String(error)) + "</div>";
+  }
+}
+
+function renderLogList() {
+  const box = document.getElementById("log-list");
+  const filter = (document.getElementById("log-search").value || "").trim().toLowerCase();
+  const groups = (logState.data && logState.data.groups) || [];
+  let html = "";
+  let any = false;
+
+  const fileMatches = (f) =>
+    !filter
+    || (f.name || "").toLowerCase().includes(filter)
+    || (f.label || "").toLowerCase().includes(filter)
+    || (f.path || "").toLowerCase().includes(filter);
+
+  const renderFiles = (files) => files.map((f) => {
+    const active = logState.current === f.path ? " active" : "";
+    return `<div class="log-item${active}" data-log-path="${esc(f.path)}" title="${esc(f.path)}">`
+      + `<span class="name">${esc(f.label || f.name)}</span>`
+      + `<span class="meta">${fmtBytes(f.size)}</span></div>`;
+  }).join("");
+
+  for (const group of groups) {
+    const globalFiles = (group.global || []).filter(fileMatches);
+    const tasks = (group.tasks || []).map((task) => {
+      const labelHit = !!filter && (task.label || "").toLowerCase().includes(filter);
+      const files = (task.files || []).filter((f) => labelHit || fileMatches(f));
+      return { task, files };
+    }).filter((item) => item.files.length > 0);
+
+    if (globalFiles.length === 0 && tasks.length === 0) continue;
+    any = true;
+    const totalFiles = globalFiles.length + tasks.reduce((sum, item) => sum + item.files.length, 0);
+    const containsCurrent = globalFiles.some((f) => f.path === logState.current)
+      || tasks.some((item) => item.files.some((f) => f.path === logState.current));
+    const groupOpen = containsCurrent || !!filter;
+    html += `<details class="log-group"${groupOpen ? " open" : ""}`
+      + `><summary>${esc(group.label)}（${totalFiles}）</summary><div class="log-group-body">`;
+    if (globalFiles.length) {
+      html += `<div class="log-subtitle">执行器日志</div>` + renderFiles(globalFiles);
+    }
+    for (const item of tasks) {
+      const open = item.files.some((f) => f.path === logState.current) ? " open" : "";
+      html += `<details class="log-task"${open}><summary>${esc(item.task.label)}（${item.files.length}）</summary>`
+        + `<div class="log-task-files">${renderFiles(item.files)}</div></details>`;
+    }
+    html += "</div></details>";
+  }
+  box.innerHTML = any ? html : '<div class="empty">没有匹配的日志</div>';
+}
+
+async function reloadCurrentLog() {
+  if (!logState.current) return;
+  const view = document.getElementById("log-view");
+  const lines = parseInt(document.getElementById("log-lines").value, 10) || 200;
+  try {
+    const response = await fetch(
+      `/api/log?path=${encodeURIComponent(logState.current)}&lines=${lines}`,
+      { cache: "no-store" }
+    );
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      view.textContent = "读取失败：" + (data.error || response.status);
+      return;
+    }
+    const head = data.truncated ? `…（仅显示末尾 ${data.lines.length}/${data.total_lines} 行）\n` : "";
+    view.textContent = head + ((data.lines || []).join("\n") || "(空)");
+    view.scrollTop = view.scrollHeight;
+  } catch (error) {
+    view.textContent = "读取失败：" + error;
+  }
+}
+
+async function openLog(relPath) {
+  logState.current = relPath;
+  document.getElementById("log-current").textContent = relPath;
+  renderLogList();
+  await reloadCurrentLog();
+}
+
+function jumpToLog(relPath) {
+  if (!relPath) return;
+  switchTab("logs");
+  openLog(relPath);
+}
+
+function setLogAuto(on) {
+  if (logState.autoTimer) {
+    clearInterval(logState.autoTimer);
+    logState.autoTimer = null;
+  }
+  if (on) {
+    logState.autoTimer = setInterval(reloadCurrentLog, 3000);
+  }
+}
+
+document.getElementById("log-refresh-list").addEventListener("click", loadLogs);
+document.getElementById("log-reload").addEventListener("click", reloadCurrentLog);
+document.getElementById("log-lines").addEventListener("change", reloadCurrentLog);
+document.getElementById("log-auto").addEventListener("change", (event) => setLogAuto(event.target.checked));
+document.getElementById("log-search").addEventListener("input", renderLogList);
+document.getElementById("log-list").addEventListener("click", (event) => {
+  const item = event.target.closest(".log-item");
+  if (item && item.dataset.logPath) openLog(item.dataset.logPath);
+});
 
 function renderRecent(items) {
   const box = document.getElementById("recent-table");
@@ -891,14 +1067,30 @@ function renderProcessingQueue(processing) {
         const isLast = index === items.length - 1;
         const key = esc(item.dataset_key);
         const note = item.note || "";
-        const merge = mergeMsgState[item.dataset_key];
+        const shpCount = Number(item.shp_count ?? 0);
+        const needsMerge = shpCount >= 2;
+        let merge = needsMerge ? (mergeMsgState[item.dataset_key] || null) : null;
+        if (!merge && needsMerge && item.merge_state === "error") {
+          merge = { text: "失败", kind: "error", busy: false, detail: item.merge_error || "合并失败" };
+        } else if (!merge && needsMerge && item.merge_state === "running") {
+          merge = { text: "合并中…", kind: "running", busy: true, detail: "合并中…" };
+        }
         const mergeBusy = !!(merge && merge.busy);
         const mergeText = merge ? merge.text : "";
         const mergeKind = merge ? merge.kind : "";
-        const shpCount = Number(item.shp_count ?? 0);
-        const needsMerge = shpCount >= 2;
+        const mergeDetail = merge ? (merge.detail || merge.text || "") : "";
         const mergeHint = needsMerge ? `<span class="merge-hint">⚠ 需先合并（${shpCount} 个分卷）后方可处理</span>` : "";
         const mergeTitle = needsMerge ? "点击自动合并为单个 SHP" : "仅 1 个 SHP，无需合并";
+        const mergeLogRel = item.merge_log || ((item.source_dir && item.process_name_prefix)
+          ? `${item.source_dir}/merge_${item.process_name_prefix}.log`
+          : "");
+        const mergeClickable = mergeKind === "error" && mergeLogRel;
+        const mergeMsgTitle = mergeClickable ? `${mergeDetail}｜点击查看日志` : mergeDetail;
+        const mergeOverLimit = mergeKind === "error"
+          && /Shapefile 单文件上限|无法合并为一个 SHP|超过/.test(mergeDetail);
+        const mergeAdvice = mergeOverLimit
+          ? "单文件超 2GB，无法自动合并：请在 QGIS 手动合并为单个 SHP，再点「同步队列」"
+          : "";
         return `
         <tr>
           <td class="order-cell">
@@ -917,7 +1109,8 @@ function renderProcessingQueue(processing) {
                      data-note-key="${key}" data-saved="${esc(note)}" value="${esc(note)}"></td>
           <td>
             ${mergeHint}<button type="button" class="mini" title="${mergeTitle}" data-auto-merge="${key}" data-source-dir="${esc(item.source_dir || "")}" data-shp-count="${esc(item.shp_count ?? 0)}" ${(needsMerge && !mergeBusy) ? "" : "disabled"}>自动合并</button>
-            <span class="merge-msg ${mergeKind}" data-merge-msg="${key}" title="${esc(mergeText)}">${esc(mergeText)}</span>
+            <span class="merge-msg ${mergeKind}${mergeClickable ? " clickable" : ""}" data-merge-msg="${key}"${mergeClickable ? ` data-merge-log="${esc(mergeLogRel)}"` : ""} title="${esc(mergeMsgTitle)}">${esc(mergeText)}</span>
+            ${mergeAdvice ? `<div class="merge-advice">${esc(mergeAdvice)}</div>` : ""}
           </td>
         </tr>`;
       }).join("")}
@@ -1097,6 +1290,11 @@ async function autoMergeParts(datasetKey, button) {
 }
 
 document.getElementById("p-queue-table").addEventListener("click", (event) => {
+  const mergeMsg = event.target.closest(".merge-msg[data-merge-log]");
+  if (mergeMsg) {
+    jumpToLog(mergeMsg.dataset.mergeLog);
+    return;
+  }
   const mergeButton = event.target.closest("button[data-auto-merge]");
   if (mergeButton && !mergeButton.disabled) {
     autoMergeParts(mergeButton.dataset.autoMerge, mergeButton);
@@ -1335,16 +1533,21 @@ function renderProcessing(processing) {
   renderProcessingFailed(processing);
 }
 
-const dbUpdateState = { page: 1, pageSize: 15, rows: [], filter: "pending" };
+const dbUpdateState = { page: 1, pageSize: 15, rows: [], filter: "pending", search: "" };
 const dbImportMsgState = {};
 const dbImportChecked = {};
 const dbNoteState = { editingKey: null };
 
 function dbUpdateFilteredRows() {
   const allRows = dbUpdateState.rows || [];
-  return allRows.filter(item =>
-    dbUpdateState.filter === "updated" ? !!item.updated : !item.updated
-  );
+  const query = (dbUpdateState.search || "").trim().toLowerCase();
+  return allRows.filter(item => {
+    const byFilter = dbUpdateState.filter === "updated" ? !!item.updated : !item.updated;
+    if (!byFilter) return false;
+    if (!query) return true;
+    const haystack = `${item.dataset_key || ""} ${item.display_name || ""} ${item.process_name_prefix || ""}`.toLowerCase();
+    return haystack.includes(query);
+  });
 }
 
 function renderDbUpdateTable() {
@@ -1368,7 +1571,9 @@ function renderDbUpdateTable() {
   const pageSize = dbUpdateState.pageSize;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   dbUpdateState.page = Math.min(Math.max(dbUpdateState.page, 1), totalPages);
-  document.getElementById("d-summary").textContent = `共 ${total} 条`;
+  document.getElementById("d-summary").textContent = dbUpdateState.search
+    ? `共 ${total} 条（搜索「${dbUpdateState.search}」）`
+    : `共 ${total} 条`;
   document.getElementById("d-page-label").textContent = `第 ${dbUpdateState.page}/${totalPages} 页`;
   document.getElementById("d-first").disabled = dbUpdateState.page <= 1;
   document.getElementById("d-prev").disabled = dbUpdateState.page <= 1;
@@ -1402,8 +1607,12 @@ function renderDbUpdateTable() {
         const detailCell = showDetail ? `<td title="${esc(detTitle)}">${esc(detText)}</td>` : "";
         const updatedAtCell = showUpdatedAt ? `<td class="mono">${esc(row.updated_at || "-")}</td>` : "";
         const busy = !!(dbImportMsgState[row.dataset_key] && dbImportMsgState[row.dataset_key].busy);
+        const importFailed = row.import_detail && row.import_detail.state === "error" && row.import_detail.import_log;
+        const importFailLink = importFailed
+          ? ` <span class="db-import-log" data-import-log="${esc(row.import_detail.import_log)}" title="点击查看入库日志">入库失败 · 查看日志</span>`
+          : "";
         const actionCell = showAction
-          ? `<td><button type="button" class="mini" data-import-db="${esc(row.dataset_key)}" title="先检查共享目录与处理产物是否一致，再执行入库" ${busy ? "disabled" : ""}>更新到库</button></td>`
+          ? `<td><button type="button" class="mini" data-import-db="${esc(row.dataset_key)}" title="先检查共享目录与处理产物是否一致，再执行入库" ${busy ? "disabled" : ""}>更新到库</button>${importFailLink}</td>`
           : "";
         const note = row.note || "";
         return `
@@ -1499,6 +1708,26 @@ document.querySelectorAll(".subtab").forEach((button) => {
   });
 });
 
+const dSearchInput = document.getElementById("d-search");
+function applyDbSearch() {
+  dbUpdateState.search = (dSearchInput.value || "").trim();
+  dbUpdateState.page = 1;
+  renderDbUpdateTable();
+}
+document.getElementById("d-search-button").addEventListener("click", applyDbSearch);
+document.getElementById("d-search-clear").addEventListener("click", () => {
+  dSearchInput.value = "";
+  dbUpdateState.search = "";
+  dbUpdateState.page = 1;
+  renderDbUpdateTable();
+});
+dSearchInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    applyDbSearch();
+  }
+});
+
 async function saveDbNote(input) {
   const rowElement = input.closest("tr");
   const key = input.dataset.noteKey;
@@ -1572,6 +1801,7 @@ function pollDbImport(datasetKey, button, originalText) {
         showMessage("入库失败：" + (data.message || data.error || "未知错误"), "error");
         button.disabled = false;
         button.textContent = originalText;
+        await refreshDbUpdated();
       }
     } catch (error) {
       clearInterval(timer);
@@ -1627,6 +1857,11 @@ async function importToDb(datasetKey, button) {
 }
 
 document.getElementById("d-table").addEventListener("click", (event) => {
+  const logLink = event.target.closest("[data-import-log]");
+  if (logLink) {
+    jumpToLog(logLink.dataset.importLog);
+    return;
+  }
   const button = event.target.closest("button[data-import-db]");
   if (!button || button.disabled) return;
   importToDb(button.dataset.importDb, button);
