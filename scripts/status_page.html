@@ -50,8 +50,10 @@
   .merge-msg.error { color:var(--err); }
   .merge-msg.clickable { cursor:pointer; text-decoration:underline; }
   .db-import-log { color:var(--err); cursor:pointer; text-decoration:underline; font-size:12px; margin-left:6px; white-space:nowrap; }
-  .merge-hint { color:var(--warn); font-size:12px; margin-right:6px; }
-  .merge-advice { color:var(--warn); font-size:12px; margin-top:2px; }
+  .merge-badge { display:inline-block; padding:1px 7px; border-radius:999px; font-size:12px; white-space:nowrap; }
+  .merge-badge.warn { color:var(--warn); background:rgba(217,119,6,.15); }
+  .merge-badge.err { color:var(--err); background:rgba(220,38,38,.15); cursor:pointer; }
+  .merge-badge.info { color:var(--muted); background:rgba(127,127,127,.12); }
   .msg-toast-wrap { position:fixed; top:20px; right:20px; z-index:9999; display:flex; flex-direction:column; align-items:flex-end; gap:10px; pointer-events:none; }
   .msg-toast { min-width:220px; max-width:520px; padding:10px 16px; border-radius:6px; background:#fff; color:#1f2328; font-size:14px; line-height:1.5; box-shadow:0 2px 12px rgba(0,0,0,.15); border:1px solid #ebeef5; opacity:0; transform:translateX(16px); transition:opacity .25s ease, transform .25s ease; }
   .msg-toast.show { opacity:1; transform:translateX(0); }
@@ -1074,22 +1076,25 @@ function renderProcessingQueue(processing) {
           merge = { text: "合并中…", kind: "running", busy: true, detail: "合并中…" };
         }
         const mergeBusy = !!(merge && merge.busy);
-        const mergeText = merge ? merge.text : "";
         const mergeKind = merge ? merge.kind : "";
         const mergeDetail = merge ? (merge.detail || merge.text || "") : "";
-        const mergeHint = needsMerge ? `<span class="merge-hint">⚠ 需先合并（${shpCount} 个分卷）后方可处理</span>` : "";
-        const mergeTitle = needsMerge ? "点击自动合并为单个 SHP" : "仅 1 个 SHP，无需合并";
+        const mergeFailed = mergeKind === "error";
+        const mergeOverLimit = mergeFailed
+          && /Shapefile 单文件上限|无法合并为一个 SHP|超过/.test(mergeDetail);
         const mergeLogRel = item.merge_log || ((item.source_dir && item.process_name_prefix)
           ? `${item.source_dir}/merge_${item.process_name_prefix}.log`
           : "");
-        const mergeClickable = mergeKind === "error" && mergeLogRel;
-        const mergeMsgTitle = mergeClickable ? `${mergeDetail}｜点击查看日志` : mergeDetail;
-        const mergeOverLimit = mergeKind === "error"
-          && /Shapefile 单文件上限|无法合并为一个 SHP|超过/.test(mergeDetail);
-        const mergeAdvice = mergeOverLimit
-          ? "单文件超 2GB，无法自动合并：请在 QGIS 手动合并为单个 SHP，再点「同步队列」"
+        const mergeBadgeTitle = mergeFailed
+          ? [mergeDetail, mergeOverLimit ? "单文件超 2GB，请手动合并为单个 SHP 后点「同步队列」" : "", mergeLogRel ? "点击查看日志" : ""]
+              .filter(Boolean).join("｜")
           : "";
-        const mergeFailed = mergeKind === "error";
+        const statusBadge = mergeFailed
+          ? `<span class="merge-badge err"${mergeLogRel ? ` data-merge-log="${esc(mergeLogRel)}"` : ""} title="${esc(mergeBadgeTitle)}">合并失败</span>`
+          : mergeBusy
+            ? `<span class="merge-badge info">合并中…</span>`
+            : needsMerge
+              ? `<span class="merge-badge warn" title="需先合并（${shpCount} 个分卷）后方可处理">待合并</span>`
+              : `待处理`;
         return `
         <tr>
           <td class="order-cell">
@@ -1103,13 +1108,11 @@ function renderProcessingQueue(processing) {
           <td class="mono">${esc(item.source_dir || "-")}</td>
           <td>${fmtNumber(item.feature_count)}</td>
           <td>${esc(item.shp_count ?? "-")}</td>
-          <td>待处理</td>
+          <td>${statusBadge}</td>
           <td><input class="note-input" type="text" maxlength="200" placeholder="添加备注"
                      data-note-key="${key}" data-saved="${esc(note)}" value="${esc(note)}"></td>
           <td>
-            ${mergeHint}<button type="button" class="mini" title="${mergeTitle}" data-auto-merge="${key}" data-source-dir="${esc(item.source_dir || "")}" data-shp-count="${esc(item.shp_count ?? 0)}" ${(needsMerge && !mergeBusy) ? "" : "disabled"}>自动合并</button>
-            <span class="merge-msg ${mergeKind}${mergeClickable ? " clickable" : ""}" data-merge-msg="${key}"${mergeClickable ? ` data-merge-log="${esc(mergeLogRel)}"` : ""} title="${esc(mergeMsgTitle)}">${esc(mergeText)}</span>
-            ${mergeAdvice ? `<div class="merge-advice">${esc(mergeAdvice)}</div>` : ""}
+            <button type="button" class="mini" title="${needsMerge ? "点击自动合并为单个 SHP" : "仅 1 个 SHP，无需合并"}" data-auto-merge="${key}" data-source-dir="${esc(item.source_dir || "")}" data-shp-count="${esc(item.shp_count ?? 0)}" ${(needsMerge && !mergeBusy) ? "" : "disabled"}>自动合并</button>
             ${mergeFailed && item.source_dir ? `<button type="button" class="mini" data-open-folder="${esc(item.source_dir)}" title="在资源管理器中打开该任务的来源目录">打开目录</button>` : ""}
           </td>
         </tr>`;
@@ -1290,7 +1293,7 @@ async function autoMergeParts(datasetKey, button) {
 }
 
 document.getElementById("p-queue-table").addEventListener("click", (event) => {
-  const mergeMsg = event.target.closest(".merge-msg[data-merge-log]");
+  const mergeMsg = event.target.closest("[data-merge-log]");
   if (mergeMsg) {
     jumpToLog(mergeMsg.dataset.mergeLog);
     return;
