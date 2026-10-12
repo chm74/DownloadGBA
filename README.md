@@ -76,7 +76,7 @@ python scripts/export_world_building_tasks.py
 Remove-Item Env:PGPASSWORD
 ```
 
-连接参数的默认值为 `building`、`postgres`、`127.0.0.1`、`5432`，可分别通过 `--dbname`、`--user`、`--host`、`--port` 覆盖；也可用 `--output` 指定清单位置。脚本依赖 PostgreSQL 自带的 `psql` 客户端，不需要额外安装 Python 数据库驱动。
+连接参数的默认值为 `building`、`postgres`、`172.16.1.145`、`5432`，可分别通过 `--dbname`、`--user`、`--host`、`--port` 覆盖；也可用 `--output` 指定清单位置。脚本依赖 PostgreSQL 自带的 `psql` 客户端，不需要额外安装 Python 数据库驱动。
 
 ### 1. `scripts/download_gba_lod1_wfs.py`
 
@@ -551,7 +551,7 @@ powershell -ExecutionPolicy Bypass -File setup.ps1
 | 配置 | 位置 | 说明 |
 |---|---|---|
 | git 代理 | `拉取更新.txt` | 改成新机器代理（如 `http.proxy=http://127.0.0.1:7890`），无代理则删 |
-| 数据库 + 共享目录 | `data/config.json`（看板「配置」页保存）；直跑工具时用 `Tools/Twopyshp2pgsql/.env` | `PG_DBNAME/PG_USER/PG_PASSWORD/PG_HOST/PG_PORT`、`DATA_ROOT` |
+| 数据库 + 共享目录 | `data/config.json`（随仓库自带；可直接编辑或用看板「配置」页保存）；直跑工具时用 `Tools/Twopyshp2pgsql/.env` | `PG_DBNAME/PG_USER/PG_PASSWORD/PG_HOST/PG_PORT`、`DATA_ROOT` |
 | 导出清单口令 | `data/config.json` 优先；可选环境变量 `PGPASSWORD` | `export_world_building_tasks.py` 默认读 `data/config.json` |
 | 看板端口 | 防火墙入站 `8765` | 局域网访问需放行 |
 | （可选）限速 | 环境变量 `GBA_WFS_MIN_INTERVAL` | 默认 1.05 秒/请求 |

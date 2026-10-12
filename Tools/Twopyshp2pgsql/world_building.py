@@ -24,13 +24,13 @@ ENV_PATH = Path(__file__).resolve().parent / ".env"
 load_dotenv(ENV_PATH)
 
 TABLE = "world_building"
-DEFAULT_DATA_ROOT = r"\\192.168.2.121\BuildingData\AutoGenerate"
+DEFAULT_DATA_ROOT = r"\\172.16.0.116\BuildingData\AutoGenerete"
 
 DEFAULT_DB = {
     "dbname": "building",
     "user": "postgres",
     "password": "frontfree",
-    "host": "127.0.0.1",
+    "host": "172.16.1.145",
     "port": 5432,
 }
 

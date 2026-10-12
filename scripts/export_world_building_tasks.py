@@ -242,7 +242,7 @@ def resolve_db_args(args: argparse.Namespace) -> dict:
     return {
         "dbname": args.dbname or os.environ.get("PG_DBNAME") or defaults.get("dbname") or "building",
         "user": args.user or os.environ.get("PG_USER") or defaults.get("user") or "postgres",
-        "host": args.host or os.environ.get("PG_HOST") or defaults.get("host") or "127.0.0.1",
+        "host": args.host or os.environ.get("PG_HOST") or defaults.get("host") or "172.16.1.145",
         "port": int(port),
         "password": (
             args.password

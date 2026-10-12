@@ -61,9 +61,9 @@ No Python at 'C:\Users\Administrator\AppData\Roaming\uv\python\cpython-3.12.12-w
 | PG_DBNAME | 数据库名 | building |
 | PG_USER | 用户名 | postgres |
 | PG_PASSWORD | 密码 | frontfree |
-| PG_HOST | 主机 | 127.0.0.1 |
+| PG_HOST | 主机 | 172.16.1.145 |
 | PG_PORT | 端口 | 5432 |
-| DATA_ROOT | shp 数据根目录 | `\\192.168.2.121\BuildingData\AutoGenerate` |
+| DATA_ROOT | shp 数据根目录 | `\\172.16.0.116\BuildingData\AutoGenerete` |
 
 首次部署：
 
