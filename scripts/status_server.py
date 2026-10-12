@@ -2106,6 +2106,27 @@ def read_log_file(repo_root: Path, rel_path: str, lines: int) -> dict:
     }
 
 
+def open_local_folder(repo_root: Path, rel_path: str) -> str:
+    """在资源管理器中打开仓库 data 目录下的子目录（仅限白名单）。"""
+    if not rel_path:
+        raise ValueError("缺少目录参数")
+    repo_root = Path(repo_root).resolve()
+    data_root = (repo_root / "data").resolve()
+    candidate = (repo_root / rel_path).resolve()
+    try:
+        candidate.relative_to(data_root)
+    except ValueError:
+        raise ValueError("只允许打开仓库 data 目录下的路径")
+    if not candidate.is_dir():
+        raise ValueError(f"目录不存在：{candidate}")
+    if os.name == "nt":
+        os.startfile(str(candidate))  # noqa: S606 - Windows 打开资源管理器
+    else:
+        opener = "open" if sys.platform == "darwin" else "xdg-open"
+        subprocess.Popen([opener, str(candidate)])
+    return str(candidate)
+
+
 def build_control_snapshot(config: dict) -> dict:
     detected = detect_batch()
     current = detected["tile_workers"] or DEFAULT_TILE_WORKERS
@@ -2353,6 +2374,7 @@ class StatusHandler(BaseHTTPRequestHandler):
             "/api/process/stop",
             "/api/process/merge-parts",
             "/api/process/redownload",
+            "/api/open-folder",
             "/api/db_updated",
             "/api/db_updated/import",
             "/api/config",
@@ -2885,6 +2907,28 @@ class StatusHandler(BaseHTTPRequestHandler):
                 )
                 return
             self._send(200, json.dumps(result, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+            return
+
+        if path == "/api/open-folder":
+            try:
+                rel_path = str(payload.get("path") or "").strip()
+                opened = open_local_folder(config["repo_root"], rel_path)
+            except ValueError as exc:
+                self._send(
+                    400,
+                    json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+                return
+            except OSError as exc:
+                self._send(
+                    500,
+                    json.dumps({"ok": False, "error": f"打开失败: {exc}"}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+                return
+            body = json.dumps({"ok": True, "path": opened}, ensure_ascii=False).encode("utf-8")
+            self._send(200, body, "application/json; charset=utf-8")
             return
 
         try:

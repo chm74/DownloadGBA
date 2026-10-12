@@ -21,7 +21,7 @@
   .badge.done { background:var(--ok); }
   .badge.unknown { background:var(--muted); }
   .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin:0 0 16px; position:sticky; top:0; z-index:20; background:var(--bg); }
-  .queue-toolbar, .sticky-toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; padding-bottom:8px; position:sticky; top:40px; z-index:15; background:var(--card); border-bottom:1px solid var(--line); }
+  .queue-toolbar, .sticky-toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; padding-bottom:8px; position:sticky; top:var(--tabs-bottom, 40px); z-index:15; background:var(--card); border-bottom:1px solid var(--line); }
   .queue-toolbar { gap:6px 12px; }
   .queue-toolbar .qt-group { display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; }
   .queue-toolbar .qt-left { flex:1 1 auto; min-width:0; }
@@ -92,6 +92,7 @@
   tr:last-child td { border-bottom:none; }
   #queue-table thead th { position:sticky; top:var(--queue-head-top, 104px); z-index:9; background:var(--card); box-shadow:inset 0 -1px 0 var(--line); }
   #p-recent-table thead th { position:sticky; top:var(--recent-head-top, 104px); z-index:9; background:var(--card); box-shadow:inset 0 -1px 0 var(--line); }
+  #p-queue-table thead th { position:sticky; top:var(--p-queue-head-top, 40px); z-index:9; background:var(--card); box-shadow:inset 0 -1px 0 var(--line); }
   td.mono { font-family:Consolas, monospace; font-size:12px; word-break:break-all; }
   .cell-input { width:100%; min-width:110px; padding:3px 6px; font:inherit; font-size:12px; }
   .cell-check { width:16px; height:16px; cursor:pointer; }
@@ -843,6 +844,22 @@ function jumpToLog(relPath) {
   openLog(relPath);
 }
 
+async function openTaskFolder(relPath) {
+  try {
+    const response = await fetch("/api/open-folder", {
+      method: "POST",
+      headers: actionHeaders(),
+      body: JSON.stringify({ path: relPath }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      showMessage("打开失败：" + (data.error || response.status), "error");
+    }
+  } catch (error) {
+    showMessage("打开失败：" + error, "error");
+  }
+}
+
 function setLogAuto(on) {
   if (logState.autoTimer) {
     clearInterval(logState.autoTimer);
@@ -1072,6 +1089,7 @@ function renderProcessingQueue(processing) {
         const mergeAdvice = mergeOverLimit
           ? "单文件超 2GB，无法自动合并：请在 QGIS 手动合并为单个 SHP，再点「同步队列」"
           : "";
+        const mergeFailed = mergeKind === "error";
         return `
         <tr>
           <td class="order-cell">
@@ -1092,6 +1110,7 @@ function renderProcessingQueue(processing) {
             ${mergeHint}<button type="button" class="mini" title="${mergeTitle}" data-auto-merge="${key}" data-source-dir="${esc(item.source_dir || "")}" data-shp-count="${esc(item.shp_count ?? 0)}" ${(needsMerge && !mergeBusy) ? "" : "disabled"}>自动合并</button>
             <span class="merge-msg ${mergeKind}${mergeClickable ? " clickable" : ""}" data-merge-msg="${key}"${mergeClickable ? ` data-merge-log="${esc(mergeLogRel)}"` : ""} title="${esc(mergeMsgTitle)}">${esc(mergeText)}</span>
             ${mergeAdvice ? `<div class="merge-advice">${esc(mergeAdvice)}</div>` : ""}
+            ${mergeFailed && item.source_dir ? `<button type="button" class="mini" data-open-folder="${esc(item.source_dir)}" title="在资源管理器中打开该任务的来源目录">打开目录</button>` : ""}
           </td>
         </tr>`;
       }).join("")}
@@ -1274,6 +1293,11 @@ document.getElementById("p-queue-table").addEventListener("click", (event) => {
   const mergeMsg = event.target.closest(".merge-msg[data-merge-log]");
   if (mergeMsg) {
     jumpToLog(mergeMsg.dataset.mergeLog);
+    return;
+  }
+  const openFolder = event.target.closest("button[data-open-folder]");
+  if (openFolder) {
+    openTaskFolder(openFolder.dataset.openFolder);
     return;
   }
   const mergeButton = event.target.closest("button[data-auto-merge]");
@@ -2289,14 +2313,18 @@ refresh();
 setInterval(refresh, REFRESH_MS);
 
 function updateStickyHeadOffsets() {
+  const tabs = document.querySelector(".tabs");
+  const tabsBottom = tabs ? Math.round(tabs.getBoundingClientRect().height) : 40;
+  document.documentElement.style.setProperty("--tabs-bottom", tabsBottom + "px");
   const queueBar = document.querySelector(".queue-toolbar");
   if (queueBar && queueBar.offsetParent !== null) {
-    document.documentElement.style.setProperty("--queue-head-top", (40 + queueBar.offsetHeight + 1) + "px");
+    document.documentElement.style.setProperty("--queue-head-top", (tabsBottom + queueBar.offsetHeight + 1) + "px");
   }
   const processBar = document.querySelector(".sticky-toolbar");
   if (processBar && processBar.offsetParent !== null) {
-    document.documentElement.style.setProperty("--recent-head-top", (40 + processBar.offsetHeight + 1) + "px");
+    document.documentElement.style.setProperty("--recent-head-top", (tabsBottom + processBar.offsetHeight + 1) + "px");
   }
+  document.documentElement.style.setProperty("--p-queue-head-top", (tabsBottom + 1) + "px");
 }
 window.addEventListener("resize", updateStickyHeadOffsets);
 updateStickyHeadOffsets();
