@@ -87,6 +87,8 @@ MERGE_JOBS: dict[str, dict] = {}
 MERGE_LOCK = threading.Lock()
 DB_IMPORT_JOBS: dict[str, dict] = {}
 DB_IMPORT_LOCK = threading.Lock()
+DB_COPY_JOBS: dict[str, dict] = {}
+DB_COPY_LOCK = threading.Lock()
 
 CONTINENT_ZH = {
     "Africa": "非洲",
@@ -1099,10 +1101,150 @@ def build_db_import_status(repo_root: Path, dataset_key: str) -> dict:
     return snapshot
 
 
+def check_publish_ready(config: dict, dataset_key: str) -> dict:
+    """更新到库前置：共享目录该区域有 SHP，且处理产物 final 已清空（已发布）。"""
+    repo_root = Path(config["repo_root"])
+    parts = [part.strip() for part in dataset_key.split("|")]
+    if len(parts) != 3 or not all(parts):
+        raise ValueError("dataset_key 需为 洲|国家|区域 三段")
+    continent, country, region = parts
+    row = _process_task_row(config, dataset_key)
+    if row is None:
+        raise KeyError(f"未找到处理任务: {dataset_key}")
+    result_root = str(load_dashboard_config(repo_root).get("result_root") or "").strip()
+    if not result_root:
+        raise ValueError("未配置区域成果 SHP 共享目录")
+    share_dir = Path(result_root) / continent / country / region
+    base = {"continent": continent, "country": country, "region": region, "share_dir": str(share_dir)}
+    if not share_dir.is_dir():
+        return {**base, "ready": False, "message": f"共享目录不存在：{share_dir}；请先「拷贝到共享目录」"}
+    try:
+        share_shps = list(share_dir.glob("*.shp"))
+    except OSError as exc:
+        return {**base, "ready": False, "message": f"共享目录不可读：{exc}"}
+    if not share_shps:
+        return {**base, "ready": False, "message": f"共享目录无 SHP：{share_dir}；请先「拷贝到共享目录」"}
+    output_dir = row.get("output_dir")
+    if output_dir:
+        final_dir = (repo_root / output_dir).resolve() / "final"
+        if final_dir.is_dir():
+            try:
+                remaining = list(final_dir.glob("*_3857.shp"))
+            except OSError:
+                remaining = []
+            if remaining:
+                return {**base, "ready": False,
+                        "message": f"处理产物尚未全部拷贝（final 仍有 {len(remaining)} 个分片），请先「拷贝到共享目录」"}
+    return {**base, "ready": True, "message": "已发布，可入库"}
+
+
+def build_copy_status(dataset_key: str) -> dict:
+    with DB_COPY_LOCK:
+        job = DB_COPY_JOBS.get(dataset_key)
+        snapshot = dict(job) if job is not None else None
+    if snapshot is None:
+        return {"ok": True, "dataset_key": dataset_key, "state": "idle"}
+    snapshot["ok"] = snapshot.get("state") != "error"
+    snapshot["dataset_key"] = dataset_key
+    return snapshot
+
+
+def copy_final_to_share(config: dict, dataset_key: str) -> dict:
+    """清空共享目录该区域文件后，把处理产物 final 拷入，校验齐全后删除 final 内容。"""
+    repo_root = Path(config["repo_root"])
+    parts = [part.strip() for part in dataset_key.split("|")]
+    if len(parts) != 3 or not all(parts):
+        raise ValueError("dataset_key 需为 洲|国家|区域 三段")
+    continent, country, region = parts
+    row = _process_task_row(config, dataset_key)
+    if row is None:
+        raise KeyError(f"未找到处理任务: {dataset_key}")
+    if row.get("status") != process_queue.PROCESS_OK:
+        raise ValueError("任务尚未处理完成，无法拷贝")
+    output_dir = row.get("output_dir")
+    if not output_dir:
+        raise ValueError("处理产物目录未记录")
+    result_root = str(load_dashboard_config(repo_root).get("result_root") or "").strip()
+    if not result_root:
+        raise ValueError("未配置区域成果 SHP 共享目录")
+
+    final_dir = (repo_root / output_dir).resolve() / "final"
+    if not final_dir.is_dir():
+        raise ValueError(f"处理产物目录不存在：{final_dir}")
+    targets = sorted(final_dir.glob("*_3857.shp"))
+    if not targets:
+        raise ValueError("处理产物为空（final 已无 *_3857.shp）")
+
+    files: list[Path] = []
+    for shp in targets:
+        files.append(shp)
+        for suffix in process_queue.SIDECAR_SUFFIXES:
+            side = shp.with_suffix(suffix)
+            if side.is_file():
+                files.append(side)
+
+    share_dir = Path(result_root) / continent / country / region
+
+    with DB_COPY_LOCK:
+        existing = DB_COPY_JOBS.get(dataset_key)
+        if existing is not None and existing.get("state") == "running":
+            raise ValueError("该区域已有拷贝任务进行中")
+        DB_COPY_JOBS[dataset_key] = {
+            "state": "running",
+            "copied": 0,
+            "total": len(files),
+            "message": "开始拷贝…",
+            "error": None,
+            "share_dir": str(share_dir),
+            "updated_at": datetime.now().isoformat(timespec="seconds"),
+        }
+
+    def set_job(**fields) -> None:
+        with DB_COPY_LOCK:
+            job = DB_COPY_JOBS.get(dataset_key)
+            if job is not None:
+                job.update(updated_at=datetime.now().isoformat(timespec="seconds"), **fields)
+
+    def worker() -> None:
+        try:
+            share_dir.mkdir(parents=True, exist_ok=True)
+            for entry in share_dir.iterdir():
+                if entry.is_file():
+                    try:
+                        entry.unlink()
+                    except OSError:
+                        pass
+            copied = 0
+            total = len(files)
+            for src in files:
+                shutil.copy2(src, share_dir / src.name)
+                copied += 1
+                set_job(copied=copied, message=f"已拷贝 {copied}/{total}")
+            missing = [
+                src.name for src in files
+                if not (share_dir / src.name).is_file()
+                or (share_dir / src.name).stat().st_size != src.stat().st_size
+            ]
+            if missing:
+                raise ValueError(f"拷贝校验失败（缺失/大小不一致 {len(missing)} 个）：" + "、".join(missing[:5]))
+            for entry in final_dir.iterdir():
+                if entry.is_file():
+                    try:
+                        entry.unlink()
+                    except OSError:
+                        pass
+            set_job(state="done", error=None, message=f"已拷贝 {copied} 个文件并清空 final")
+        except Exception as exc:  # noqa: BLE001
+            set_job(state="error", error=str(exc), message=f"拷贝失败：{exc}")
+
+    threading.Thread(target=worker, name=f"copy-{dataset_key}", daemon=True).start()
+    return {"ok": True, "state": "running", "total": len(files), "share_dir": str(share_dir)}
+
+
 def start_db_import_job(config: dict, dataset_key: str) -> dict:
     repo_root = Path(config["repo_root"])
-    precheck = check_db_update_consistency(config, dataset_key)
-    if not precheck.get("consistent"):
+    precheck = check_publish_ready(config, dataset_key)
+    if not precheck.get("ready"):
         return {"ok": False, "state": "blocked", **precheck}
 
     python_exe = repo_root / DEFAULT_UPDATE_PYTHON
@@ -2391,6 +2533,11 @@ class StatusHandler(BaseHTTPRequestHandler):
             body = json.dumps(build_db_import_status(config["repo_root"], dataset_key), ensure_ascii=False).encode("utf-8")
             self._send(200, body, "application/json; charset=utf-8")
             return
+        if path == "/api/db_updated/copy-status":
+            dataset_key = (parse_qs(urlparse(self.path).query).get("dataset_key") or [""])[0]
+            body = json.dumps(build_copy_status(dataset_key), ensure_ascii=False).encode("utf-8")
+            self._send(200, body, "application/json; charset=utf-8")
+            return
         if path == "/api/db_updated":
             snapshot = build_db_update_snapshot(
                 repo_root=config["repo_root"],
@@ -2428,6 +2575,7 @@ class StatusHandler(BaseHTTPRequestHandler):
             "/api/sync-manifest",
             "/api/db_updated",
             "/api/db_updated/import",
+            "/api/db_updated/copy-to-share",
             "/api/config",
         ):
             self._send(404, b"not found", "text/plain; charset=utf-8")
@@ -2452,6 +2600,26 @@ class StatusHandler(BaseHTTPRequestHandler):
                 if not dataset_key:
                     raise ValueError("dataset_key 不能为空")
                 result = start_db_import_job(config, dataset_key)
+            except KeyError as exc:
+                status, error = 404, str(exc)
+            except ValueError as exc:
+                status, error = 400, str(exc)
+            except Exception as exc:  # noqa: BLE001
+                status, error = 500, str(exc)
+            else:
+                self._send(200, json.dumps(result, ensure_ascii=False).encode("utf-8"),
+                           "application/json; charset=utf-8")
+                return
+            self._send(status, json.dumps({"ok": False, "error": error}, ensure_ascii=False).encode("utf-8"),
+                       "application/json; charset=utf-8")
+            return
+
+        if path == "/api/db_updated/copy-to-share":
+            try:
+                dataset_key = str(payload.get("dataset_key") or "").strip()
+                if not dataset_key:
+                    raise ValueError("dataset_key 不能为空")
+                result = copy_final_to_share(config, dataset_key)
             except KeyError as exc:
                 status, error = 404, str(exc)
             except ValueError as exc:

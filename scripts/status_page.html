@@ -1539,6 +1539,7 @@ function renderProcessing(processing) {
 const dbUpdateState = { page: 1, pageSize: 15, rows: [], filter: "pending", search: "" };
 const dbImportMsgState = {};
 const dbImportChecked = {};
+const dbCopyMsgState = {};
 const dbNoteState = { editingKey: null };
 
 function dbUpdateFilteredRows() {
@@ -1610,12 +1611,14 @@ function renderDbUpdateTable() {
         const detailCell = showDetail ? `<td title="${esc(detTitle)}">${esc(detText)}</td>` : "";
         const updatedAtCell = showUpdatedAt ? `<td class="mono">${esc(row.updated_at || "-")}</td>` : "";
         const busy = !!(dbImportMsgState[row.dataset_key] && dbImportMsgState[row.dataset_key].busy);
+        const copyBusy = !!(dbCopyMsgState[row.dataset_key] && dbCopyMsgState[row.dataset_key].busy);
         const importFailed = row.import_detail && row.import_detail.state === "error" && row.import_detail.import_log;
         const importFailLink = importFailed
           ? ` <span class="db-import-log" data-import-log="${esc(row.import_detail.import_log)}" title="点击查看入库日志">入库失败 · 查看日志</span>`
           : "";
         const actionCell = showAction
-          ? `<td><button type="button" class="mini" data-import-db="${esc(row.dataset_key)}" title="先检查共享目录与处理产物是否一致，再执行入库" ${busy ? "disabled" : ""}>更新到库</button>${importFailLink}</td>`
+          ? `<td><button type="button" class="mini" data-copy-share="${esc(row.dataset_key)}" title="清空共享目录该区域文件后，把处理产物拷入（完成后删除 final）" ${copyBusy ? "disabled" : ""}>${copyBusy ? "拷贝中…" : "拷贝到共享目录"}</button>` +
+            `<button type="button" class="mini" data-import-db="${esc(row.dataset_key)}" title="以共享目录为准写入数据库（需先拷贝到共享目录）" ${busy ? "disabled" : ""}>更新到库</button>${importFailLink}</td>`
           : "";
         const note = row.note || "";
         return `
@@ -1817,7 +1820,7 @@ function pollDbImport(datasetKey, button, originalText) {
 }
 
 async function importToDb(datasetKey, button) {
-  if (!window.confirm(`确认对“${datasetKey}”执行“更新到库”？\n将先检查共享目录与处理产物是否一致，一致后才执行入库。`)) {
+  if (!window.confirm(`确认对“${datasetKey}”执行“更新到库”？\n将以共享目录内容写入数据库（需已「拷贝到共享目录」）。`)) {
     return;
   }
   const originalText = button.textContent;
@@ -1839,13 +1842,8 @@ async function importToDb(datasetKey, button) {
       return;
     }
     if (data.ok === false) {
-      const lines = [data.message || "内容不一致，请手动检查共享目录"];
-      if (data.missing && data.missing.length) lines.push(`缺失（${data.missing.length}）：` + data.missing.slice(0, 8).join("、"));
-      if (data.extra && data.extra.length) lines.push(`多余（${data.extra.length}）：` + data.extra.slice(0, 8).join("、"));
-      if (data.share_dir) lines.push(`共享目录：${data.share_dir}`);
-      window.alert(lines.join("\n"));
       dbImportMsgState[datasetKey] = { busy: false };
-      showMessage("内容不一致，请手动检查共享目录", "error");
+      showMessage(data.message || "请先「拷贝到共享目录」再更新到库", "error");
       button.disabled = false;
       button.textContent = originalText;
       return;
@@ -1865,10 +1863,81 @@ document.getElementById("d-table").addEventListener("click", (event) => {
     jumpToLog(logLink.dataset.importLog);
     return;
   }
+  const copyButton = event.target.closest("button[data-copy-share]");
+  if (copyButton && !copyButton.disabled) {
+    copyFinalToShare(copyButton.dataset.copyShare, copyButton);
+    return;
+  }
   const button = event.target.closest("button[data-import-db]");
   if (!button || button.disabled) return;
   importToDb(button.dataset.importDb, button);
 });
+
+async function copyFinalToShare(datasetKey, button) {
+  if (!window.confirm(`确认对“${datasetKey}”执行“拷贝到共享目录”？\n将先清空共享目录该区域的文件，再拷入处理产物；全部拷贝并校验一致后删除 final。`)) {
+    return;
+  }
+  const originalText = button.textContent;
+  dbCopyMsgState[datasetKey] = { busy: true };
+  button.disabled = true;
+  button.textContent = "拷贝中…";
+  try {
+    const response = await fetch("/api/db_updated/copy-to-share", {
+      method: "POST",
+      headers: actionHeaders(),
+      body: JSON.stringify({ dataset_key: datasetKey }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      dbCopyMsgState[datasetKey] = { busy: false };
+      showMessage("拷贝失败：" + (data.error || response.status), "error");
+      button.disabled = false;
+      button.textContent = originalText;
+      return;
+    }
+    pollCopyStatus(datasetKey, button, originalText);
+  } catch (error) {
+    dbCopyMsgState[datasetKey] = { busy: false };
+    showMessage("拷贝请求失败：" + error, "error");
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+}
+
+function pollCopyStatus(datasetKey, button, originalText) {
+  const timer = setInterval(async () => {
+    try {
+      const response = await fetch(
+        `/api/db_updated/copy-status?dataset_key=${encodeURIComponent(datasetKey)}`,
+        { cache: "no-store" }
+      );
+      const data = await response.json();
+      if (data.state === "running") {
+        button.textContent = `拷贝中 ${data.copied || 0}/${data.total || "?"}…`;
+        return;
+      }
+      clearInterval(timer);
+      dbCopyMsgState[datasetKey] = { busy: false };
+      if (data.state === "done") {
+        showMessage(`已拷贝 ${data.copied || 0} 个文件到共享目录`, "success");
+        await refreshDbUpdated();
+      } else if (data.state === "idle") {
+        button.disabled = false;
+        button.textContent = originalText;
+      } else {
+        showMessage("拷贝失败：" + (data.message || data.error || "未知错误"), "error");
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    } catch (error) {
+      clearInterval(timer);
+      dbCopyMsgState[datasetKey] = { busy: false };
+      showMessage("拷贝状态查询失败：" + error, "error");
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }, 1500);
+}
 
 async function loadConfig() {
   const message = document.getElementById("cfg-message");

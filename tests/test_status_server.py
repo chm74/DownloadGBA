@@ -2421,7 +2421,7 @@ class ControlTests(unittest.TestCase):
             repo_root = Path(tmp)
             key = "Europe|San_Marino|San_Marino"
             output_dir = "Tools/Oneshp_pipline_qgis/out_data/san_marino_pipeline"
-            self._make_tiles(repo_root / output_dir / "final", ["a_3857", "b_3857"])
+            (repo_root / output_dir / "final").mkdir(parents=True, exist_ok=True)
             share_root = repo_root / "share"
             share = share_root / "Europe" / "San_Marino" / "San_Marino"
             self._make_tiles(share, ["a_3857", "b_3857"])
@@ -2504,8 +2504,8 @@ class ControlTests(unittest.TestCase):
                     with urllib.request.urlopen(request, timeout=10) as response:
                         payload = json.loads(response.read().decode("utf-8"))
                 self.assertFalse(payload["ok"])
-                self.assertFalse(payload["consistent"])
-                self.assertIn("b_3857", payload["missing"])
+                self.assertFalse(payload["ready"])
+                self.assertIn("拷贝", payload["message"])
                 mocked.assert_not_called()
             finally:
                 server.shutdown()
