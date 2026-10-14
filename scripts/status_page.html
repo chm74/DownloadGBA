@@ -1618,7 +1618,7 @@ function renderDbUpdateTable() {
           : "";
         const actionCell = showAction
           ? `<td><button type="button" class="mini" data-copy-share="${esc(row.dataset_key)}" title="清空共享目录该区域文件后，把处理产物拷入（完成后删除 final）" ${copyBusy ? "disabled" : ""}>${copyBusy ? "拷贝中…" : "拷贝到共享目录"}</button>` +
-            `<button type="button" class="mini" data-import-db="${esc(row.dataset_key)}" title="以共享目录为准写入数据库（需先拷贝到共享目录）" ${busy ? "disabled" : ""}>更新到库</button>${importFailLink}</td>`
+            `<button type="button" class="mini" data-import-db="${esc(row.dataset_key)}" title="以共享目录为准写入数据库；数据处理内容到共享目录可自动或手动拷贝" ${busy ? "disabled" : ""}>更新到库</button>${importFailLink}</td>`
           : "";
         const note = row.note || "";
         return `

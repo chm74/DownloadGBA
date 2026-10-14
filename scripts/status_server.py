@@ -1102,7 +1102,13 @@ def build_db_import_status(repo_root: Path, dataset_key: str) -> dict:
 
 
 def check_publish_ready(config: dict, dataset_key: str) -> dict:
-    """更新到库前置：共享目录该区域有 SHP，且处理产物 final 已清空（已发布）。"""
+    """更新到库前置：共享目录该区域有 SHP，且内容齐全。
+
+    齐全的判定：
+    - 处理产物 final 仍在 → 共享目录需包含 final 的全部文件（名称一致、大小一致，适用于手动拷贝）；
+    - final 已清空（自动拷贝完成）→ 共享目录非空即可。
+    拷贝中断（共享目录缺文件/大小不一致）会被拦截。
+    """
     repo_root = Path(config["repo_root"])
     parts = [part.strip() for part in dataset_key.split("|")]
     if len(parts) != 3 or not all(parts):
@@ -1117,24 +1123,38 @@ def check_publish_ready(config: dict, dataset_key: str) -> dict:
     share_dir = Path(result_root) / continent / country / region
     base = {"continent": continent, "country": country, "region": region, "share_dir": str(share_dir)}
     if not share_dir.is_dir():
-        return {**base, "ready": False, "message": f"共享目录不存在：{share_dir}；请先「拷贝到共享目录」"}
+        return {**base, "ready": False, "message": f"共享目录不存在：{share_dir}；请先「拷贝到共享目录」或手动拷贝"}
     try:
         share_shps = list(share_dir.glob("*.shp"))
     except OSError as exc:
         return {**base, "ready": False, "message": f"共享目录不可读：{exc}"}
     if not share_shps:
-        return {**base, "ready": False, "message": f"共享目录无 SHP：{share_dir}；请先「拷贝到共享目录」"}
+        return {**base, "ready": False, "message": f"共享目录无 SHP：{share_dir}；请先「拷贝到共享目录」或手动拷贝"}
     output_dir = row.get("output_dir")
     if output_dir:
         final_dir = (repo_root / output_dir).resolve() / "final"
         if final_dir.is_dir():
             try:
-                remaining = list(final_dir.glob("*_3857.shp"))
+                sources: list[Path] = []
+                for shp in sorted(final_dir.glob("*_3857.shp")):
+                    sources.append(shp)
+                    for suffix in process_queue.SIDECAR_SUFFIXES:
+                        side = shp.with_suffix(suffix)
+                        if side.is_file():
+                            sources.append(side)
             except OSError:
-                remaining = []
-            if remaining:
+                sources = []
+            missing = []
+            for src in sources:
+                dest = share_dir / src.name
+                try:
+                    if not dest.is_file() or dest.stat().st_size != src.stat().st_size:
+                        missing.append(src.name)
+                except OSError:
+                    missing.append(src.name)
+            if missing:
                 return {**base, "ready": False,
-                        "message": f"处理产物尚未全部拷贝（final 仍有 {len(remaining)} 个分片），请先「拷贝到共享目录」"}
+                        "message": f"共享目录尚未齐全（缺 {len(missing)} 个 / 大小不一致）：请「拷贝到共享目录」或手动拷贝后再更新"}
     return {**base, "ready": True, "message": "已发布，可入库"}
 
 
