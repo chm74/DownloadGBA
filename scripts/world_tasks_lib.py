@@ -887,7 +887,7 @@ class StateStore:
     def close(self) -> None:
         self.conn.close()
 
-    def sync_manifest(self, tasks: list[Task]) -> dict:
+    def sync_manifest(self, tasks: list[Task], dry_run: bool = False) -> dict:
         added = 0
         updated = 0
         reset = 0
@@ -898,27 +898,28 @@ class StateStore:
         for order, task in enumerate(tasks):
             row = self.get(task.task_id)
             if row is None:
-                self.conn.execute(
-                    """
-                    INSERT INTO tasks (
-                        task_id, continent, country, city, download_dir,
-                        manifest_order, queue_order, status, attempts, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
-                    """,
-                    (
-                        task.task_id,
-                        task.continent,
-                        task.country,
-                        task.city,
-                        task.download_dir,
-                        order,
-                        next_queue_order,
-                        STATUS_PENDING,
-                        now,
-                    ),
-                )
+                if not dry_run:
+                    self.conn.execute(
+                        """
+                        INSERT INTO tasks (
+                            task_id, continent, country, city, download_dir,
+                            manifest_order, queue_order, status, attempts, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+                        """,
+                        (
+                            task.task_id,
+                            task.continent,
+                            task.country,
+                            task.city,
+                            task.download_dir,
+                            order,
+                            next_queue_order,
+                            STATUS_PENDING,
+                            now,
+                        ),
+                    )
+                    self.add_event(task.task_id, "IMPORT", f"source_row={task.source_row}")
                 next_queue_order += 1
-                self.add_event(task.task_id, "IMPORT", f"source_row={task.source_row}")
                 added += 1
                 continue
 
@@ -929,37 +930,40 @@ class StateStore:
                 or row["download_dir"] != task.download_dir
                 or row["manifest_order"] != order
             ):
-                self.conn.execute(
-                    """
-                    UPDATE tasks
-                    SET continent = ?, country = ?, city = ?, download_dir = ?,
-                        manifest_order = ?, updated_at = ?
-                    WHERE task_id = ?
-                    """,
-                    (
-                        task.continent,
-                        task.country,
-                        task.city,
-                        task.download_dir,
-                        order,
-                        now,
-                        task.task_id,
-                    ),
-                )
-                updated += 1
-                if row["download_dir"] != task.download_dir and row["status"] in SUCCESS_STATUSES:
+                if not dry_run:
                     self.conn.execute(
                         """
                         UPDATE tasks
-                        SET status = ?, feature_count = NULL, merge_output = NULL,
-                            last_error = NULL, updated_at = ?
+                        SET continent = ?, country = ?, city = ?, download_dir = ?,
+                            manifest_order = ?, updated_at = ?
                         WHERE task_id = ?
                         """,
-                        (STATUS_PENDING, now, task.task_id),
+                        (
+                            task.continent,
+                            task.country,
+                            task.city,
+                            task.download_dir,
+                            order,
+                            now,
+                            task.task_id,
+                        ),
                     )
-                    self.add_event(task.task_id, "RESET", "download_dir 变更，状态重置为 PENDING")
+                updated += 1
+                if row["download_dir"] != task.download_dir and row["status"] in SUCCESS_STATUSES:
+                    if not dry_run:
+                        self.conn.execute(
+                            """
+                            UPDATE tasks
+                            SET status = ?, feature_count = NULL, merge_output = NULL,
+                                last_error = NULL, updated_at = ?
+                            WHERE task_id = ?
+                            """,
+                            (STATUS_PENDING, now, task.task_id),
+                        )
+                        self.add_event(task.task_id, "RESET", "download_dir 变更，状态重置为 PENDING")
                     reset += 1
-        self.conn.commit()
+        if not dry_run:
+            self.conn.commit()
         return {"added": added, "updated": updated, "reset": reset}
 
     def get(self, task_id: str) -> dict | None:

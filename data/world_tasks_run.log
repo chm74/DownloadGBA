@@ -63,3 +63,13 @@
 [OK] Africa|Liberia|Liberia features=1351866 elapsed=4211s
 --- [13/256] Africa|Mali|Mali ---
 [RUN] Africa|Mali|Mali -> F:\建筑数据下载\DownloadGBA\data\Africa\Mali\Mali
+[FAILED] Africa|Mali|Mali: === 2026-10-12T12:36:31 START Africa|Mali|Mali attempt=1 ===
+[RETRY] Africa|Mali|Mali attempt=2
+[RUN] Africa|Mali|Mali -> F:\建筑数据下载\DownloadGBA\data\Africa\Mali\Mali
+[FAILED] Africa|Mali|Mali: === 2026-10-12T12:36:31 START Africa|Mali|Mali attempt=1 === | === 2026-10-12T19:29:34 START Africa|Mali|Mali attempt=2 ===
+--- [14/256] Africa|Libya|Libya ---
+[RUN] Africa|Libya|Libya -> F:\建筑数据下载\DownloadGBA\data\Africa\Libya\Libya
+[FAILED] Africa|Libya|Libya: === 2026-10-12T19:29:37 START Africa|Libya|Libya attempt=2 ===
+[RETRY] Africa|Libya|Libya attempt=2
+[RUN] Africa|Libya|Libya -> F:\建筑数据下载\DownloadGBA\data\Africa\Libya\Libya
+[FAILED] Africa|Libya|Libya: === 2026-10-12T19:29:37 START Africa|Libya|Libya attempt=2 === | === 2026-10-12T19:29:37 START Africa|Libya|Libya attempt=3 ===

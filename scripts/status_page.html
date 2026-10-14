@@ -20,6 +20,8 @@
   .badge.stopped { background:var(--warn); }
   .badge.done { background:var(--ok); }
   .badge.unknown { background:var(--muted); }
+  @keyframes blink { 50% { opacity:.35; } }
+  .blink { animation: blink 1s step-start infinite; }
   .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin:0 0 16px; position:sticky; top:0; z-index:20; background:var(--bg); }
   .queue-toolbar, .sticky-toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; padding-bottom:8px; position:sticky; top:var(--tabs-bottom, 40px); z-index:15; background:var(--card); border-bottom:1px solid var(--line); }
   .queue-toolbar { gap:6px 12px; }
@@ -180,6 +182,7 @@
     <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
       <button id="ctl-restart" style="padding:6px 14px;cursor:pointer;">重启批处理</button>
       <button id="ctl-stop" style="padding:6px 14px;cursor:pointer;color:#b91c1c;border-color:#b91c1c;">停止下载任务</button>
+      <button id="ctl-sync-manifest" style="padding:6px 14px;cursor:pointer;" title="在CSV中添加任务城市清单后，需要点CSV同步到状态库。">CSV同步到状态库</button>
       <span id="ctl-message" class="muted"></span>
     </div>
   </section>
@@ -2095,6 +2098,32 @@ document.getElementById("ctl-stop").addEventListener("click", async () => {
   }
 });
 
+document.getElementById("ctl-sync-manifest").addEventListener("click", async () => {
+  const message = document.getElementById("ctl-message");
+  message.textContent = "正在同步清单到状态库…";
+  try {
+    const response = await fetch("/api/sync-manifest", {
+      method: "POST",
+      headers: actionHeaders(),
+      body: JSON.stringify({}),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      const text = "同步失败：" + (data.error || response.status);
+      message.textContent = text;
+      showMessage(text, "error");
+      return;
+    }
+    const text = `已同步清单：新增 ${data.added}，更新 ${data.updated}，重置 ${data.reset}（共 ${data.total}）`;
+    message.textContent = text;
+    showMessage(text, "success");
+    await refresh();
+  } catch (error) {
+    message.textContent = "同步请求失败：" + error;
+    showMessage("同步请求失败：" + error, "error");
+  }
+});
+
 async function refreshProcessControl() {
   try {
     const response = await fetch("/api/process/control", { cache: "no-store" });
@@ -2188,6 +2217,7 @@ document.getElementById("pctl-sync").addEventListener("click", async () => {
 
 async function refresh() {
   const sequence = ++refreshSequence;
+  checkManifestDiff();
   try {
     const offset = (queueState.page - 1) * queueState.pageSize;
     const processRecentOffset = (processingRecentState.page - 1) * processingRecentState.pageSize;
@@ -2306,6 +2336,18 @@ document.getElementById("config-warning-close").addEventListener("click", () => 
 checkStartupConfig();
 refresh();
 setInterval(refresh, REFRESH_MS);
+
+async function checkManifestDiff() {
+  const button = document.getElementById("ctl-sync-manifest");
+  if (!button) return;
+  try {
+    const response = await fetch("/api/manifest-diff", { cache: "no-store" });
+    const data = await response.json();
+    button.classList.toggle("blink", !!data.changed);
+  } catch (error) {
+    /* 忽略比对失败 */
+  }
+}
 
 function updateStickyHeadOffsets() {
   const tabs = document.querySelector(".tabs");

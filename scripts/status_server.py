@@ -19,6 +19,7 @@ import run_shp_process_tasks as process_queue
 import world_tasks_lib as lib
 
 DEFAULT_STATE_DB = "data/world_building_download_tasks_state.db"
+DEFAULT_TASKS_CSV = "data/world_building_download_tasks.csv"
 DEFAULT_PROCESS_DB = "data/shp_process_state.db"
 DEFAULT_DB_UPDATE_FILE = "data/db_update_status.json"
 DEFAULT_PAGE = "scripts/status_page.html"
@@ -2230,6 +2231,51 @@ def restart_batch(config: dict, tile_workers: int) -> dict:
         }
 
 
+def sync_manifest_to_state(config: dict) -> dict:
+    """把任务清单 CSV 同步进下载状态库（只登记/更新/对账，不下载）。"""
+    repo_root = Path(config["repo_root"])
+    manifest_path = repo_root / DEFAULT_TASKS_CSV
+    if not manifest_path.is_file():
+        raise ValueError(f"未找到清单文件：{manifest_path}")
+
+    detected = detect_batch()
+    if detected.get("runner") or detected.get("workers"):
+        raise RuntimeError("下载运行中，请先「停止下载任务」再同步")
+
+    tasks = lib.read_manifest(manifest_path)
+    store = lib.StateStore(Path(config["state_db"]))
+    try:
+        result = store.sync_manifest(tasks)
+    finally:
+        store.close()
+    return {
+        "ok": True,
+        "total": len(tasks),
+        "added": result["added"],
+        "updated": result["updated"],
+        "reset": result["reset"],
+    }
+
+
+def manifest_diff(config: dict) -> dict:
+    """空跑比对清单 CSV 与状态库：同步是否会带来变更（不写库）。"""
+    repo_root = Path(config["repo_root"])
+    manifest_path = repo_root / DEFAULT_TASKS_CSV
+    if not manifest_path.is_file():
+        return {"ok": False, "changed": False, "error": "未找到清单文件"}
+    try:
+        tasks = lib.read_manifest(manifest_path)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "changed": False, "error": str(exc)}
+    store = lib.StateStore(Path(config["state_db"]))
+    try:
+        result = store.sync_manifest(tasks, dry_run=True)
+    finally:
+        store.close()
+    changed = (result["added"] + result["updated"] + result["reset"]) > 0
+    return {"ok": True, "changed": changed, "total": len(tasks), **result}
+
+
 def render_page(page_path: Path, refresh_seconds: int) -> bytes:
     if page_path.exists():
         html = page_path.read_text(encoding="utf-8")
@@ -2295,6 +2341,10 @@ class StatusHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/control":
             body = json.dumps(build_control_snapshot(config), ensure_ascii=False).encode("utf-8")
+            self._send(200, body, "application/json; charset=utf-8")
+            return
+        if path == "/api/manifest-diff":
+            body = json.dumps(manifest_diff(config), ensure_ascii=False).encode("utf-8")
             self._send(200, body, "application/json; charset=utf-8")
             return
         if path == "/api/process/control":
@@ -2375,6 +2425,7 @@ class StatusHandler(BaseHTTPRequestHandler):
             "/api/process/merge-parts",
             "/api/process/redownload",
             "/api/open-folder",
+            "/api/sync-manifest",
             "/api/db_updated",
             "/api/db_updated/import",
             "/api/config",
@@ -2928,6 +2979,34 @@ class StatusHandler(BaseHTTPRequestHandler):
                 )
                 return
             body = json.dumps({"ok": True, "path": opened}, ensure_ascii=False).encode("utf-8")
+            self._send(200, body, "application/json; charset=utf-8")
+            return
+
+        if path == "/api/sync-manifest":
+            try:
+                result = sync_manifest_to_state(config)
+            except ValueError as exc:
+                self._send(
+                    400,
+                    json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+                return
+            except RuntimeError as exc:
+                self._send(
+                    409,
+                    json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+                return
+            except Exception as exc:  # noqa: BLE001
+                self._send(
+                    500,
+                    json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+                return
+            body = json.dumps(result, ensure_ascii=False).encode("utf-8")
             self._send(200, body, "application/json; charset=utf-8")
             return
 
