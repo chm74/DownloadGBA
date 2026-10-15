@@ -758,5 +758,94 @@ class LocalBoundaryTests(unittest.TestCase):
                 store.close()
 
 
+class AppendManifestTests(unittest.TestCase):
+    def _base_content(self) -> str:
+        return (
+            "continent,country,city,download_dir,process_name_prefix\n"
+            "Africa,Algeria,Algeria,data\\Africa\\Algeria\\Algeria,Algeria\n"
+        )
+
+    def test_append_keeps_gbk_encoding_and_row_number(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = Path(tmp) / "tasks.csv"
+            gbk_content = (
+                "continent,country,city,download_dir,process_name_prefix\n"
+                "亚洲,中国,北京市,data\\亚洲\\中国\\北京市,beijing\n"
+            )
+            manifest.write_bytes(gbk_content.encode("gbk"))
+
+            result = lib.append_manifest_row(manifest, "亚洲", "沙特", "利雅得", "Riyadh")
+
+            self.assertEqual(result["row_number"], 3)
+            self.assertEqual(result["download_dir"], "data\\亚洲\\沙特\\利雅得")
+            self.assertEqual(lib.detect_encoding(manifest), "gbk")
+            text = manifest.read_bytes().decode("gbk")
+            self.assertIn("亚洲,沙特,利雅得,data\\亚洲\\沙特\\利雅得,Riyadh", text)
+            tasks = lib.read_manifest(manifest)
+            self.assertEqual(tasks[-1].task_id, "亚洲|沙特|利雅得")
+            self.assertEqual(tasks[-1].download_dir, "data/亚洲/沙特/利雅得")
+
+    def test_append_adds_trailing_newline_when_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = Path(tmp) / "tasks.csv"
+            manifest.write_text(self._base_content().rstrip("\n"), encoding="utf-8")
+
+            result = lib.append_manifest_row(manifest, "Asia", "Bhutan", "Bhutan", "Bhutan")
+
+            self.assertEqual(result["row_number"], 3)
+            tasks = lib.read_manifest(manifest)
+            self.assertEqual(len(tasks), 2)
+            self.assertEqual(tasks[-1].task_id, "Asia|Bhutan|Bhutan")
+
+    def test_append_rejects_duplicate_task_ignoring_case(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = Path(tmp) / "tasks.csv"
+            manifest.write_text(self._base_content(), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                lib.append_manifest_row(manifest, "africa", "Algeria", "Algeria", "Algeria2")
+
+    def test_append_rejects_duplicate_prefix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = Path(tmp) / "tasks.csv"
+            manifest.write_text(self._base_content(), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                lib.append_manifest_row(manifest, "Asia", "Bhutan", "Bhutan", "algeria")
+
+    def test_append_rejects_invalid_characters(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = Path(tmp) / "tasks.csv"
+            manifest.write_text(self._base_content(), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                lib.append_manifest_row(manifest, "Asia", "Bhutan", "Bhutan,寨卡", "Bhutan")
+            with self.assertRaises(ValueError):
+                lib.append_manifest_row(manifest, "Asia", "Bhutan", "Bhutan", "Bhut/an")
+
+    def test_find_manifest_task_exact_match_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = Path(tmp) / "tasks.csv"
+            manifest.write_text(self._base_content(), encoding="utf-8")
+            found = lib.find_manifest_task(manifest, "africa", "algeria", "ALGERIA")
+            self.assertIsNotNone(found)
+            self.assertEqual(found["row"], 2)
+            self.assertEqual(found["process_name_prefix"], "Algeria")
+            self.assertIsNone(lib.find_manifest_task(manifest, "Africa", "Algeria", "Angola"))
+
+    def test_find_manifest_matches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = Path(tmp) / "tasks.csv"
+            manifest.write_text(
+                self._base_content() + "亚洲,沙特,利雅得,data\\亚洲\\沙特\\利雅得,Riyadh\n",
+                encoding="utf-8",
+            )
+            matches = lib.find_manifest_matches(manifest, "algeria")
+            self.assertEqual(len(matches), 1)
+            self.assertEqual(matches[0]["row"], 2)
+            self.assertEqual(matches[0]["process_name_prefix"], "Algeria")
+            matches_zh = lib.find_manifest_matches(manifest, "利雅得")
+            self.assertEqual(len(matches_zh), 1)
+            self.assertEqual(matches_zh[0]["row"], 3)
+            self.assertEqual(lib.find_manifest_matches(manifest, "  "), [])
+
+
 if __name__ == "__main__":
     unittest.main()

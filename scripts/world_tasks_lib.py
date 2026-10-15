@@ -15,6 +15,9 @@ from pathlib import Path
 from gba_contract import DATA_SEMANTICS_VERSION, GRID_ALGORITHM_VERSION, GRID_MANIFEST_NAME, TILE_DIRECTORY_NAME
 
 MANIFEST_FIELDS = ("continent", "country", "city", "download_dir")
+MANIFEST_APPEND_FIELDS = ("continent", "country", "city", "download_dir", "process_name_prefix")
+MANIFEST_APPEND_MAX_FIELD_LEN = 100
+MANIFEST_FORBIDDEN_CHARS = set(',"<>:*?|/\\')
 MARKER_NAME = "_TASK_DONE.json"
 RAW_DATA_PATTERNS = ("*_buildings_height_gba.gpkg", "*_buildings_height_gba.shp")
 BOUNDARY_NAME = "place_boundary.gpkg"
@@ -245,6 +248,137 @@ def read_manifest(path: Path) -> list[Task]:
     if not tasks:
         raise ValueError(f"清单为空: {manifest_path}")
     return tasks
+
+
+def _validate_manifest_input(label: str, value: str) -> str:
+    cleaned = collapse_spaces(value)
+    if not cleaned:
+        raise ValueError(f"{label} 不能为空")
+    if len(cleaned) > MANIFEST_APPEND_MAX_FIELD_LEN:
+        raise ValueError(f"{label} 过长（最多 {MANIFEST_APPEND_MAX_FIELD_LEN} 字符）")
+    bad = sorted({ch for ch in cleaned if ch in MANIFEST_FORBIDDEN_CHARS or ord(ch) < 32})
+    if bad:
+        raise ValueError(f"{label} 含非法字符：{''.join(bad)}")
+    return cleaned
+
+
+def manifest_download_dir(continent: str, country: str, city: str) -> str:
+    return "\\".join(
+        ["data", sanitize_path_segment(continent), sanitize_path_segment(country), sanitize_path_segment(city)]
+    )
+
+
+def find_manifest_matches(path: Path, keyword: str) -> list[dict]:
+    """在清单 CSV 中按关键词（洲/国家/城市，忽略大小写）查找条目，返回含行号的结果。"""
+    manifest_path = Path(path)
+    needle = collapse_spaces(keyword).casefold()
+    if not needle or not manifest_path.is_file():
+        return []
+    encoding = detect_encoding(manifest_path)
+    matches: list[dict] = []
+    with manifest_path.open("r", encoding=encoding, newline="") as handle:
+        reader = csv.DictReader(handle)
+        for row_number, row in enumerate(reader, start=2):
+            values = {field: collapse_spaces(row.get(field) or "") for field in MANIFEST_APPEND_FIELDS}
+            if not any(values.values()):
+                continue
+            haystack = " ".join(values[field] for field in ("continent", "country", "city")).casefold()
+            if needle in haystack:
+                matches.append({"row": row_number, **values})
+    return matches
+
+
+def find_manifest_task(path: Path, continent: str, country: str, city: str) -> dict | None:
+    """在清单 CSV 中精确查找任务（洲/国家/城市，忽略大小写），返回含行号的行或 None。"""
+    manifest_path = Path(path)
+    if not manifest_path.is_file():
+        return None
+    target = tuple(collapse_spaces(value).casefold() for value in (continent, country, city))
+    encoding = detect_encoding(manifest_path)
+    with manifest_path.open("r", encoding=encoding, newline="") as handle:
+        reader = csv.DictReader(handle)
+        for row_number, row in enumerate(reader, start=2):
+            values = {field: collapse_spaces(row.get(field) or "") for field in MANIFEST_APPEND_FIELDS}
+            if not any(values.values()):
+                continue
+            current = tuple(values[field].casefold() for field in ("continent", "country", "city"))
+            if current == target:
+                return {"row": row_number, **values}
+    return None
+
+
+def append_manifest_row(
+    path: Path,
+    continent: str,
+    country: str,
+    city: str,
+    process_name_prefix: str,
+) -> dict:
+    """向任务清单追加一行（保持原编码与换行风格，原子写入）。
+
+    返回 ``{"row_number": int, "row": dict, "download_dir": str}``。
+    """
+    manifest_path = Path(path)
+    if not manifest_path.is_file():
+        raise FileNotFoundError(f"任务清单不存在: {manifest_path}")
+    continent = _validate_manifest_input("洲", continent)
+    country = _validate_manifest_input("国家", country)
+    city = _validate_manifest_input("城市/区域", city)
+    prefix = _validate_manifest_input("命名前缀", process_name_prefix)
+
+    encoding = detect_encoding(manifest_path)
+    with manifest_path.open("r", encoding=encoding, newline="") as handle:
+        text = handle.read()
+
+    reader = csv.DictReader(text.splitlines())
+    fieldnames = reader.fieldnames or []
+    missing_fields = [field for field in MANIFEST_FIELDS if field not in fieldnames]
+    if missing_fields:
+        raise ValueError(f"清单缺少字段 {missing_fields}: {manifest_path}")
+
+    new_key = tuple(value.casefold() for value in (continent, country, city))
+    prefix_fold = prefix.casefold()
+    for row_number, row in enumerate(reader, start=2):
+        values = {field: collapse_spaces(row.get(field) or "") for field in MANIFEST_APPEND_FIELDS}
+        if not any(values.values()):
+            continue
+        existing_key = tuple(values[field].casefold() for field in ("continent", "country", "city"))
+        if existing_key == new_key:
+            raise ValueError(
+                "该任务已存在于清单第 "
+                f"{row_number} 行：{values['continent']}|{values['country']}|{values['city']}"
+            )
+        if values["process_name_prefix"].casefold() == prefix_fold:
+            raise ValueError(f"命名前缀已被清单第 {row_number} 行占用：{values['process_name_prefix']}")
+
+    download_dir = manifest_download_dir(continent, country, city)
+    new_values = {
+        "continent": continent,
+        "country": country,
+        "city": city,
+        "download_dir": download_dir,
+        "process_name_prefix": prefix,
+    }
+
+    if not text.endswith("\n"):
+        text += "\r\n" if "\r\n" in text else "\n"
+    newline = "\r\n" if "\r\n" in text else "\n"
+    row_number = text.count("\n") + 1
+    text += ",".join(new_values[field] for field in MANIFEST_APPEND_FIELDS) + newline
+
+    tmp_path = manifest_path.with_name(f".{manifest_path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        with tmp_path.open("w", encoding=encoding, newline="") as handle:
+            handle.write(text)
+        tmp_path.replace(manifest_path)
+    finally:
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+
+    return {"row_number": row_number, "row": new_values, "download_dir": download_dir}
 
 
 def load_overrides(path: Path) -> list[RangeOverride]:

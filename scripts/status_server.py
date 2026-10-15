@@ -20,6 +20,8 @@ import world_tasks_lib as lib
 
 DEFAULT_STATE_DB = "data/world_building_download_tasks_state.db"
 DEFAULT_TASKS_CSV = "data/world_building_download_tasks.csv"
+MANIFEST_KEYWORD_MAX_LEN = 100
+MANIFEST_SEARCH_LIMIT = 50
 DEFAULT_PROCESS_DB = "data/shp_process_state.db"
 DEFAULT_DB_UPDATE_FILE = "data/db_update_status.json"
 DEFAULT_PAGE = "scripts/status_page.html"
@@ -2468,6 +2470,147 @@ def manifest_diff(config: dict) -> dict:
     return {"ok": True, "changed": changed, "total": len(tasks), **result}
 
 
+def _find_download_task_by_region(
+    state_db: Path, continent: str, country: str, city: str
+) -> dict | None:
+    try:
+        connection = _open_state_db(state_db)
+    except sqlite3.Error:
+        return None
+    try:
+        rows = connection.execute(
+            "SELECT task_id, continent, country, city, status FROM tasks"
+        ).fetchall()
+    except sqlite3.Error:
+        return None
+    finally:
+        connection.close()
+    target = (continent.casefold(), country.casefold(), city.casefold())
+    for row in rows:
+        current = (
+            str(row["continent"] or "").casefold(),
+            str(row["country"] or "").casefold(),
+            str(row["city"] or "").casefold(),
+        )
+        if current == target:
+            return {"task_id": row["task_id"], "status": row["status"]}
+    return None
+
+
+def _find_process_prefix_owner(process_db: Path, prefix: str) -> dict | None:
+    try:
+        connection = _open_state_db(process_db)
+    except sqlite3.Error:
+        return None
+    try:
+        rows = connection.execute(
+            "SELECT dataset_key, process_name_prefix FROM process_tasks "
+            "WHERE process_name_prefix IS NOT NULL"
+        ).fetchall()
+    except sqlite3.Error:
+        return None
+    finally:
+        connection.close()
+    prefix_fold = prefix.casefold()
+    for row in rows:
+        if str(row["process_name_prefix"] or "").casefold() == prefix_fold:
+            return {
+                "dataset_key": row["dataset_key"],
+                "process_name_prefix": row["process_name_prefix"],
+            }
+    return None
+
+
+def build_manifest_check(config: dict, keyword: str) -> dict:
+    """在任务清单 CSV 与下载状态库中查找关键词（供「CSV清单管理」页查询）。"""
+    needle = lib.collapse_spaces(keyword)
+    if not needle:
+        raise ValueError("关键词不能为空")
+    if len(needle) > MANIFEST_KEYWORD_MAX_LEN:
+        raise ValueError(f"关键词过长（最多 {MANIFEST_KEYWORD_MAX_LEN} 字符）")
+    repo_root = Path(config["repo_root"])
+    manifest_path = repo_root / DEFAULT_TASKS_CSV
+    in_csv = lib.find_manifest_matches(manifest_path, needle) if manifest_path.is_file() else []
+    in_state: list[dict] = []
+    try:
+        connection = _open_state_db(Path(config["state_db"]))
+    except sqlite3.Error:
+        connection = None
+    if connection is not None:
+        try:
+            lower = needle.casefold()
+            for row in connection.execute(
+                "SELECT task_id, continent, country, city, status FROM tasks ORDER BY task_id"
+            ):
+                haystack = " ".join(
+                    str(row[field] or "") for field in ("task_id", "continent", "country", "city")
+                ).casefold()
+                if lower in haystack:
+                    in_state.append({"task_id": row["task_id"], "status": row["status"]})
+                    if len(in_state) >= MANIFEST_SEARCH_LIMIT:
+                        break
+        finally:
+            connection.close()
+    return {
+        "ok": True,
+        "keyword": needle,
+        "manifest_exists": manifest_path.is_file(),
+        "in_csv": in_csv[:MANIFEST_SEARCH_LIMIT],
+        "in_state": in_state,
+    }
+
+
+def append_manifest_task(
+    config: dict, continent: str, country: str, city: str, process_name_prefix: str
+) -> dict:
+    """校验（状态库/处理库查重）后向任务清单追加一行，返回新行信息。"""
+    repo_root = Path(config["repo_root"])
+    manifest_path = repo_root / DEFAULT_TASKS_CSV
+    if not manifest_path.is_file():
+        raise ValueError(f"任务清单不存在：{DEFAULT_TASKS_CSV}（请先由维护人员从数据库导出）")
+    continent = lib.collapse_spaces(continent)
+    country = lib.collapse_spaces(country)
+    city = lib.collapse_spaces(city)
+    process_name_prefix = lib.collapse_spaces(process_name_prefix)
+    missing = [
+        label
+        for label, value in (
+            ("洲", continent),
+            ("国家", country),
+            ("城市/区域", city),
+            ("命名前缀", process_name_prefix),
+        )
+        if not value
+    ]
+    if missing:
+        raise ValueError("缺少必填项：" + "、".join(missing))
+
+    with CONTROL_LOCK:
+        existing = _find_download_task_by_region(Path(config["state_db"]), continent, country, city)
+        if existing:
+            raise ValueError(
+                f"该任务已存在于下载状态库（{existing['task_id']}，状态 {existing['status']}），"
+                "无需追加；如需重新下载请到「建筑数据下载」页操作"
+            )
+        owner = _find_process_prefix_owner(Path(config["process_db"]), process_name_prefix)
+        if owner:
+            raise ValueError(
+                f"命名前缀已被处理任务占用：{owner['dataset_key']}（前缀 {owner['process_name_prefix']}），"
+                "请更换"
+            )
+        existing_row = lib.find_manifest_task(manifest_path, continent, country, city)
+        if existing_row:
+            return {
+                "ok": True,
+                "existed": True,
+                "row_number": existing_row["row"],
+                "row": {field: existing_row[field] for field in lib.MANIFEST_APPEND_FIELDS},
+                "download_dir": existing_row["download_dir"],
+            }
+        result = lib.append_manifest_row(manifest_path, continent, country, city, process_name_prefix)
+    return {"ok": True, "existed": False, **result}
+
+
 def render_page(page_path: Path, refresh_seconds: int) -> bytes:
     if page_path.exists():
         html = page_path.read_text(encoding="utf-8")
@@ -2623,6 +2766,8 @@ class StatusHandler(BaseHTTPRequestHandler):
             "/api/process/redownload",
             "/api/open-folder",
             "/api/sync-manifest",
+            "/api/manifest/check",
+            "/api/manifest/append",
             "/api/db_updated",
             "/api/db_updated/import",
             "/api/db_updated/copy-to-share",
@@ -3220,6 +3365,64 @@ class StatusHandler(BaseHTTPRequestHandler):
             except RuntimeError as exc:
                 self._send(
                     409,
+                    json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+                return
+            except Exception as exc:  # noqa: BLE001
+                self._send(
+                    500,
+                    json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+                return
+            body = json.dumps(result, ensure_ascii=False).encode("utf-8")
+            self._send(200, body, "application/json; charset=utf-8")
+            return
+
+        if path == "/api/manifest/check":
+            try:
+                result = build_manifest_check(config, str(payload.get("keyword") or ""))
+            except ValueError as exc:
+                self._send(
+                    400,
+                    json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+                return
+            except Exception as exc:  # noqa: BLE001
+                self._send(
+                    500,
+                    json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+                return
+            body = json.dumps(result, ensure_ascii=False).encode("utf-8")
+            self._send(200, body, "application/json; charset=utf-8")
+            return
+
+        if path == "/api/manifest/append":
+            try:
+                result = append_manifest_task(
+                    config,
+                    str(payload.get("continent") or ""),
+                    str(payload.get("country") or ""),
+                    str(payload.get("city") or ""),
+                    str(payload.get("process_name_prefix") or ""),
+                )
+            except PermissionError:
+                self._send(
+                    409,
+                    json.dumps(
+                        {"ok": False, "error": "任务清单文件被占用，请关闭编辑器（Excel / WPS）后重试"},
+                        ensure_ascii=False,
+                    ).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+                return
+            except ValueError as exc:
+                self._send(
+                    400,
                     json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8"),
                     "application/json; charset=utf-8",
                 )

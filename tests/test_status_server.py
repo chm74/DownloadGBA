@@ -2866,6 +2866,168 @@ class ControlTests(unittest.TestCase):
                 server.shutdown()
                 server.server_close()
 
+    def _write_manifest_fixture(self, repo_root: Path) -> Path:
+        manifest = repo_root / "data" / "world_building_download_tasks.csv"
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        manifest.write_text(
+            "continent,country,city,download_dir,process_name_prefix\n"
+            "Africa,Algeria,Algeria,data\\Africa\\Algeria\\Algeria,Algeria\n",
+            encoding="utf-8",
+        )
+        return manifest
+
+    def _post_json(self, port: int, path: str, payload: dict) -> dict:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{port}{path}",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+    def test_manifest_check_endpoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            build_repo_fixture(repo_root)
+            self._write_manifest_fixture(repo_root)
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                payload = self._post_json(port, "/api/manifest/check", {"keyword": "Algeria"})
+            finally:
+                server.shutdown()
+                server.server_close()
+            self.assertTrue(payload["ok"])
+            self.assertEqual(len(payload["in_csv"]), 1)
+            self.assertEqual(payload["in_csv"][0]["row"], 2)
+            self.assertEqual(payload["in_csv"][0]["process_name_prefix"], "Algeria")
+            self.assertTrue(
+                any(item["task_id"] == "Africa|Algeria|Algeria" for item in payload["in_state"])
+            )
+
+    def test_manifest_check_requires_keyword(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{port}/api/manifest/check",
+                    data=json.dumps({"keyword": ""}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as context:
+                    urllib.request.urlopen(request, timeout=10)
+                self.assertEqual(context.exception.code, 400)
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_manifest_append_endpoint_then_idempotent_retry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            build_repo_fixture(repo_root)
+            manifest = self._write_manifest_fixture(repo_root)
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                payload = self._post_json(
+                    port,
+                    "/api/manifest/append",
+                    {
+                        "continent": "亚洲",
+                        "country": "沙特",
+                        "city": "利雅得",
+                        "process_name_prefix": "Riyadh",
+                    },
+                )
+                self.assertTrue(payload["ok"])
+                self.assertFalse(payload["existed"])
+                self.assertEqual(payload["row_number"], 3)
+                self.assertEqual(payload["download_dir"], "data\\亚洲\\沙特\\利雅得")
+                retry = self._post_json(
+                    port,
+                    "/api/manifest/append",
+                    {
+                        "continent": "亚洲",
+                        "country": "沙特",
+                        "city": "利雅得",
+                        "process_name_prefix": "Riyadh2",
+                    },
+                )
+                self.assertTrue(retry["ok"])
+                self.assertTrue(retry["existed"])
+                self.assertEqual(retry["row_number"], 3)
+            finally:
+                server.shutdown()
+                server.server_close()
+            content = manifest.read_text(encoding="utf-8")
+            self.assertIn("亚洲,沙特,利雅得,data\\亚洲\\沙特\\利雅得,Riyadh", content)
+            self.assertEqual(content.count("亚洲,沙特,利雅得"), 1)
+
+    def test_manifest_append_rejects_task_in_state_db(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            build_repo_fixture(repo_root)
+            self._write_manifest_fixture(repo_root)
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{port}/api/manifest/append",
+                    data=json.dumps(
+                        {
+                            "continent": "Africa",
+                            "country": "Algeria",
+                            "city": "Algeria",
+                            "process_name_prefix": "Algeria2",
+                        }
+                    ).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as context:
+                    urllib.request.urlopen(request, timeout=10)
+                self.assertEqual(context.exception.code, 400)
+                body = json.loads(context.exception.read().decode("utf-8"))
+                self.assertIn("下载状态库", body["error"])
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_manifest_append_rejects_prefix_used_by_process_db(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            build_repo_fixture(repo_root)
+            build_process_fixture(repo_root)
+            self._write_manifest_fixture(repo_root)
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{port}/api/manifest/append",
+                    data=json.dumps(
+                        {
+                            "continent": "Asia",
+                            "country": "Botswana",
+                            "city": "Gaborone",
+                            "process_name_prefix": "shanghai",
+                        }
+                    ).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as context:
+                    urllib.request.urlopen(request, timeout=10)
+                self.assertEqual(context.exception.code, 400)
+                body = json.loads(context.exception.read().decode("utf-8"))
+                self.assertIn("命名前缀", body["error"])
+            finally:
+                server.shutdown()
+                server.server_close()
+
 
 if __name__ == "__main__":
     unittest.main()

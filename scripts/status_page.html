@@ -152,6 +152,7 @@
     <button type="button" class="tab active" data-tab="download">建筑数据下载</button>
     <button type="button" class="tab" data-tab="processing">数据处理</button>
     <button type="button" class="tab" data-tab="dbupdated">库表更新</button>
+    <button type="button" class="tab" data-tab="manifest">CSV清单管理</button>
     <button type="button" class="tab" data-tab="logs">日志</button>
     <button type="button" class="tab" data-tab="config">配置</button>
   </nav>
@@ -171,7 +172,7 @@
   <section>
     <h2>批处理控制</h2>
     <div class="muted" style="margin-bottom:10px;">
-      重启会停止当前批处理并重新启动；已完成分块全部复用，任务从断点继续（约几秒中断）。
+      重启会停止当前批处理并重新启动；已完成分块全部复用，任务从断点继续（约几秒中断）。任务清单的检查 / 追加（含同步）已移至「CSV清单管理」页。
     </div>
     <div class="stats">
       <span>批处理：<b id="ctl-running">-</b></span>
@@ -182,7 +183,6 @@
     <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
       <button id="ctl-restart" style="padding:6px 14px;cursor:pointer;">重启批处理</button>
       <button id="ctl-stop" style="padding:6px 14px;cursor:pointer;color:#b91c1c;border-color:#b91c1c;">停止下载任务</button>
-      <button id="ctl-sync-manifest" style="padding:6px 14px;cursor:pointer;" title="在CSV中添加任务城市清单后，需要点CSV同步到状态库。">CSV同步到状态库</button>
       <span id="ctl-message" class="muted"></span>
     </div>
   </section>
@@ -485,6 +485,46 @@
     </div>
   </div>
 
+  <div class="panel" id="panel-manifest" hidden>
+    <section>
+      <h2>① 检查任务</h2>
+      <div class="muted" style="margin-bottom:10px;">
+        输入城市 / 国家 / 洲关键词，检查目标区域是否已在任务清单或下载状态库中；查不到再往下追加。
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <input id="mf-check-keyword" type="text" placeholder="如：利雅得 / Riyadh / 沙特"
+               style="padding:5px 8px;width:280px;">
+        <button id="mf-check" type="button" style="padding:5px 14px;cursor:pointer;">查询</button>
+        <span id="mf-check-message" class="muted"></span>
+      </div>
+      <div id="mf-check-result" style="margin-top:10px;"></div>
+    </section>
+
+    <section>
+      <h2>② 追加新任务</h2>
+      <div class="muted" style="margin-bottom:10px;">
+        向任务清单 <code>data/world_building_download_tasks.csv</code> 追加一行，并执行「<b>CSV同步到状态库</b>」（把整份清单登记 / 更新 / 对账进下载状态库；同步后该任务才会出现在「建筑数据下载」队列中）。下载运行中时同步会被拒绝，请先停止下载任务；下载目录按 <code>data\洲\国家\城市</code> 自动生成。重复追加同一任务会自动跳过追加、直接同步，可放心重试。
+      </div>
+      <div id="mf-diff-note" class="muted" style="display:none;margin-bottom:10px;color:var(--warn);"></div>
+      <div class="cfg-grid">
+        <div class="cfg-field"><label>洲（必填）</label><input id="mf-continent" type="text" placeholder="如：亚洲 / Asia"></div>
+        <div class="cfg-field"><label>国家（必填）</label><input id="mf-country" type="text" placeholder="如：沙特 / Saudi_Arabia"></div>
+        <div class="cfg-field"><label>城市 / 区域（必填）</label><input id="mf-city" type="text" placeholder="如：利雅得 / Riyadh"></div>
+        <div class="cfg-field"><label>命名前缀（必填，全局唯一，中英文均可）</label><input id="mf-prefix" type="text" placeholder="如：Riyadh / 利雅得"></div>
+      </div>
+      <div class="cfg-actions" style="margin-top:14px;">
+        <button id="mf-append" type="button" style="padding:6px 16px;cursor:pointer;" title="追加一行到任务清单 CSV，并把 CSV 同步到下载状态库（即「CSV同步到状态库」功能）">追加并同步</button>
+        <span id="mf-append-message" class="muted"></span>
+      </div>
+      <div class="muted" style="margin-top:10px;">
+        「追加并同步」将依次执行：① 向任务清单 CSV 追加一行　→　② 把 CSV 同步到状态库（登记 / 更新 / 对账）；同步成功后，该任务才会出现在「建筑数据下载」队列中。若同步被拒（下载运行中），停止下载后再点一次即可（任务已存在时自动跳过追加）。
+      </div>
+      <div class="muted" style="margin-top:6px;">
+        提示：追加并同步 ≠ 开始下载。之后请到「建筑数据下载」页搜索该任务，（可选）点「⤒ 置顶」，再点「重启批处理」。
+      </div>
+    </section>
+  </div>
+
   <footer>只读看板 ｜ 数据源：SQLite 状态库</footer>
 </div>
 
@@ -728,6 +768,7 @@ document.getElementById("queue-search-clear").addEventListener("click", () => {
 
 const TAB_PANELS = {
   download: "panel-download",
+  manifest: "panel-manifest",
   processing: "panel-processing",
   dbupdated: "panel-db-updated",
   logs: "panel-logs",
@@ -2167,31 +2208,138 @@ document.getElementById("ctl-stop").addEventListener("click", async () => {
   }
 });
 
-document.getElementById("ctl-sync-manifest").addEventListener("click", async () => {
-  const message = document.getElementById("ctl-message");
-  message.textContent = "正在同步清单到状态库…";
+// ---- CSV清单管理 ----
+async function mfApi(url, payload) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: actionHeaders(),
+    body: JSON.stringify(payload || {}),
+  });
+  const text = await response.text();
+  let data = null;
   try {
-    const response = await fetch("/api/sync-manifest", {
-      method: "POST",
-      headers: actionHeaders(),
-      body: JSON.stringify({}),
-    });
-    const data = await response.json();
+    data = JSON.parse(text);
+  } catch (error) {
+    data = { ok: false, error: text || String(response.status) };
+  }
+  return { response, data };
+}
+
+function mfResetForm() {
+  document.getElementById("mf-continent").value = "";
+  document.getElementById("mf-country").value = "";
+  document.getElementById("mf-city").value = "";
+  document.getElementById("mf-prefix").value = "";
+}
+
+async function checkManifestTask() {
+  const keyword = document.getElementById("mf-check-keyword").value.trim();
+  const message = document.getElementById("mf-check-message");
+  const box = document.getElementById("mf-check-result");
+  if (!keyword) {
+    message.textContent = "请输入关键词";
+    return;
+  }
+  message.textContent = "查询中…";
+  box.innerHTML = "";
+  try {
+    const { response, data } = await mfApi("/api/manifest/check", { keyword });
     if (!response.ok || !data.ok) {
-      const text = "同步失败：" + (data.error || response.status);
+      message.textContent = "查询失败：" + (data.error || response.status);
+      return;
+    }
+    message.textContent = "";
+    renderManifestCheck(data);
+  } catch (error) {
+    message.textContent = "查询请求失败：" + error;
+  }
+}
+
+function renderManifestCheck(data) {
+  const box = document.getElementById("mf-check-result");
+  const blocks = [];
+  const csvRows = data.in_csv || [];
+  if (csvRows.length) {
+    const rows = csvRows.map((item) =>
+      `<tr><td>${esc(item.row)}</td><td>${esc(item.continent)}</td><td>${esc(item.country)}</td><td>${esc(item.city)}</td><td class="mono">${esc(item.process_name_prefix || "")}</td></tr>`
+    ).join("");
+    blocks.push(
+      `<div class="muted" style="margin:6px 0;">已在任务清单（${csvRows.length} 条）：</div>` +
+      `<table><thead><tr><th>行号</th><th>洲</th><th>国家</th><th>城市</th><th>前缀</th></tr></thead><tbody>${rows}</tbody></table>`
+    );
+  } else {
+    blocks.push('<div class="muted" style="margin:6px 0;">任务清单中不存在该任务。</div>');
+  }
+  const stateRows = data.in_state || [];
+  if (stateRows.length) {
+    const rows = stateRows.map((item) =>
+      `<tr><td class="mono">${esc(item.task_id)}</td><td>${esc(item.status)}</td></tr>`
+    ).join("");
+    blocks.push(
+      `<div class="muted" style="margin:6px 0;">下载状态库中已存在（${stateRows.length} 条）：</div>` +
+      `<table><thead><tr><th>任务</th><th>状态</th></tr></thead><tbody>${rows}</tbody></table>`
+    );
+  } else {
+    blocks.push('<div class="muted" style="margin:6px 0;">下载状态库中也不存在。</div>');
+  }
+  box.innerHTML = blocks.join("");
+}
+
+async function appendManifestTask() {
+  const message = document.getElementById("mf-append-message");
+  const payload = {
+    continent: document.getElementById("mf-continent").value.trim(),
+    country: document.getElementById("mf-country").value.trim(),
+    city: document.getElementById("mf-city").value.trim(),
+    process_name_prefix: document.getElementById("mf-prefix").value.trim(),
+  };
+  if (!payload.continent || !payload.country || !payload.city || !payload.process_name_prefix) {
+    message.textContent = "请填写洲、国家、城市与命名前缀";
+    return;
+  }
+  message.textContent = "正在追加…";
+  let appended = null;
+  try {
+    const { response, data } = await mfApi("/api/manifest/append", payload);
+    if (!response.ok || !data.ok) {
+      const text = "追加失败：" + (data.error || response.status);
       message.textContent = text;
       showMessage(text, "error");
       return;
     }
-    const text = `已同步清单：新增 ${data.added}，更新 ${data.updated}，重置 ${data.reset}（共 ${data.total}）`;
+    appended = data;
+  } catch (error) {
+    message.textContent = "追加请求失败：" + error;
+    showMessage("追加请求失败：" + error, "error");
+    return;
+  }
+  message.textContent = appended.existed
+    ? `该任务已存在（第 ${appended.row_number} 行），跳过追加，正在同步到状态库…`
+    : `已追加（第 ${appended.row_number} 行），正在同步到状态库…`;
+  try {
+    const { response, data } = await mfApi("/api/sync-manifest", {});
+    if (!response.ok || !data.ok) {
+      const text = `（第 ${appended.row_number} 行）同步失败：${data.error || response.status}。请停止下载任务后重新点「追加并同步」重试。`;
+      message.textContent = text;
+      showMessage(text, "error", 8000);
+      return;
+    }
+    const text = `${appended.existed ? "已同步（任务已存在）" : "已追加并同步"}（第 ${appended.row_number} 行）：新增 ${data.added}，更新 ${data.updated}，重置 ${data.reset}（共 ${data.total}）。请到「建筑数据下载」页搜索该任务并启动批处理。`;
     message.textContent = text;
-    showMessage(text, "success");
+    showMessage("已追加并同步：" + payload.continent + " / " + payload.country + " / " + payload.city, "success", 5000);
+    mfResetForm();
     await refresh();
   } catch (error) {
-    message.textContent = "同步请求失败：" + error;
-    showMessage("同步请求失败：" + error, "error");
+    message.textContent = `（第 ${appended.row_number} 行）同步请求失败：${error}`;
+    showMessage("同步请求失败，请停止下载任务后重新点「追加并同步」重试。", "error", 8000);
   }
+}
+
+document.getElementById("mf-check").addEventListener("click", checkManifestTask);
+document.getElementById("mf-check-keyword").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") checkManifestTask();
 });
+document.getElementById("mf-append").addEventListener("click", appendManifestTask);
 
 async function refreshProcessControl() {
   try {
@@ -2407,12 +2555,16 @@ refresh();
 setInterval(refresh, REFRESH_MS);
 
 async function checkManifestDiff() {
-  const button = document.getElementById("ctl-sync-manifest");
-  if (!button) return;
+  const note = document.getElementById("mf-diff-note");
+  if (!note) return;
   try {
     const response = await fetch("/api/manifest-diff", { cache: "no-store" });
     const data = await response.json();
-    button.classList.toggle("blink", !!data.changed);
+    const changed = !!data.changed;
+    note.style.display = changed ? "" : "none";
+    if (changed) {
+      note.textContent = "提示：任务清单与状态库存在差异（可能上次同步未完成）。对任一目标任务点「追加并同步」即可补同步（会同步整份清单）。";
+    }
   } catch (error) {
     /* 忽略比对失败 */
   }
