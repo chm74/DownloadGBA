@@ -1466,18 +1466,23 @@ class ControlTests(unittest.TestCase):
                     return_value=({"runner": None, "runners": [], "workers": []}, [7]),
                 ):
                     with patch.object(
-                        status_server.process_queue,
-                        "reset_running_in_db",
-                        return_value=1,
-                    ) as reset:
-                        request = urllib.request.Request(
-                            f"http://127.0.0.1:{port}/api/process/stop",
-                            data=b"{}",
-                            headers={"Content-Type": "application/json"},
-                            method="POST",
-                        )
-                        with urllib.request.urlopen(request, timeout=10) as response:
-                            payload = json.loads(response.read().decode("utf-8"))
+                        status_server,
+                        "_wait_process_batch_clear",
+                        return_value={"runner": None, "runners": [], "workers": []},
+                    ):
+                        with patch.object(
+                            status_server.process_queue,
+                            "reset_running_in_db",
+                            return_value=1,
+                        ) as reset:
+                            request = urllib.request.Request(
+                                f"http://127.0.0.1:{port}/api/process/stop",
+                                data=b"{}",
+                                headers={"Content-Type": "application/json"},
+                                method="POST",
+                            )
+                            with urllib.request.urlopen(request, timeout=10) as response:
+                                payload = json.loads(response.read().decode("utf-8"))
                 self.assertTrue(payload["ok"])
                 self.assertEqual(payload["stopped_pids"], [7])
                 self.assertEqual(payload["reset_tasks"], 1)
@@ -1485,6 +1490,79 @@ class ControlTests(unittest.TestCase):
             finally:
                 server.shutdown()
                 server.server_close()
+
+    def test_stop_process_action_resets_when_no_processes_remain(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            config = {"repo_root": repo_root, "process_db": str(repo_root / "process_state.db")}
+            empty_detected = {
+                "runner": None,
+                "runners": [],
+                "runner_count": 0,
+                "workers": [],
+                "limit": 0,
+                "wait_resources": False,
+            }
+            with patch.object(
+                status_server,
+                "_stop_all_process_queue_processes",
+                return_value=({"runner": {"pid": 100}, "runners": [{"pid": 100}], "workers": []}, [100]),
+            ):
+                with patch.object(status_server, "_wait_process_batch_clear", return_value=empty_detected):
+                    with patch.object(
+                        status_server.process_queue,
+                        "reset_running_in_db",
+                        return_value=2,
+                    ) as reset:
+                        result = status_server.stop_process_action(config)
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["stopped_pids"], [100])
+            self.assertEqual(result["reset_tasks"], 2)
+            reset.assert_called_once()
+
+    def test_stop_process_action_keeps_running_when_processes_survive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            config = {"repo_root": repo_root, "process_db": str(repo_root / "process_state.db")}
+            survivor = {
+                "runner": None,
+                "runners": [],
+                "runner_count": 0,
+                "workers": [{"pid": 200}],
+                "limit": 0,
+                "wait_resources": False,
+            }
+            with patch.object(
+                status_server,
+                "_stop_all_process_queue_processes",
+                return_value=({"runner": None, "runners": [], "workers": [{"pid": 200}]}, []),
+            ):
+                with patch.object(status_server, "_wait_process_batch_clear", return_value=survivor):
+                    with patch.object(status_server.process_queue, "reset_running_in_db") as reset:
+                        with self.assertRaises(RuntimeError) as context:
+                            status_server.stop_process_action(config)
+            reset.assert_not_called()
+            self.assertIn("200", str(context.exception))
+            self.assertIn("RUNNING", str(context.exception))
+
+    def test_process_start_blocked_when_worker_survives(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            config = {"repo_root": repo_root, "process_db": str(repo_root / "process_state.db")}
+            orphan = {
+                "runner": None,
+                "runners": [],
+                "runner_count": 0,
+                "workers": [{"pid": 200}],
+                "limit": 0,
+                "wait_resources": False,
+            }
+            with patch.object(status_server, "detect_process_batch", return_value=orphan):
+                with patch.object(status_server, "start_process_batch") as start:
+                    result = status_server.start_process_action(config, 0, False)
+            self.assertFalse(result["ok"])
+            self.assertIn("200", result["error"])
+            start.assert_not_called()
 
     def test_process_sync_endpoint(self):
         with tempfile.TemporaryDirectory() as tmp:

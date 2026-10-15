@@ -1690,6 +1690,16 @@ def _stop_all_process_queue_processes() -> tuple[dict, list[int]]:
     return detected, stopped
 
 
+def _wait_process_batch_clear(timeout: float = 5.0, interval: float = 0.5) -> dict:
+    """轮询探测，直到处理 runner/worker 全部退出或超时；返回最后一次检测结果。"""
+    deadline = time.time() + max(timeout, 0.0)
+    detected = detect_process_batch()
+    while (detected["runner"] or detected["workers"]) and time.time() < deadline:
+        time.sleep(interval)
+        detected = detect_process_batch()
+    return detected
+
+
 def sync_process_queue(config: dict) -> dict:
     repo_root = Path(config["repo_root"])
     result = process_queue.sync_process_tasks(
@@ -1714,6 +1724,16 @@ def start_process_action(config: dict, limit: int, wait_resources: bool) -> dict
                 "error": "处理任务已在运行",
                 "runner_pid": detected["runner"]["pid"],
             }
+        if detected["workers"]:
+            worker_pids = [item["pid"] for item in detected["workers"]]
+            return {
+                "ok": False,
+                "error": (
+                    f"检测到残留处理进程（PID: {', '.join(map(str, worker_pids))}），"
+                    "请先点「停止处理」并确认未运行后再开始"
+                ),
+                "worker_pids": worker_pids,
+            }
         python_exe = resolve_process_python(config)
         command = build_process_start_command(python_exe, config["repo_root"], limit, wait_resources)
         qgis_dir = load_dashboard_config(config["repo_root"]).get("qgis_dir") or ""
@@ -1732,6 +1752,16 @@ def start_process_action(config: dict, limit: int, wait_resources: bool) -> dict
 def stop_process_action(config: dict) -> dict:
     with CONTROL_LOCK:
         detected, stopped = _stop_all_process_queue_processes()
+        remaining = _wait_process_batch_clear(timeout=5.0)
+        if remaining["runner"] or remaining["workers"]:
+            survivor_pids = [
+                item["pid"]
+                for item in ([remaining["runner"]] if remaining["runner"] else []) + remaining["workers"]
+            ]
+            raise RuntimeError(
+                f"处理进程未完全停止（PID: {', '.join(map(str, survivor_pids))}），"
+                "任务状态保持 RUNNING；请稍后重试「停止处理」"
+            )
         reset_count = 0
         reset_error = None
         try:
@@ -3138,6 +3168,13 @@ class StatusHandler(BaseHTTPRequestHandler):
         if path == "/api/process/stop":
             try:
                 result = stop_process_action(config)
+            except RuntimeError as exc:
+                self._send(
+                    409,
+                    json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+                return
             except Exception as exc:  # noqa: BLE001
                 self._send(
                     500,
