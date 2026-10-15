@@ -416,7 +416,7 @@ uv sync --project Tools\Twopyshp2pgsql            # SHP 入库工具
 | `data/` | 状态库、边界、下载数据；日志在 `data/logs/`（见下） |
 | `Tools/Oneshp_pipline_qgis/` | 数据处理工具（QGIS 管线）与产物 `out_data/` |
 | `Tools/Twopyshp2pgsql/` | SHP 入库工具（写入 `world_building`） |
-| `docs/` | 文档（本手册、状态页说明、任务管线说明等） |
+| `docs/` | 文档（本手册） |
 
 ### 日志路径
 

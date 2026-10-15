@@ -25,7 +25,7 @@
 - `scripts/sync_existing_data.py`
   扫描已下载的省/市数据目录，把路径同步到任务状态库（看板「最近完成」表格显示）。
 - `scripts/status_server.py` + `scripts/status_page.html`
-  只读状态看板：浏览器查看当前任务进度、队列与最近完成。
+  状态与操作看板：浏览器查看进度、调整队列、控制批处理，并操作数据处理与库表更新（详见下文第 5 节与 `docs/GBA建筑下载操作手册.md`）。
 - `scripts/export_world_building_tasks.py`
   从 PostgreSQL 的 `world_building` 表导出按洲、国家、城市分组后的下载任务清单。
 
@@ -33,12 +33,12 @@
 
 `run_gba_province_batch.py` 是批处理入口，内部会调用 `download_gba_lod1_wfs.py` 执行单个省份的实际下载任务。
 
-`download_gba_lod1_wfs_adaptive.py` 是 `download_gba_lod1_wfs.py` 的增强版副本，保留原始入口方式，同时增加超大格网的自适应切分能力。
+`download_gba_lod1_wfs_adaptive.py` 与 `download_gba_lod1_wfs.py` 共用同一抓取内核（超大范围/截断/失败时的四分裂切分已内置在 `scripts/gba_wfs_client.py`），该脚本仅保留自适应入口与兼容参数，便于沿用旧命令。
 
 推荐理解顺序：
 
 1. 先看 `download_gba_lod1_wfs.py`，理解单次抓取逻辑。
-2. 再看 `download_gba_lod1_wfs_adaptive.py`，理解超大格网切分逻辑。
+2. 再看 `scripts/gba_wfs_client.py`，理解请求节流与自适应切分（`download_gba_lod1_wfs_adaptive.py` 与其共用该内核）。
 3. 最后看 `run_gba_province_batch.py`，理解批量调度、日志和汇总方式。
 
 ## 数据源
@@ -93,7 +93,7 @@ Remove-Item Env:PGPASSWORD
 
 #### 主要能力
 
-- 调用 WFS 分页下载建筑要素
+- 调用 WFS 按范围抓取建筑要素；返回被截断或 `BBOX_TOO_LARGE` 时自动四分裂更小范围（分页参数为兼容保留，切分实现在 `scripts/gba_wfs_client.py`）
 - 自动把字段标准化为统一输出列
 - 按边界自动生成格网并分块抓取
 - 支持复用已存在分块结果，便于断点续跑
@@ -133,7 +133,7 @@ Remove-Item Env:PGPASSWORD
 - `--grid-size`
   分格网大小，默认 `0.2`。
 - `--page-size`
-  单次 WFS 分页大小，默认 `5000`。
+  兼容参数（默认 `5000`）；当前抓取按范围整段返回，不使用分页。
 - `--max-pages`
   烟雾测试时限制分页数量。
 - `--tile-format`
@@ -184,10 +184,10 @@ python scripts/download_gba_lod1_wfs.py ^
 
 #### 用途
 
-这个脚本在 `scripts/download_gba_lod1_wfs.py` 的基础上新增了超大格网自适应处理能力，适合下面两类场景：
+这个脚本与 `scripts/download_gba_lod1_wfs.py` 共用同一抓取内核（自适应切分已内置在 `scripts/gba_wfs_client.py`），适合下面两类场景：
 
-- 单个格网内建筑数量过大，分页请求会非常多
-- 某个格网请求连续失败，难以稳定拉完
+- 单个请求范围过大：客户端在请求前按跨度上限（`0.09°`）自动预切分
+- 请求被截断、返回 `BBOX_TOO_LARGE` 或持续失败：自动四分裂为更小范围再试（最小 `0.003°`）
 
 它保留了和原脚本一致的三种入口：
 
@@ -195,25 +195,23 @@ python scripts/download_gba_lod1_wfs.py ^
 - `--place`
 - `--boundary`
 
-其中 `--place` 和 `--boundary` 模式会启用自适应逻辑。
+三种入口共用同一抓取内核，切分行为一致。
 
-#### 自适应规则
+#### 自适应规则（由 WFS 客户端实现）
 
-- 如果某个格网探测到的 `numberMatched` 超过阈值，就自动四分裂成更小子格网
-- 如果某个格网在探测阶段失败，能继续切分时会自动四分裂；已到最小格网时改为直接下载
-- 如果某个格网在实际下载阶段请求重试耗尽后仍失败，也会自动四分裂成更小子格网
-- 如果格网已经小到最小阈值，则不再继续切分
+- 请求前预切分：单次请求跨度超过 `0.09°` 时先四分裂
+- 截断检测：返回要素数少于 `numberMatched`，或返回 `BBOX_TOO_LARGE` 时，自动四分裂重试
+- 失败分裂：请求持续失败时自动四分裂；到达最小跨度 `0.003°` 后不再切分
+- 例外：源站 429 限流只等待重试，绝不切分
 
-#### 新增参数
+#### 兼容参数
 
-- `--split-threshold`
-  单格建筑数量超过该值时自动切分，默认 `20000`。
-- `--failure-split-retries`
-  单格请求连续失败多少次后改为切分，默认 `5`。
-- `--min-grid-size`
-  子格网允许切分到的最小尺寸，默认 `0.05`。
-- `--probe-page-size`
-  探测 `numberMatched` 时使用的请求页大小，默认 `1`。
+> 说明：实际切分由客户端决定（跨度上限 `0.09°`、最小 `0.003°`）；以下参数为兼容保留、当前不生效：
+
+- `--split-threshold`（默认 `20000`）
+- `--failure-split-retries`（默认 `5`）
+- `--min-grid-size`（默认 `0.05`）
+- `--probe-page-size`（默认 `1`）
 
 #### 适合场景
 
@@ -372,7 +370,7 @@ python scripts/run_gba_province_batch.py ^
 #### 主要能力
 
 - 自动识别清单编码（UTF-8 / GBK），校验字段与路径
-- 覆盖表优先，其次本地行政边界（Natural Earth）匹配，再回退在线地名解析与缓存
+- 边界解析：覆盖表 `skip` 首先判定；其余情况优先复用任务目录缓存 `place_boundary.gpkg`，无缓存时依次为覆盖表（`bbox` / `boundary` / `query`）→ 本地行政边界（Natural Earth）→ 在线地名解析。已缓存任务新增/修改覆盖后需加 `--refresh-boundary` 才重新解析
 - 逐任务调用下载脚本（viewerSession 自动刷新、0.09° 请求自动切分），产物、日志、完成标记写入标准下载目录
 - 任务完成自动导出交付用 SHP，超大任务按要素数自动分卷（`--shp-max-features`）
 - SQLite 状态库支撑断点续跑、只跑失败项、强制重跑，`--export-shp-only` 可为历史成果补导出 SHP
@@ -392,7 +390,7 @@ python scripts/run_gba_province_batch.py ^
 - `--retry-failed` / `--status` / `--force`
   失败重试、指定状态、强制重跑。
 - `--dry-run`
-  只打印计划，不下载、不改状态。
+  只打印计划，不下载；注意仍会先把清单同步进状态库（可能新增/更新/重置任务）。
 - `--sync-only` / `--summary` / `--running`
   只同步清单入库 / 只打印状态统计 / 打印当前正在执行的任务与分块进度。
 - `--export-shp-only`
@@ -417,13 +415,13 @@ python scripts/run_world_building_tasks.py --retry-failed
 python scripts/run_world_building_tasks.py --move-top "Botswana"
 ```
 
-完整目录规范、SQLite 结构与状态机说明见 `docs/world_building_tasks_pipeline.md`。
+完整目录规范、SQLite 结构与状态机见 `scripts/world_tasks_lib.py` 与相关单测（`tests/test_world_tasks_lib.py`、`tests/test_run_world_building_tasks.py`）。
 
 ### 5. `scripts/status_server.py`
 
 #### 用途
 
-网页看板：浏览器查看当前下载任务、分块进度、队列分页（全部待执行任务，支持翻页、每页条数、按城市中英文搜索、手动排序）、最近完成情况；失败任务表可把失败任务「重新入队」（重置为待执行并添加到队首，不删除已下载数据，下次启动批处理生效）；「最近完成」表的「重新下载」：确认后删除该任务整个下载目录并重置为待执行队首，同时把下游数据处理任务置为「等待重新下载」（下载完成后自动恢复为待处理）。「批处理控制」可一键重启批处理、或一键停止当前下载任务（已完成分块复用，断点继续）。「数据处理」页签展示 SHP 处理队列（切分 → QGIS 校验 → 清洗 → 3857 重投影）的阶段、分片进度与日志尾。
+网页看板：浏览器查看下载进度、队列（全部待执行任务，支持翻页、每页条数、按城市中英文搜索、手动排序与置顶）、最近完成与失败任务；失败任务可「重新入队」（置顶队首，不删除已下载数据）；队列任务可「重新下载」（删除该任务整个下载目录并重置到队首，同时把下游处理任务置为「等待重新下载」、删除其「库表更新」记录）。「批处理控制」支持重启/停止批处理，以及把清单 CSV「同步到状态库」（有下载进程运行时需先停止）。「数据处理」页签支持「开始执行 / 停止处理 / 同步队列」，并展示处理阶段、分片进度、分卷「自动合并」与日志尾。「库表更新」页签可将处理成果「拷贝到共享目录」「更新到库」（成功后自动登记为已更新）。另有「日志」页签集中查看各阶段日志、「配置」页签保存数据库/共享目录/QGIS 并「检测环境」。
 
 #### 启动与访问
 
@@ -437,7 +435,7 @@ python -u scripts/status_server.py --port 8765
 - 局域网防误操作（可选）：加 `--action-token <令牌>`，重启操作需在页面输入该令牌
 - 「最近完成」表格含「下载目录」列：显示该任务的下载数据目录；点该行「重新下载」会**永久删除该目录**并把任务重置为待执行队首（同时重置下游数据处理任务、删除其「库表更新」记录），请谨慎操作
 
-完整说明见 `docs/status_page.md`。
+完整说明见 `docs/GBA建筑下载操作手册.md`。
 
 ### 6. `scripts/run_shp_process_tasks.py`
 
@@ -453,7 +451,7 @@ python -u scripts/status_server.py --port 8765
 - `--run` 执行：资源护栏（可用内存/磁盘不足时不启动）、隔离输入目录、调用处理工具、每 5 秒写阶段与分片进度、产物校验（CRS=3857 + 分片要素数）、写 `_PROCESS_DONE.json`、回写下载库 `processed_3857_dir`
 - 手动排序：待处理队列支持 `queue_order` 顺序，可用 `--move-up / --move-down / --move-top` 或 `--order` 调整；看板「数据处理」页签的「排序」列提供 ↑/↓/⤒ 按钮，改动在下次 `--run` 生效
 - 页面控制：看板「数据处理」页签支持「开始执行 / 停止处理」；开始可填数量（0=全部）与是否等待资源，停止会把 RUNNING 任务重置为 PENDING；执行器日志 `data/logs/process/run.log`
-- 队列备注：待处理队列每行可编辑备注（≤200 字符，失焦/回车自动保存，存 `process_tasks.note`），重跑与 sync 不会清空
+- 队列备注：任务备注（≤200 字符，存 `process_tasks.note`），重跑与 sync 不会清空（接口 `/api/process/note`；看板处理页暂未提供编辑入口）
 - 断点续跑：中断的 RUNNING 自动重置为 PENDING；`--retry-failed` 重试失败项；`--force` 强制重跑
 - `--summary / --running`：CLI 查看队列统计与当前处理任务（与看板「数据处理」页签同源）
 
@@ -496,7 +494,7 @@ python scripts/run_shp_process_tasks.py --move-top "宁夏"
 - 高度字段名需为 `HEIGHT` 或 `Height`，否则清洗阶段的零高剔除不生效（可用 `Tools/Oneshp_pipline_qgis/rename_height.py` 先改名）。
 - 单个大文件处理以小时计，建议后台运行并用看板「数据处理」页签观察进度。
 
-完整说明见 `docs/status_page.md` 的「数据处理页签」一节。
+完整说明见 `docs/GBA建筑下载操作手册.md` 第 7 节「数据处理」。
 
 ## 推荐使用方式
 
@@ -508,12 +506,6 @@ python scripts/run_shp_process_tasks.py --move-top "宁夏"
 ## 相关文档
 
 - `docs/GBA建筑下载操作手册.md`（项目简介 / 整个链路步骤 / 前置准备 / 启动 / 下载 / 修改优先级 / 数据处理 / 库表更新 / 日志 / 常见问题）
-- `docs/gba_building_shp_height_process.md`
-- `docs/gba_building_shp_height_usage.md`
-- `docs/province_gba_batch_solution.md`
-- `docs/world_building_tasks_pipeline.md`
-- `docs/status_page.md`
-- `docs/gba_wfs_download_limits.md`
 
 ## 部署环境清单
 
