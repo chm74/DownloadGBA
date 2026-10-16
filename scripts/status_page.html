@@ -152,8 +152,8 @@
     <button type="button" class="tab active" data-tab="download">建筑数据下载</button>
     <button type="button" class="tab" data-tab="processing">数据处理</button>
     <button type="button" class="tab" data-tab="dbupdated">库表更新</button>
-    <button type="button" class="tab" data-tab="manifest">CSV清单管理</button>
     <button type="button" class="tab" data-tab="logs">日志</button>
+    <button type="button" class="tab" data-tab="manifest">CSV清单管理</button>
     <button type="button" class="tab" data-tab="config">配置</button>
   </nav>
 
@@ -503,7 +503,10 @@
     <section>
       <h2>② 追加新任务</h2>
       <div class="muted" style="margin-bottom:10px;">
-        向任务清单 <code>data/world_building_download_tasks.csv</code> 追加一行，并执行「<b>CSV同步到状态库</b>」（把整份清单登记 / 更新 / 对账进下载状态库；同步后该任务才会出现在「建筑数据下载」队列中）。下载运行中时同步会被拒绝，请先停止下载任务；下载目录按 <code>data\洲\国家\城市</code> 自动生成。重复追加同一任务会自动跳过追加、直接同步，可放心重试。
+        向任务清单 <code>data/world_building_download_tasks.csv</code> 追加一行，并同步到下载状态库（把整份清单登记 / 更新 / 对账进状态库）。同步后该任务才会出现在「建筑数据下载」队列中。下载目录按 <code>data\洲\国家\城市</code> 自动生成；重复追加同一任务会自动跳过追加、直接同步，可放心重试。
+      </div>
+      <div class="muted" style="margin-bottom:10px;color:var(--warn);">
+        <b>备注</b>：点「追加并同步」前，需先停止「建筑数据下载」任务——到「建筑数据下载」页签点「停止下载任务」；下载运行中时同步会被拒绝。
       </div>
       <div id="mf-diff-note" class="muted" style="display:none;margin-bottom:10px;color:var(--warn);"></div>
       <div class="cfg-grid">
@@ -513,7 +516,7 @@
         <div class="cfg-field"><label>命名前缀（必填，全局唯一，中英文均可）</label><input id="mf-prefix" type="text" placeholder="如：Riyadh / 利雅得"></div>
       </div>
       <div class="cfg-actions" style="margin-top:14px;">
-        <button id="mf-append" type="button" style="padding:6px 16px;cursor:pointer;" title="追加一行到任务清单 CSV，并把 CSV 同步到下载状态库（即「CSV同步到状态库」功能）">追加并同步</button>
+        <button id="mf-append" type="button" style="padding:6px 16px;cursor:pointer;" title="追加一行到任务清单 CSV，并把 CSV 同步到下载状态库（同步后任务出现在「建筑数据下载」队列）">追加并同步</button>
         <span id="mf-append-message" class="muted"></span>
       </div>
       <div class="muted" style="margin-top:10px;">
