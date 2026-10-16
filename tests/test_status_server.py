@@ -576,6 +576,8 @@ class DbUpdateTests(unittest.TestCase):
             self.assertIsNone(snapshot["error"])
             self.assertEqual([row["dataset_key"] for row in snapshot["rows"]], ["Europe|San_Marino|San_Marino"])
             self.assertFalse(snapshot["rows"][0]["updated"])
+            self.assertEqual(snapshot["rows"][0]["continent"], "Europe")
+            self.assertEqual(snapshot["rows"][0]["continent_display"], "Europe(欧洲)")
             self.assertEqual(snapshot["counts"], {"total": 1, "updated": 0, "pending": 1})
 
             saved = status_server.save_db_update_marks(

@@ -52,6 +52,7 @@
   .merge-msg.error { color:var(--err); }
   .merge-msg.clickable { cursor:pointer; text-decoration:underline; }
   .db-import-log { color:var(--err); cursor:pointer; text-decoration:underline; font-size:12px; margin-left:6px; white-space:nowrap; }
+  .db-group-row td { background:rgba(127,127,127,.08); font-weight:600; font-size:12px; }
   .merge-badge { display:inline-block; padding:1px 7px; border-radius:999px; font-size:12px; white-space:nowrap; }
   .merge-badge.warn { color:var(--warn); background:rgba(217,119,6,.15); }
   .merge-badge.err { color:var(--err); background:rgba(220,38,38,.15); cursor:pointer; }
@@ -1598,6 +1599,29 @@ function dbUpdateFilteredRows() {
   });
 }
 
+const DB_CONTINENT_ORDER = ["Asia(亚洲)", "Europe(欧洲)", "Africa(非洲)", "America(美洲)", "Oceania(大洋洲)", "Antarctica(南极洲)", "其它(EXT)"];
+
+function dbRowContinent(item) {
+  if (item && item.continent_display) return item.continent_display;
+  const key = String((item && item.dataset_key) || "");
+  const raw = key.split("|")[0] || "其它";
+  return raw === "EXT" ? "其它(EXT)" : raw;
+}
+
+function sortDbRowsByContinent(rows) {
+  return rows.slice().sort((a, b) => {
+    const ca = dbRowContinent(a);
+    const cb = dbRowContinent(b);
+    const ia = DB_CONTINENT_ORDER.indexOf(ca);
+    const ib = DB_CONTINENT_ORDER.indexOf(cb);
+    const oa = ia === -1 ? DB_CONTINENT_ORDER.length : ia;
+    const ob = ib === -1 ? DB_CONTINENT_ORDER.length : ib;
+    if (oa !== ob) return oa - ob;
+    if (ca !== cb) return ca.localeCompare(cb, "zh-Hans-CN");
+    return String(a.dataset_key || "").localeCompare(String(b.dataset_key || ""), "zh-Hans-CN");
+  });
+}
+
 function renderDbUpdateTable() {
   const box = document.getElementById("d-table");
   if (dbNoteState.editingKey && box.querySelector(`input[data-note-key="${dbNoteState.editingKey}"]`)) {
@@ -1614,7 +1638,7 @@ function renderDbUpdateTable() {
     button.classList.toggle("active", button.dataset.dfilter === dbUpdateState.filter);
   });
 
-  const rows = dbUpdateFilteredRows();
+  const rows = sortDbRowsByContinent(dbUpdateFilteredRows());
   const total = rows.length;
   const pageSize = dbUpdateState.pageSize;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -1642,11 +1666,24 @@ function renderDbUpdateTable() {
   const actionHeader = showAction ? "<th>操作</th>" : "";
   const detailHeader = showDetail ? "<th>更新详情</th>" : "";
   const updatedAtHeader = showUpdatedAt ? "<th>更新时间</th>" : "";
+  const colCount = 5 + (showUpdatedAt ? 1 : 0) + (showDetail ? 1 : 0) + (showAction ? 1 : 0);
+  const groupTotals = new Map();
+  for (const item of rows) {
+    const label = dbRowContinent(item);
+    groupTotals.set(label, (groupTotals.get(label) || 0) + 1);
+  }
+  let lastContinent = "";
   box.innerHTML = `
     <table>
       <thead><tr><th>数据集</th><th>命名前缀</th><th>处理完成时间</th><th>输出目录</th>${updatedAtHeader}<th>备注</th>${detailHeader}${actionHeader}</tr></thead>
       <tbody>${pageRows.map(item => {
         const row = item;
+        let groupRow = "";
+        const continentLabel = dbRowContinent(item);
+        if (continentLabel !== lastContinent) {
+          lastContinent = continentLabel;
+          groupRow = `<tr class="db-group-row"><td colspan="${colCount}">${esc(continentLabel)}（${groupTotals.get(continentLabel) || 0} 条）</td></tr>`;
+        }
         const det = row.import_detail;
         const detText = det && (det.deleted != null || det.inserted != null)
           ? `删除 ${det.deleted ?? "-"} 条 / 新增 ${det.inserted ?? "-"} 个 SHP` + (det.skipped ? ` / 跳过 ${det.skipped}` : "")
@@ -1665,7 +1702,7 @@ function renderDbUpdateTable() {
             `<button type="button" class="mini" data-import-db="${esc(row.dataset_key)}" title="以共享目录为准写入数据库；数据处理内容到共享目录可自动或手动拷贝" ${busy ? "disabled" : ""}>更新到库</button>${importFailLink}</td>`
           : "";
         const note = row.note || "";
-        return `
+        return groupRow + `
         <tr data-dkey="${esc(row.dataset_key)}" data-updated="${row.updated ? "1" : "0"}" data-updated-at="${esc(row.updated_at || "")}">
           <td class="mono">${esc(row.display_name || row.dataset_key)}</td>
           <td class="mono">${esc(row.process_name_prefix || "-")}</td>

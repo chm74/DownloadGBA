@@ -1417,6 +1417,8 @@ def build_db_update_snapshot(repo_root: Path, process_db: Path, marks_file: Path
     rows = []
     for row in records:
         key = row["dataset_key"]
+        continent_raw = key.split("|", 1)[0] if "|" in key else key
+        continent_display = "其它(EXT)" if continent_raw.upper() == "EXT" else format_continent(continent_raw)
         mark = marks.get(key, {})
         record = import_records.get(key)
         import_detail = None
@@ -1432,6 +1434,8 @@ def build_db_update_snapshot(repo_root: Path, process_db: Path, marks_file: Path
         rows.append(
             {
                 "dataset_key": key,
+                "continent": continent_raw,
+                "continent_display": continent_display,
                 "task_id": row["task_id"],
                 "display_name": row["display_name"] or key,
                 "process_name_prefix": _row_optional(row, "process_name_prefix"),
