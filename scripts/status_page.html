@@ -1780,7 +1780,7 @@ function renderDbContinentStats() {
       ? ` · 未下载 ${dbUpdateState.notDownloadedTotal} 条`
       : "";
     totalEl.textContent = total
-      ? `已处理 ${total} 条：已更新 ${updated}，未更新 ${total - updated}${actual}${notDownloaded}`
+      ? `已更新到库 ${updated} 条：未更新 ${total - updated} 条${actual}${notDownloaded}`
       : "暂无数据";
   }
   if (stats.length === 0) {
@@ -1806,7 +1806,7 @@ function renderDbContinentStats() {
       <div class="db-stat-row"><span>实际任务总数</span><b>${actualText}</b></div>
       <div class="db-stat-row"><span>建筑数据已下载</span><b class="ok">${downloadedText}</b></div>
       <div class="db-stat-row"><span>建筑数据未下载</span><b class="warn">${notDownloadedText}</b></div>
-      <div class="db-stat-row db-stat-total"><span>已处理 ${item.total} 条</span><span>完成 ${percent}%</span></div>
+      <div class="db-stat-row db-stat-total"><span>已更新到库 ${item.updated} 条</span><span>完成 ${percent}%</span></div>
       <div class="db-stat-bar"><i style="width:${percent}%"></i></div>
     </div>`;
   }).join("");
