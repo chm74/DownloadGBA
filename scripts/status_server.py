@@ -1241,6 +1241,15 @@ def copy_final_to_share(config: dict, dataset_key: str) -> dict:
             "updated_at": datetime.now().isoformat(timespec="seconds"),
         }
 
+    # 在启动后台线程前同步创建日志，保证点击后立即能在「日志 → 库表更新」看到文件
+    started_at = datetime.now()
+    total = len(files)
+    _append_update_log(repo_root, dataset_key, "===== 开始拷贝到共享目录 =====")
+    _append_update_log(repo_root, dataset_key, f"开始时间: {started_at.strftime('%Y-%m-%d %H:%M:%S')}")
+    _append_update_log(repo_root, dataset_key, f"源目录: {final_dir}")
+    _append_update_log(repo_root, dataset_key, f"目标目录: {share_dir}")
+    _append_update_log(repo_root, dataset_key, f"文件数: {total}")
+
     def set_job(**fields) -> None:
         with DB_COPY_LOCK:
             job = DB_COPY_JOBS.get(dataset_key)
@@ -1248,13 +1257,6 @@ def copy_final_to_share(config: dict, dataset_key: str) -> dict:
                 job.update(updated_at=datetime.now().isoformat(timespec="seconds"), **fields)
 
     def worker() -> None:
-        started_at = datetime.now()
-        total = len(files)
-        _append_update_log(repo_root, dataset_key, "===== 开始拷贝到共享目录 =====")
-        _append_update_log(repo_root, dataset_key, f"开始时间: {started_at.strftime('%Y-%m-%d %H:%M:%S')}")
-        _append_update_log(repo_root, dataset_key, f"源目录: {final_dir}")
-        _append_update_log(repo_root, dataset_key, f"目标目录: {share_dir}")
-        _append_update_log(repo_root, dataset_key, f"文件数: {total}")
         try:
             share_dir.mkdir(parents=True, exist_ok=True)
             for entry in share_dir.iterdir():

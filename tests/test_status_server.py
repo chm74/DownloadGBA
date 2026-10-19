@@ -2943,6 +2943,10 @@ class ControlTests(unittest.TestCase):
             started = status_server.copy_final_to_share(config, dataset_key)
             self.assertTrue(started["ok"])
 
+            log_path = repo_root / "data" / "logs" / "update" / "log_main3_Testland_Testregion.log"
+            self.assertTrue(log_path.is_file())
+            self.assertIn("开始拷贝到共享目录", log_path.read_text(encoding="utf-8"))
+
             status = status_server.build_copy_status(dataset_key)
             for _ in range(100):
                 status = status_server.build_copy_status(dataset_key)
@@ -2953,7 +2957,6 @@ class ControlTests(unittest.TestCase):
             self.assertFalse(shp.exists())
             self.assertTrue((share_root / "Asia" / "Testland" / "Testregion" / shp.name).is_file())
 
-            log_path = repo_root / "data" / "logs" / "update" / "log_main3_Testland_Testregion.log"
             text = log_path.read_text(encoding="utf-8")
             self.assertIn("开始拷贝到共享目录", text)
             self.assertIn(f"源目录: {final_dir}", text)
