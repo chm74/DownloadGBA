@@ -7,6 +7,7 @@ import threading
 import time
 import unittest
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -599,6 +600,61 @@ class DbUpdateTests(unittest.TestCase):
             self.assertEqual(row["updated_at"], "2026-09-17T10:00:00")
             self.assertEqual(row["note"], "已更新 world_building")
             self.assertEqual(updated["counts"], {"total": 1, "updated": 1, "pending": 0})
+
+    def test_build_db_update_snapshot_actual_continent_totals(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            state_db = build_repo_fixture(repo_root)
+            process_db = build_process_fixture(repo_root)
+            marks_file = repo_root / "data" / "db_update_status.json"
+
+            snapshot = status_server.build_db_update_snapshot(
+                repo_root, process_db, marks_file, state_db=state_db
+            )
+
+            self.assertIsNone(snapshot["error"])
+            self.assertEqual(
+                snapshot["continent_actual_totals"],
+                {"Africa(非洲)": 3, "Europe(欧洲)": 1},
+            )
+            self.assertEqual(
+                snapshot["continent_not_downloaded"],
+                {"Africa(非洲)": 3, "Europe(欧洲)": 0},
+            )
+            self.assertEqual(snapshot["actual_total"], 4)
+            self.assertEqual(snapshot["not_downloaded_total"], 3)
+
+            missing = status_server.build_db_update_snapshot(
+                repo_root, process_db, marks_file, state_db=repo_root / "missing-state.db"
+            )
+            self.assertEqual(missing["continent_actual_totals"], {})
+            self.assertEqual(missing["continent_not_downloaded"], {})
+            self.assertIsNone(missing["actual_total"])
+            self.assertIsNone(missing["not_downloaded_total"])
+
+    def test_load_not_downloaded_tasks_filters_and_sorts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            state_db = build_repo_fixture(repo_root)
+
+            africa = status_server.load_not_downloaded_tasks(repo_root, state_db, "Africa(非洲)")
+            self.assertTrue(africa["ok"])
+            self.assertEqual(africa["total"], 3)
+            self.assertEqual(africa["counts"]["RUNNING"], 1)
+            self.assertEqual(africa["counts"]["PENDING"], 2)
+            self.assertEqual(africa["rows"][0]["status"], "RUNNING")
+
+            europe = status_server.load_not_downloaded_tasks(repo_root, state_db, "Europe(欧洲)")
+            self.assertEqual(europe["total"], 0)
+            self.assertEqual(europe["rows"], [])
+
+            with self.assertRaises(ValueError):
+                status_server.load_not_downloaded_tasks(repo_root, state_db, "")
+
+            with self.assertRaises(RuntimeError):
+                status_server.load_not_downloaded_tasks(
+                    repo_root, repo_root / "missing-state.db", "Africa(非洲)"
+                )
 
     def test_save_db_update_marks_rejects_bad_rows(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1258,6 +1314,28 @@ class ControlTests(unittest.TestCase):
                 server.shutdown()
                 server.server_close()
 
+    def test_not_downloaded_endpoint_returns_continent_tasks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            build_repo_fixture(repo_root)
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            try:
+                query = urllib.parse.urlencode({"continent": "Africa(非洲)"})
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{port}/api/db_updated/not-downloaded?{query}",
+                    timeout=10,
+                ) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                self.assertTrue(payload["ok"])
+                self.assertEqual(payload["total"], 3)
+                self.assertEqual(payload["counts"]["RUNNING"], 1)
+                self.assertEqual(payload["counts"]["PENDING"], 2)
+                self.assertEqual(payload["rows"][0]["status"], "RUNNING")
+            finally:
+                server.shutdown()
+                server.server_close()
+
     def test_db_updated_endpoint_saves_and_reads(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)
@@ -1424,6 +1502,52 @@ class ControlTests(unittest.TestCase):
                 command = start.call_args[0][1]
                 self.assertEqual(command[command.index("--limit") + 1], "2")
                 self.assertIn("--wait-resources", command)
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_process_start_endpoint_uses_configured_default_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            status_server.save_dashboard_config(
+                repo_root,
+                {
+                    "database": {"host": "10.0.0.5", "port": 5432, "dbname": "gis",
+                                 "user": "u1", "password": "p1"},
+                    "result_root": "\\\\srv\\share\\AutoGenerte",
+                    "process": {"default_limit": 3},
+                },
+            )
+            server = self._make_server(repo_root)
+            port = server.server_address[1]
+            empty_detected = {
+                "runner": None,
+                "runners": [],
+                "runner_count": 0,
+                "workers": [],
+                "limit": 0,
+                "wait_resources": False,
+            }
+            try:
+                with patch.object(status_server, "detect_process_batch", return_value=empty_detected):
+                    with patch.object(
+                        status_server,
+                        "start_process_batch",
+                        return_value={"pid": 5252, "command": []},
+                    ) as start:
+                        request = urllib.request.Request(
+                            f"http://127.0.0.1:{port}/api/process/start",
+                            data=json.dumps({"wait_resources": False}).encode("utf-8"),
+                            headers={"Content-Type": "application/json"},
+                            method="POST",
+                        )
+                        with urllib.request.urlopen(request, timeout=10) as response:
+                            payload = json.loads(response.read().decode("utf-8"))
+                self.assertTrue(payload["ok"])
+                self.assertEqual(payload["limit"], 3)
+                start.assert_called_once()
+                command = start.call_args[0][1]
+                self.assertEqual(command[command.index("--limit") + 1], "3")
             finally:
                 server.shutdown()
                 server.server_close()
@@ -2767,6 +2891,7 @@ class ControlTests(unittest.TestCase):
             self.assertEqual(config["database"]["host"], status_server.DEFAULT_UPDATE_DB["host"])
             self.assertEqual(config["database"]["port"], status_server.DEFAULT_UPDATE_DB["port"])
             self.assertEqual(config["result_root"], status_server.DEFAULT_RESULT_ROOT)
+            self.assertEqual(config["process"]["default_limit"], 0)
 
     def test_save_and_load_dashboard_config(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2778,10 +2903,12 @@ class ControlTests(unittest.TestCase):
                                  "user": "u1", "password": "p1"},
                     "result_root": "\\\\srv\\share\\AutoGenerte",
                     "qgis_dir": "E:\\QGIS",
+                    "process": {"default_limit": 5},
                 },
             )
             self.assertEqual(saved["database"]["port"], 5433)
             self.assertEqual(saved["qgis_dir"], "E:\\QGIS")
+            self.assertEqual(saved["process"]["default_limit"], 5)
             config = status_server.load_dashboard_config(repo_root)
             self.assertTrue(config["configured"])
             self.assertEqual(config["database"]["host"], "10.0.0.5")
@@ -2790,6 +2917,7 @@ class ControlTests(unittest.TestCase):
             self.assertEqual(config["database"]["password"], "p1")
             self.assertEqual(config["result_root"], "\\\\srv\\share\\AutoGenerte")
             self.assertEqual(config["qgis_dir"], "E:\\QGIS")
+            self.assertEqual(config["process"]["default_limit"], 5)
             self.assertTrue((repo_root / "data" / "config.json").exists())
 
     def test_config_endpoint_get_and_post(self):
@@ -2801,6 +2929,7 @@ class ControlTests(unittest.TestCase):
                 with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/config", timeout=10) as response:
                     initial = json.loads(response.read().decode("utf-8"))
                 self.assertEqual(initial["database"]["dbname"], status_server.DEFAULT_UPDATE_DB["dbname"])
+                self.assertEqual(initial["process"]["default_limit"], 0)
 
                 request = urllib.request.Request(
                     f"http://127.0.0.1:{port}/api/config",
@@ -2808,6 +2937,7 @@ class ControlTests(unittest.TestCase):
                         "database": {"host": "1.2.3.4", "port": 5555, "dbname": "bld",
                                      "user": "pg", "password": "secret"},
                         "result_root": "\\\\host\\AutoGenerte",
+                        "process": {"default_limit": 7},
                     }).encode("utf-8"),
                     headers={"Content-Type": "application/json"},
                     method="POST",
@@ -2822,6 +2952,7 @@ class ControlTests(unittest.TestCase):
                 self.assertEqual(saved["database"]["port"], 5555)
                 self.assertEqual(saved["database"]["password"], "secret")
                 self.assertEqual(saved["result_root"], "\\\\host\\AutoGenerte")
+                self.assertEqual(saved["process"]["default_limit"], 7)
             finally:
                 server.shutdown()
                 server.server_close()
@@ -2835,6 +2966,8 @@ class ControlTests(unittest.TestCase):
                 for body in (
                     {"database": {"host": "h", "port": 70000, "dbname": "b", "user": "u", "password": ""}, "result_root": "x"},
                     {"database": {"host": "h", "port": 5432, "dbname": "b", "user": "u", "password": ""}, "result_root": ""},
+                    {"database": {"host": "h", "port": 5432, "dbname": "b", "user": "u", "password": ""}, "result_root": "x", "process": {"default_limit": -1}},
+                    {"database": {"host": "h", "port": 5432, "dbname": "b", "user": "u", "password": ""}, "result_root": "x", "process": {"default_limit": "abc"}},
                 ):
                     request = urllib.request.Request(
                         f"http://127.0.0.1:{port}/api/config",

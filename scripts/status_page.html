@@ -11,7 +11,7 @@
   }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font: 14px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; }
-  .wrap { max-width: 1571px; margin: 0 auto; padding: 20px 16px 48px; }
+  .wrap { max-width: 1571px; margin: 0 auto; padding: 20px 16px 48px; min-height: 100vh; display: flex; flex-direction: column; }
   header { display:flex; flex-wrap:wrap; align-items:baseline; gap:10px 16px; margin-bottom:16px; }
   h1 { font-size:20px; margin:0; }
   .muted { color:var(--muted); font-size:12px; }
@@ -53,6 +53,47 @@
   .merge-msg.clickable { cursor:pointer; text-decoration:underline; }
   .db-import-log { color:var(--err); cursor:pointer; text-decoration:underline; font-size:12px; margin-left:6px; white-space:nowrap; }
   .db-group-row td { background:rgba(127,127,127,.08); font-weight:600; font-size:12px; }
+  .db-stat-block { border:1px solid var(--line); border-radius:10px; background:rgba(127,127,127,.04); padding:12px 14px; margin:0 0 12px; }
+  .db-stat-head { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+  .db-stat-title { font-size:13px; font-weight:600; }
+  .db-stat-head #d-continent-total { margin-left:auto; }
+  .db-stat-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:10px; }
+  .db-stat-card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 12px; cursor:pointer; transition:border-color .15s ease, box-shadow .15s ease; }
+  .db-stat-card:hover { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
+  .db-stat-card:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .db-stat-name { font-size:13px; font-weight:600; margin-bottom:6px; }
+  .db-stat-row { display:flex; justify-content:space-between; gap:10px; font-size:12px; line-height:1.7; }
+  .db-stat-row b.ok { color:var(--ok); }
+  .db-stat-row b.err { color:var(--err); }
+  .db-stat-row b.warn { color:var(--warn); }
+  .db-stat-total { color:var(--muted); margin-top:2px; }
+  .db-stat-bar { height:5px; background:var(--line); border-radius:999px; overflow:hidden; margin-top:6px; }
+  .db-stat-bar > i { display:block; height:100%; background:var(--ok); width:0; }
+  .modal-backdrop { position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px; background:rgba(0,0,0,.45); }
+  .modal-backdrop[hidden] { display:none; }
+  .modal { width:min(1120px, 96vw); max-height:86vh; display:flex; flex-direction:column; background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:12px; box-shadow:0 24px 80px rgba(0,0,0,.35); overflow:hidden; }
+  .modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:16px 18px 10px; border-bottom:1px solid var(--line); }
+  .modal-title { font-size:16px; font-weight:600; }
+  .modal-close { background:none; border:none; color:var(--muted); font:24px/1 "Segoe UI", sans-serif; cursor:pointer; padding:0 4px; }
+  .modal-close:hover { color:var(--text); }
+  .modal-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:10px 18px; border-bottom:1px solid var(--line); }
+  .status-chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .status-chip { border:1px solid var(--line); background:transparent; color:var(--muted); border-radius:999px; padding:2px 9px; font-size:12px; cursor:pointer; }
+  .status-chip.active { border-color:var(--accent); color:var(--accent); background:rgba(37,99,235,.08); }
+  .modal-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .modal-tools input { padding:4px 8px; width:230px; }
+  .modal-body { flex:1 1 auto; min-height:180px; overflow:auto; padding:0 18px; }
+  .modal-body table { min-width:980px; }
+  .modal-body th, .modal-body td { white-space:nowrap; }
+  .modal-body td.path-cell { max-width:280px; overflow:hidden; text-overflow:ellipsis; }
+  .modal-body td.error-cell { max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .modal-foot { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 18px; border-top:1px solid var(--line); }
+  .status-badge { display:inline-block; padding:1px 7px; border-radius:999px; font-size:12px; white-space:nowrap; }
+  .status-badge.pending { color:var(--muted); background:rgba(127,127,127,.12); }
+  .status-badge.running { color:var(--accent); background:rgba(37,99,235,.14); }
+  .status-badge.failed { color:var(--err); background:rgba(220,38,38,.14); }
+  .status-badge.skipped { color:var(--warn); background:rgba(217,119,6,.14); }
+  .status-badge.other { color:var(--muted); background:rgba(127,127,127,.12); }
   .merge-badge { display:inline-block; padding:1px 7px; border-radius:999px; font-size:12px; white-space:nowrap; }
   .merge-badge.warn { color:var(--warn); background:rgba(217,119,6,.15); }
   .merge-badge.err { color:var(--err); background:rgba(220,38,38,.15); cursor:pointer; }
@@ -122,12 +163,16 @@
   .log-task { margin:4px 0; }
   .log-task > summary { cursor:pointer; font-size:12px; padding:2px 4px; }
   .log-task-files { padding-left:10px; }
-  footer { color:var(--muted); font-size:12px; text-align:center; margin-top:8px; }
+  footer { color:var(--muted); font-size:12px; text-align:center; margin-top:auto; padding-top:12px; }
   a { color:var(--accent); }
   @media (max-width: 760px) {
     .layout { flex-direction:column; }
     .sidebar { flex:1 1 auto; width:100%; }
     .cards { grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); }
+    .modal { width:100%; max-height:92vh; }
+    .modal-toolbar { align-items:flex-start; }
+    .modal-tools { width:100%; }
+    .modal-tools input { width:100%; }
   }
 </style>
 </head>
@@ -265,18 +310,15 @@
           <div class="muted" style="margin-bottom:10px;">
             后台启动处理队列（独立进程，重启看板不影响）；停止会把正在跑的任务重置为「待处理」，可随时重新开始。
             建议先在「建筑数据下载」页签停止下载，避免内存竞争。
+            处理数量取自「配置」页「数据处理 → 处理默认数量」（0=全部，下次「开始执行」生效）。
           </div>
           <div class="stats">
             <span>处理批处理：<b id="pctl-running">-</b></span>
             <span>执行器 PID：<span id="pctl-pid">-</span></span>
             <span>当前任务：<span id="pctl-task">-</span></span>
+            <span>本次数量：<b id="pctl-limit-current">-</b></span>
           </div>
           <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <label class="muted">数量
-              <input id="pctl-limit" type="number" min="0" step="1" value="0"
-                     style="width:80px;margin-left:6px;padding:4px 6px;" title="0 表示执行全部待处理任务">
-              （0=全部）
-            </label>
             <label class="muted">
               <input id="pctl-wait" type="checkbox" checked> 资源不足时等待
             </label>
@@ -357,6 +399,16 @@
           <div class="muted" style="margin-bottom:10px;">
             对已完成处理的任务点「更新到库」写入数据库；备注可直接编辑（失焦自动保存），更新时间由入库自动填入。
           </div>
+          <div class="db-stat-block">
+            <div class="db-stat-head">
+              <span class="db-stat-title">按大洲统计</span>
+              <span class="muted">全量统计，不受搜索和翻页影响；实际任务总数含未处理任务</span>
+              <span id="d-continent-total" class="muted">-</span>
+            </div>
+            <div id="d-continent-stats" class="db-stat-grid">
+              <div class="empty">暂无数据</div>
+            </div>
+          </div>
           <div class="subtabs">
             <button type="button" class="subtab active" data-dfilter="pending">未更新到库（<span id="d-count-pending">0</span>）</button>
             <button type="button" class="subtab" data-dfilter="updated">更新到库（<span id="d-count-updated">0</span>）</button>
@@ -389,6 +441,30 @@
     </div>
   </div>
 
+  <div id="d-download-modal" class="modal-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="d-download-title">
+      <div class="modal-head">
+        <div>
+          <div id="d-download-title" class="modal-title">建筑数据未下载</div>
+          <div id="d-download-meta" class="muted">-</div>
+        </div>
+        <button type="button" id="d-download-close" class="modal-close" aria-label="关闭">×</button>
+      </div>
+      <div class="modal-toolbar">
+        <div id="d-download-status" class="status-chips"></div>
+        <div class="modal-tools">
+          <input id="d-download-search" type="text" placeholder="搜索国家 / 区域 / 任务ID">
+          <button id="d-download-refresh" type="button" style="padding:4px 10px;cursor:pointer;">刷新</button>
+        </div>
+      </div>
+      <div id="d-download-body" class="modal-body"><div class="empty">加载中…</div></div>
+      <div class="modal-foot">
+        <span id="d-download-time" class="muted">-</span>
+        <button type="button" id="d-download-close-footer" style="padding:4px 14px;cursor:pointer;">关闭</button>
+      </div>
+    </div>
+  </div>
+
   <div class="panel" id="panel-config" hidden>
     <div class="layout">
       <aside class="sidebar">
@@ -396,6 +472,7 @@
           <button type="button" class="cfg-nav-item active" data-cfgtab="db">数据库连接</button>
           <button type="button" class="cfg-nav-item" data-cfgtab="root">区域成果共享目录</button>
           <button type="button" class="cfg-nav-item" data-cfgtab="qgis">QGIS</button>
+          <button type="button" class="cfg-nav-item" data-cfgtab="process">数据处理</button>
           <button type="button" class="cfg-nav-item" data-cfgtab="env">环境 / 诊断</button>
         </nav>
       </aside>
@@ -434,6 +511,17 @@
             <div class="muted" style="margin-top:6px;">用于数据处理的 QGIS；启动处理队列时会以此设置注入环境变量 <code>QGIS_DIR</code>。</div>
           </div>
 
+          <div class="cfg-pane" data-cfgpane="process" hidden>
+            <h2>数据处理</h2>
+            <div class="cfg-grid">
+              <div class="cfg-field">
+                <label>处理默认数量（0=全部）</label>
+                <input id="cfg-process-limit" type="number" min="0" step="1" value="0">
+              </div>
+            </div>
+            <div class="muted" style="margin-top:6px;">「数据处理」页每次「开始执行」时读取此数量（0=全部）；修改保存后下次开始执行生效，不影响正在运行的处理。</div>
+          </div>
+
           <div class="cfg-pane" data-cfgpane="env" hidden>
             <h2 style="display:flex;align-items:center;justify-content:space-between;">
               <span>环境 / 诊断</span>
@@ -460,25 +548,12 @@
   <div class="panel" id="panel-logs" hidden>
     <div class="layout">
       <aside class="sidebar" style="flex:0 0 320px;">
-        <div style="margin-bottom:10px;">
-          <button id="log-refresh-list" type="button" style="padding:4px 10px;cursor:pointer;">刷新列表</button>
-        </div>
         <div id="log-list"><div class="empty">暂无日志</div></div>
       </aside>
       <main class="main">
-        <section style="border:none;background:transparent;padding:0;">
+        <section id="log-detail" style="border:none;background:transparent;padding:0;" hidden>
           <div class="sticky-toolbar">
             <span id="log-current" class="muted">未选择日志</span>
-            <label class="muted">行数
-              <select id="log-lines" style="margin-left:4px;padding:3px 6px;">
-                <option value="100">100</option>
-                <option value="200" selected>200</option>
-                <option value="500">500</option>
-                <option value="2000">2000</option>
-              </select>
-            </label>
-            <label class="muted"><input id="log-auto" type="checkbox"> 自动刷新</label>
-            <button id="log-reload" type="button" style="padding:4px 10px;cursor:pointer;">刷新</button>
           </div>
           <pre id="log-view" class="log" style="min-height:320px;max-height:72vh;overflow:auto;white-space:pre;">未选择日志</pre>
         </section>
@@ -541,6 +616,7 @@ const noteState = { editingKey: null };
 const queueState = { page: 1, pageSize: 15, total: 0, search: "" };
 const processingRecentState = { page: 1, pageSize: 10, total: 0 };
 const mergeMsgState = {};
+let processDefaultLimit = null; // 「配置」页处理默认数量缓存（0=全部）；null 表示尚未读取到
 
 function showMessage(text, type = "info", duration = 3000) {
   let wrap = document.querySelector(".msg-toast-wrap");
@@ -789,8 +865,8 @@ function switchTab(name) {
   });
   if (typeof updateStickyHeadOffsets === "function") updateStickyHeadOffsets();
   if (target === "config") loadConfig();
+  if (target === "processing") loadProcessDefaultLimit();
   if (target === "logs") loadLogs();
-  else setLogAuto(false);
   try {
     localStorage.setItem("gba_tab", target);
   } catch (error) {
@@ -802,7 +878,8 @@ document.querySelectorAll(".tab").forEach((button) => {
   button.addEventListener("click", () => switchTab(button.dataset.tab));
 });
 
-let logState = { current: null, autoTimer: null, data: null };
+let logState = { current: null, data: null };
+const LOG_TAIL_LINES = 200;
 
 let initialTab = "download";
 try {
@@ -862,10 +939,9 @@ function renderLogList() {
 async function reloadCurrentLog() {
   if (!logState.current) return;
   const view = document.getElementById("log-view");
-  const lines = parseInt(document.getElementById("log-lines").value, 10) || 200;
   try {
     const response = await fetch(
-      `/api/log?path=${encodeURIComponent(logState.current)}&lines=${lines}`,
+      `/api/log?path=${encodeURIComponent(logState.current)}&lines=${LOG_TAIL_LINES}`,
       { cache: "no-store" }
     );
     const data = await response.json();
@@ -884,6 +960,8 @@ async function reloadCurrentLog() {
 async function openLog(relPath) {
   logState.current = relPath;
   document.getElementById("log-current").textContent = relPath;
+  const detail = document.getElementById("log-detail");
+  if (detail) detail.hidden = false;
   renderLogList();
   await reloadCurrentLog();
 }
@@ -910,20 +988,6 @@ async function openTaskFolder(relPath) {
   }
 }
 
-function setLogAuto(on) {
-  if (logState.autoTimer) {
-    clearInterval(logState.autoTimer);
-    logState.autoTimer = null;
-  }
-  if (on) {
-    logState.autoTimer = setInterval(reloadCurrentLog, 3000);
-  }
-}
-
-document.getElementById("log-refresh-list").addEventListener("click", loadLogs);
-document.getElementById("log-reload").addEventListener("click", reloadCurrentLog);
-document.getElementById("log-lines").addEventListener("change", reloadCurrentLog);
-document.getElementById("log-auto").addEventListener("change", (event) => setLogAuto(event.target.checked));
 document.getElementById("log-list").addEventListener("click", (event) => {
   const item = event.target.closest(".log-item");
   if (item && item.dataset.logPath) openLog(item.dataset.logPath);
@@ -1581,11 +1645,26 @@ function renderProcessing(processing) {
   renderProcessingFailed(processing);
 }
 
-const dbUpdateState = { page: 1, pageSize: 15, rows: [], filter: "pending", search: "" };
+const dbUpdateState = {
+  page: 1, pageSize: 15, rows: [], filter: "pending", search: "",
+  actualTotals: {}, actualTotal: null,
+  notDownloaded: {}, notDownloadedTotal: null,
+};
 const dbImportMsgState = {};
 const dbImportChecked = {};
 const dbCopyMsgState = {};
 const dbNoteState = { editingKey: null };
+const DOWNLOAD_STATUS_LABELS = {
+  PENDING: "待下载",
+  RUNNING: "下载中",
+  FAILED: "失败",
+  SKIPPED: "跳过",
+};
+const DOWNLOAD_STATUS_ORDER = ["PENDING", "RUNNING", "FAILED", "SKIPPED"];
+const notDownloadedModalState = {
+  continent: "", rows: [], counts: {}, total: 0, generatedAt: "",
+  status: "all", search: "",
+};
 
 function dbUpdateFilteredRows() {
   const allRows = dbUpdateState.rows || [];
@@ -1608,7 +1687,9 @@ function dbRowContinent(item) {
   return raw === "EXT" ? "其它(EXT)" : raw;
 }
 
-function sortDbRowsByContinent(rows) {
+function sortDbRowsByContinent(rows, compareWithin) {
+  const within = compareWithin || ((a, b) =>
+    String(a.dataset_key || "").localeCompare(String(b.dataset_key || ""), "zh-Hans-CN"));
   return rows.slice().sort((a, b) => {
     const ca = dbRowContinent(a);
     const cb = dbRowContinent(b);
@@ -1618,8 +1699,267 @@ function sortDbRowsByContinent(rows) {
     const ob = ib === -1 ? DB_CONTINENT_ORDER.length : ib;
     if (oa !== ob) return oa - ob;
     if (ca !== cb) return ca.localeCompare(cb, "zh-Hans-CN");
-    return String(a.dataset_key || "").localeCompare(String(b.dataset_key || ""), "zh-Hans-CN");
+    return within(a, b);
   });
+}
+
+function dbContinentSortKey(label) {
+  const index = DB_CONTINENT_ORDER.indexOf(label);
+  return index === -1 ? DB_CONTINENT_ORDER.length : index;
+}
+
+function buildDbContinentStats(rows) {
+  const stats = new Map();
+  for (const item of rows || []) {
+    const label = dbRowContinent(item);
+    let stat = stats.get(label);
+    if (!stat) {
+      stat = { label, total: 0, updated: 0, pending: 0 };
+      stats.set(label, stat);
+    }
+    stat.total += 1;
+    if (item.updated) stat.updated += 1;
+    else stat.pending += 1;
+  }
+  return Array.from(stats.values()).sort((a, b) => {
+    const oa = dbContinentSortKey(a.label);
+    const ob = dbContinentSortKey(b.label);
+    if (oa !== ob) return oa - ob;
+    return a.label.localeCompare(b.label, "zh-Hans-CN");
+  });
+}
+
+function renderDbContinentStats() {
+  const box = document.getElementById("d-continent-stats");
+  const totalEl = document.getElementById("d-continent-total");
+  if (!box) return;
+  const stats = buildDbContinentStats(dbUpdateState.rows);
+  const total = stats.reduce((sum, item) => sum + item.total, 0);
+  const updated = stats.reduce((sum, item) => sum + item.updated, 0);
+  if (totalEl) {
+    const actual = Number.isFinite(dbUpdateState.actualTotal)
+      ? ` · 实际任务 ${dbUpdateState.actualTotal} 条`
+      : "";
+    const notDownloaded = Number.isFinite(dbUpdateState.notDownloadedTotal)
+      ? ` · 未下载 ${dbUpdateState.notDownloadedTotal} 条`
+      : "";
+    totalEl.textContent = total
+      ? `已处理 ${total} 条：已更新 ${updated}，未更新 ${total - updated}${actual}${notDownloaded}`
+      : "暂无数据";
+  }
+  if (stats.length === 0) {
+    box.innerHTML = '<div class="empty">暂无数据</div>';
+    return;
+  }
+  box.innerHTML = stats.map((item) => {
+    const percent = item.total > 0 ? Math.round(item.updated * 100 / item.total) : 0;
+    const actual = dbUpdateState.actualTotals[item.label];
+    const actualText = Number.isFinite(actual)
+      ? String(actual)
+      : (dbUpdateState.actualTotal === null ? "-" : "0");
+    const notDownloaded = dbUpdateState.notDownloaded[item.label];
+    const notDownloadedText = Number.isFinite(notDownloaded)
+      ? String(notDownloaded)
+      : (dbUpdateState.notDownloadedTotal === null ? "-" : "0");
+    return `<div class="db-stat-card" data-continent="${esc(item.label)}" tabindex="0" role="button" title="点击查看建筑数据未下载任务">
+      <div class="db-stat-name">${esc(item.label)}</div>
+      <div class="db-stat-row"><span>实际任务总数</span><b>${actualText}</b></div>
+      <div class="db-stat-row"><span>建筑数据未下载</span><b class="warn">${notDownloadedText}</b></div>
+      <div class="db-stat-row"><span>已更新</span><b class="ok">${item.updated}</b></div>
+      <div class="db-stat-row"><span>未更新</span><b class="err">${item.pending}</b></div>
+      <div class="db-stat-row db-stat-total"><span>已处理 ${item.total} 条</span><span>完成 ${percent}%</span></div>
+      <div class="db-stat-bar"><i style="width:${percent}%"></i></div>
+    </div>`;
+  }).join("");
+}
+
+async function loadNotDownloadedTasks() {
+  const continent = notDownloadedModalState.continent;
+  if (!continent) return;
+  const body = document.getElementById("d-download-body");
+  const refreshButton = document.getElementById("d-download-refresh");
+  if (body) body.innerHTML = '<div class="empty">正在加载任务…</div>';
+  if (refreshButton) refreshButton.disabled = true;
+  try {
+    const response = await fetch(
+      `/api/db_updated/not-downloaded?continent=${encodeURIComponent(continent)}`,
+      { cache: "no-store" }
+    );
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || String(response.status));
+    notDownloadedModalState.rows = data.rows || [];
+    notDownloadedModalState.counts = data.counts || {};
+    notDownloadedModalState.total = Number.isFinite(Number(data.total))
+      ? Number(data.total)
+      : notDownloadedModalState.rows.length;
+    notDownloadedModalState.generatedAt = data.generated_at || "";
+    renderNotDownloadedModal();
+  } catch (error) {
+    document.getElementById("d-download-meta").textContent = "加载失败";
+    if (body) body.innerHTML = `<div class="empty">加载失败：${esc(String(error))}</div>`;
+  } finally {
+    if (refreshButton) refreshButton.disabled = false;
+  }
+}
+
+function renderNotDownloadedModal() {
+  const state = notDownloadedModalState;
+  const title = document.getElementById("d-download-title");
+  const meta = document.getElementById("d-download-meta");
+  const statusBox = document.getElementById("d-download-status");
+  const timeBox = document.getElementById("d-download-time");
+  const body = document.getElementById("d-download-body");
+  if (!title || !body) return;
+
+  title.textContent = `${state.continent} · 建筑数据未下载（${state.total}）`;
+  const knownChips = DOWNLOAD_STATUS_ORDER.map((key) => [
+    key, DOWNLOAD_STATUS_LABELS[key] || key, Number(state.counts[key]) || 0,
+  ]);
+  const unknownKeys = Object.keys(state.counts).filter((key) => !DOWNLOAD_STATUS_ORDER.includes(key));
+  const chips = [["all", "全部", state.total], ...knownChips,
+    ...unknownKeys.map((key) => [key, key, Number(state.counts[key]) || 0])];
+  if (statusBox) {
+    statusBox.innerHTML = chips.map(([value, label, count]) =>
+      `<button type="button" class="status-chip${state.status === value ? " active" : ""}" data-status="${esc(value)}">${esc(label)} ${count}</button>`
+    ).join("");
+  }
+  if (meta) {
+    const summary = knownChips
+      .filter(([, , count]) => count > 0)
+      .map(([, label, count]) => `${label} ${count}`)
+      .join(" ｜ ");
+    meta.textContent = summary || "暂无未下载任务";
+  }
+  if (timeBox) {
+    timeBox.textContent = state.generatedAt ? `数据时间：${state.generatedAt}` : "-";
+  }
+
+  const query = state.search.trim().toLowerCase();
+  const rows = state.rows.filter((row) => {
+    if (state.status !== "all" && row.status !== state.status) return false;
+    if (!query) return true;
+    return `${row.country || ""} ${row.city || ""} ${row.task_id || ""}`
+      .toLowerCase()
+      .includes(query);
+  });
+  if (rows.length === 0) {
+    body.innerHTML = `<div class="empty">${state.rows.length ? "没有符合筛选条件的任务" : "该大洲暂无建筑数据未下载任务"}</div>`;
+    return;
+  }
+  body.innerHTML = `<table>
+    <thead><tr><th>国家</th><th>区域/任务</th><th>状态</th><th>队列</th><th>尝试</th><th>更新时间</th><th>下载目录</th><th>最后错误/说明</th><th>操作</th></tr></thead>
+    <tbody>${rows.map((row) => {
+      const status = String(row.status || "");
+      const statusClass = ["pending", "running", "failed", "skipped"].includes(status.toLowerCase())
+        ? status.toLowerCase()
+        : "other";
+      const statusLabel = DOWNLOAD_STATUS_LABELS[status] || status || "-";
+      const queue = row.queue_order ?? row.manifest_order ?? "-";
+      const time = row.updated_at || row.finished_at || row.started_at || "-";
+      const error = row.last_error || "";
+      const logButton = row.log_path
+        ? `<button type="button" class="mini" data-download-log="${esc(row.log_path)}">查看日志</button>`
+        : "";
+      const dirButton = row.download_dir
+        ? `<button type="button" class="mini" data-open-dir="${esc(row.download_dir)}">打开目录</button>`
+        : "";
+      return `<tr>
+        <td>${esc(row.country || "-")}</td>
+        <td>${esc(row.city || "-")}<div class="muted mono" title="${esc(row.task_id || "")}">${esc(row.task_id || "")}</div></td>
+        <td><span class="status-badge ${statusClass}">${esc(statusLabel)}</span></td>
+        <td>${esc(queue)}</td>
+        <td>${esc(row.attempts ?? "-")}</td>
+        <td class="mono">${esc(time)}</td>
+        <td class="mono path-cell" title="${esc(row.download_dir || "")}">${esc(row.download_dir || "-")}</td>
+        <td class="error-cell" title="${esc(error)}">${esc(error || "-")}</td>
+        <td>${logButton}${dirButton}</td>
+      </tr>`;
+    }).join("")}</tbody>
+  </table>`;
+}
+
+async function openNotDownloadedModal(continent) {
+  notDownloadedModalState.continent = continent;
+  notDownloadedModalState.rows = [];
+  notDownloadedModalState.counts = {};
+  notDownloadedModalState.total = 0;
+  notDownloadedModalState.generatedAt = "";
+  notDownloadedModalState.status = "all";
+  notDownloadedModalState.search = "";
+  const search = document.getElementById("d-download-search");
+  if (search) search.value = "";
+  const modal = document.getElementById("d-download-modal");
+  if (modal) modal.hidden = false;
+  document.body.style.overflow = "hidden";
+  document.getElementById("d-download-title").textContent = `${continent} · 建筑数据未下载`;
+  document.getElementById("d-download-meta").textContent = "加载中…";
+  document.getElementById("d-download-status").innerHTML = "";
+  document.getElementById("d-download-body").innerHTML = '<div class="empty">正在加载任务…</div>';
+  document.getElementById("d-download-time").textContent = "-";
+  document.getElementById("d-download-close").focus();
+  await loadNotDownloadedTasks();
+}
+
+function closeNotDownloadedModal() {
+  const modal = document.getElementById("d-download-modal");
+  if (modal) modal.hidden = true;
+  document.body.style.overflow = "";
+  notDownloadedModalState.continent = "";
+}
+
+const dbContinentStatsBox = document.getElementById("d-continent-stats");
+if (dbContinentStatsBox) {
+  dbContinentStatsBox.addEventListener("click", (event) => {
+    const card = event.target.closest(".db-stat-card");
+    if (card && card.dataset.continent) openNotDownloadedModal(card.dataset.continent);
+  });
+  dbContinentStatsBox.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const card = event.target.closest(".db-stat-card");
+    if (!card || !card.dataset.continent) return;
+    event.preventDefault();
+    openNotDownloadedModal(card.dataset.continent);
+  });
+}
+
+const downloadModal = document.getElementById("d-download-modal");
+document.getElementById("d-download-close").addEventListener("click", closeNotDownloadedModal);
+document.getElementById("d-download-close-footer").addEventListener("click", closeNotDownloadedModal);
+document.getElementById("d-download-refresh").addEventListener("click", loadNotDownloadedTasks);
+document.getElementById("d-download-search").addEventListener("input", (event) => {
+  notDownloadedModalState.search = event.target.value || "";
+  renderNotDownloadedModal();
+});
+document.getElementById("d-download-status").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-status]");
+  if (!button) return;
+  notDownloadedModalState.status = button.dataset.status || "all";
+  renderNotDownloadedModal();
+});
+document.getElementById("d-download-body").addEventListener("click", (event) => {
+  const logButton = event.target.closest("[data-download-log]");
+  if (logButton) {
+    closeNotDownloadedModal();
+    jumpToLog(logButton.dataset.downloadLog);
+    return;
+  }
+  const dirButton = event.target.closest("[data-open-dir]");
+  if (dirButton) openTaskFolder(dirButton.dataset.openDir);
+});
+if (downloadModal) {
+  downloadModal.addEventListener("click", (event) => {
+    if (event.target === downloadModal) closeNotDownloadedModal();
+  });
+  downloadModal.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeNotDownloadedModal();
+  });
+}
+
+function compareRowsByFinishedDesc(a, b) {
+  const ta = String(a.finished_at || "");
+  const tb = String(b.finished_at || "");
+  if (ta !== tb) return tb.localeCompare(ta);
+  return String(a.dataset_key || "").localeCompare(String(b.dataset_key || ""), "zh-Hans-CN");
 }
 
 function renderDbUpdateTable() {
@@ -1634,11 +1974,14 @@ function renderDbUpdateTable() {
   }
   document.getElementById("d-count-updated").textContent = updatedCount;
   document.getElementById("d-count-pending").textContent = allRows.length - updatedCount;
+  renderDbContinentStats();
   document.querySelectorAll(".subtab").forEach((button) => {
     button.classList.toggle("active", button.dataset.dfilter === dbUpdateState.filter);
   });
 
-  const rows = sortDbRowsByContinent(dbUpdateFilteredRows());
+  const rows = dbUpdateState.filter === "updated"
+    ? sortDbRowsByContinent(dbUpdateFilteredRows())
+    : sortDbRowsByContinent(dbUpdateFilteredRows(), compareRowsByFinishedDesc);
   const total = rows.length;
   const pageSize = dbUpdateState.pageSize;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -1764,6 +2107,10 @@ function renderDbUpdated(snapshot) {
   document.getElementById("d-pending").textContent = counts.pending ?? 0;
 
   dbUpdateState.rows = snapshot.rows || [];
+  dbUpdateState.actualTotals = snapshot.continent_actual_totals || {};
+  dbUpdateState.actualTotal = snapshot.actual_total ?? null;
+  dbUpdateState.notDownloaded = snapshot.continent_not_downloaded || {};
+  dbUpdateState.notDownloadedTotal = snapshot.not_downloaded_total ?? null;
   renderDbUpdateTable();
 }
 
@@ -2033,6 +2380,8 @@ async function loadConfig() {
     document.getElementById("cfg-db-password").value = db.password || "";
     document.getElementById("cfg-result-root").value = data.result_root || "";
     document.getElementById("cfg-qgis-dir").value = data.qgis_dir || "";
+    const processLimit = data.process && Number.isFinite(Number(data.process.default_limit)) ? Number(data.process.default_limit) : 0;
+    document.getElementById("cfg-process-limit").value = String(processLimit);
     renderConfigEnv(data.env || {});
     if (message) message.textContent = "";
   } catch (error) {
@@ -2040,9 +2389,13 @@ async function loadConfig() {
   }
 }
 
-function renderConfigEnv(env) {
+function setRepoRoot(value) {
   const root = document.getElementById("env-repo-root");
-  if (root) root.value = env.repo_root || "";
+  if (root && value) root.value = value;
+}
+
+function renderConfigEnv(env) {
+  setRepoRoot(env.repo_root);
   const box = document.getElementById("env-checks");
   if (!box) return;
   const mark = (ok) => ok
@@ -2103,6 +2456,10 @@ function switchConfigPane(name) {
   document.querySelectorAll(".cfg-pane").forEach((pane) => {
     pane.hidden = pane.dataset.cfgpane !== target;
   });
+  if (target === "env") {
+    const root = document.getElementById("env-repo-root");
+    if (root && !root.value) loadConfig();
+  }
 }
 
 document.querySelectorAll(".cfg-nav-item").forEach((button) => {
@@ -2121,6 +2478,9 @@ async function saveConfig() {
     },
     result_root: document.getElementById("cfg-result-root").value.trim(),
     qgis_dir: document.getElementById("cfg-qgis-dir").value.trim(),
+    process: {
+      default_limit: document.getElementById("cfg-process-limit").value.trim(),
+    },
   };
   if (message) message.textContent = "正在保存…";
   try {
@@ -2381,6 +2741,18 @@ document.getElementById("mf-check-keyword").addEventListener("keydown", (event) 
 });
 document.getElementById("mf-append").addEventListener("click", appendManifestTask);
 
+async function loadProcessDefaultLimit() {
+  try {
+    const response = await fetch("/api/config", { cache: "no-store" });
+    const data = await response.json();
+    const value = data.process && Number.isFinite(Number(data.process.default_limit)) ? Number(data.process.default_limit) : 0;
+    processDefaultLimit = Math.max(0, value);
+  } catch (error) {
+    /* 读取失败保留上一次缓存值（null 表示未知），实际数量以服务端配置为准 */
+  }
+  return processDefaultLimit;
+}
+
 async function refreshProcessControl() {
   try {
     const response = await fetch("/api/process/control", { cache: "no-store" });
@@ -2393,6 +2765,15 @@ async function refreshProcessControl() {
       : (data.running ? "等待资源/准备中…" : "-");
     document.getElementById("pctl-start").disabled = !!data.running;
     document.getElementById("pctl-stop").disabled = !data.running;
+    const limitEl = document.getElementById("pctl-limit-current");
+    if (limitEl) {
+      if (data.running) {
+        const current = Number(data.limit);
+        limitEl.textContent = Number.isFinite(current) && current > 0 ? String(current) : "全部";
+      } else {
+        limitEl.textContent = "-";
+      }
+    }
   } catch (error) {
     document.getElementById("pctl-running").textContent = "查询失败";
   }
@@ -2400,19 +2781,24 @@ async function refreshProcessControl() {
 
 document.getElementById("pctl-start").addEventListener("click", async () => {
   const message = document.getElementById("pctl-message");
-  const rawLimit = parseInt(document.getElementById("pctl-limit").value, 10);
-  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 0;
+  await loadProcessDefaultLimit();
   const waitResources = document.getElementById("pctl-wait").checked;
-  const scope = limit === 0 ? "全部待处理任务" : `前 ${limit} 个待处理任务`;
-  if (!window.confirm(`确认开始执行处理队列？\n范围：${scope}${waitResources ? "（资源不足时自动等待）" : ""}`)) {
+  const scope = processDefaultLimit === null
+    ? "按「配置」页「处理默认数量」执行"
+    : (processDefaultLimit === 0 ? "全部待处理任务" : `前 ${processDefaultLimit} 个待处理任务`);
+  if (!window.confirm(`确认开始执行处理队列？\n范围：${scope}${waitResources ? "（资源不足时自动等待）" : ""}\n处理数量可在「配置」页「数据处理」中调整`)) {
     return;
   }
   message.textContent = "正在启动…";
+  const startPayload = { wait_resources: waitResources };
+  if (processDefaultLimit !== null) {
+    startPayload.limit = processDefaultLimit;
+  }
   try {
     const response = await fetch("/api/process/start", {
       method: "POST",
       headers: actionHeaders(),
-      body: JSON.stringify({ limit, wait_resources: waitResources }),
+      body: JSON.stringify(startPayload),
     });
     const data = await response.json();
     if (!response.ok || !data.ok) {
@@ -2484,6 +2870,8 @@ async function refresh() {
     );
     const data = await response.json();
     if (sequence !== refreshSequence) return;
+    /* /api/status 也带 repo_root：启动后无需先切到「配置」页即可回填仓库根目录 */
+    setRepoRoot(data.repo_root);
     const [label, cls] = batchLabel(data.batch_state);
     const badge = document.getElementById("batch-badge");
     badge.textContent = label;
@@ -2553,6 +2941,7 @@ function checkStartupConfig() {
     .then((response) => response.json())
     .then((data) => {
       const env = data.env || {};
+      setRepoRoot(env.repo_root);
       const reasons = [];
       if (!data.configured) {
         reasons.push("尚未填写配置（未找到 data/config.json）");
@@ -2591,6 +2980,7 @@ document.getElementById("config-warning-close").addEventListener("click", () => 
 });
 
 checkStartupConfig();
+loadProcessDefaultLimit();
 refresh();
 setInterval(refresh, REFRESH_MS);
 

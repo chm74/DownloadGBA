@@ -175,7 +175,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="GBA 下载任务状态看板（只读）。")
     parser.add_argument("--host", default=DEFAULT_HOST, help="监听地址，默认 0.0.0.0。")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="监听端口，默认 8765。")
-    parser.add_argument("--repo-root", default=None, help="仓库根目录，默认脚本上级目录。")
+    parser.add_argument("--repo-root", default=None, help="仓库根目录，默认当前工作目录（启动看板时所在目录）。")
     parser.add_argument("--state-db", default=DEFAULT_STATE_DB, help="SQLite 状态库路径。")
     parser.add_argument("--process-db", default=DEFAULT_PROCESS_DB, help="SHP 处理队列状态库路径。")
     parser.add_argument(
@@ -1379,7 +1379,130 @@ def _update_log_relpath(dataset_key: str) -> str:
     return f"data/logs/update/log_main3_{sanitize(parts[1])}_{sanitize(parts[2])}.log"
 
 
-def build_db_update_snapshot(repo_root: Path, process_db: Path, marks_file: Path) -> dict:
+def load_download_continent_stats(state_db: Path | None) -> dict[str, dict[str, int]] | None:
+    """按大洲统计下载任务总数、已下载数与未下载数（含未处理任务）。"""
+    if state_db is None:
+        return None
+    file_path = Path(state_db)
+    if not file_path.exists():
+        return None
+    try:
+        connection = _open_state_db(file_path)
+    except sqlite3.Error:
+        return None
+    try:
+        rows = connection.execute(
+            "SELECT continent, status, COUNT(*) AS total FROM tasks GROUP BY continent, status"
+        ).fetchall()
+    except sqlite3.Error:
+        return None
+    finally:
+        connection.close()
+    stats: dict[str, dict[str, int]] = {}
+    for row in rows:
+        label = format_continent(row["continent"])
+        item = stats.setdefault(label, {"total": 0, "downloaded": 0, "not_downloaded": 0})
+        count = int(row["total"] or 0)
+        item["total"] += count
+        if str(row["status"] or "") in lib.SUCCESS_STATUSES:
+            item["downloaded"] += count
+        else:
+            item["not_downloaded"] += count
+    return stats
+
+
+def load_not_downloaded_tasks(repo_root: Path, state_db: Path, continent: str) -> dict:
+    """按大洲查询尚未成功下载建筑数据的任务。"""
+    repo_root = Path(repo_root)
+    file_path = Path(state_db)
+    label = str(continent or "").strip()
+    if not label:
+        raise ValueError("continent 不能为空")
+    if not file_path.exists():
+        raise RuntimeError(f"下载状态库不存在: {file_path}")
+    try:
+        connection = _open_state_db(file_path)
+    except sqlite3.Error as exc:
+        raise RuntimeError(f"下载状态库无法打开: {exc}") from exc
+    try:
+        rows = connection.execute(
+            "SELECT task_id, continent, country, city, download_dir, status, attempts, "
+            "queue_order, manifest_order, last_error, started_at, finished_at, updated_at "
+            "FROM tasks"
+        ).fetchall()
+    except sqlite3.Error as exc:
+        raise RuntimeError(f"下载状态库读取失败: {exc}") from exc
+    finally:
+        connection.close()
+
+    matched = [
+        dict(row)
+        for row in rows
+        if format_continent(row["continent"]) == label
+        and str(row["status"] or "") not in lib.SUCCESS_STATUSES
+    ]
+    priority = {"RUNNING": 0, "PENDING": 1, "FAILED": 2, "SKIPPED": 3}
+    matched.sort(
+        key=lambda item: (
+            priority.get(str(item["status"] or ""), 9),
+            item["queue_order"] if item["queue_order"] is not None else 10**9,
+            item["manifest_order"] if item["manifest_order"] is not None else 10**9,
+            str(item["task_id"] or ""),
+        )
+    )
+
+    counts = {status: 0 for status in ("PENDING", "RUNNING", "FAILED", "SKIPPED")}
+    resolved_root = repo_root.resolve()
+    result_rows = []
+    for item in matched:
+        status = str(item["status"] or "")
+        counts[status] = counts.get(status, 0) + 1
+        download_dir = str(item["download_dir"] or "")
+        log_path = ""
+        if download_dir:
+            for log_name in ("run.log", "run.err.log"):
+                try:
+                    candidate = (repo_root / download_dir / log_name).resolve()
+                    candidate.relative_to(resolved_root)
+                    if candidate.is_file():
+                        log_path = candidate.relative_to(resolved_root).as_posix()
+                        break
+                except (OSError, ValueError):
+                    continue
+        result_rows.append(
+            {
+                "task_id": item["task_id"],
+                "continent": item["continent"],
+                "country": item["country"],
+                "city": item["city"],
+                "download_dir": download_dir,
+                "status": status,
+                "attempts": item["attempts"],
+                "queue_order": item["queue_order"],
+                "manifest_order": item["manifest_order"],
+                "last_error": str(item["last_error"] or "")[:300],
+                "started_at": item["started_at"],
+                "finished_at": item["finished_at"],
+                "updated_at": item["updated_at"],
+                "log_path": log_path,
+            }
+        )
+    return {
+        "ok": True,
+        "continent": label,
+        "total": len(result_rows),
+        "counts": counts,
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "rows": result_rows,
+    }
+
+
+def build_db_update_snapshot(
+    repo_root: Path,
+    process_db: Path,
+    marks_file: Path,
+    state_db: Path | None = None,
+) -> dict:
     repo_root = Path(repo_root)
     process_db = Path(process_db)
     marks_file = Path(marks_file)
@@ -1387,8 +1510,13 @@ def build_db_update_snapshot(repo_root: Path, process_db: Path, marks_file: Path
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "process_db": str(process_db),
         "marks_file": str(marks_file),
+        "state_db": str(state_db) if state_db else "",
         "error": None,
         "counts": {"total": 0, "updated": 0, "pending": 0},
+        "continent_actual_totals": {},
+        "continent_not_downloaded": {},
+        "actual_total": None,
+        "not_downloaded_total": None,
         "rows": [],
     }
     if not process_db.exists():
@@ -1456,6 +1584,18 @@ def build_db_update_snapshot(repo_root: Path, process_db: Path, marks_file: Path
         "updated": sum(1 for item in rows if item["updated"]),
         "pending": sum(1 for item in rows if not item["updated"]),
     }
+    download_stats = load_download_continent_stats(state_db)
+    if download_stats is not None:
+        snapshot["continent_actual_totals"] = {
+            label: item["total"] for label, item in download_stats.items()
+        }
+        snapshot["continent_not_downloaded"] = {
+            label: item["not_downloaded"] for label, item in download_stats.items()
+        }
+        snapshot["actual_total"] = sum(item["total"] for item in download_stats.values())
+        snapshot["not_downloaded_total"] = sum(
+            item["not_downloaded"] for item in download_stats.values()
+        )
     return snapshot
 
 
@@ -1943,6 +2083,16 @@ def _normalize_config_port(value: object, default: int | None) -> int | None:
     return port if 1 <= port <= 65535 else default
 
 
+def _normalize_process_default_limit(value: object) -> int:
+    if value is None or str(value).strip() == "":
+        return 0
+    try:
+        parsed = int(str(value).strip())
+    except ValueError:
+        return 0
+    return parsed if parsed >= 0 else 0
+
+
 def load_dashboard_config(repo_root: Path) -> dict:
     path = Path(repo_root) / DEFAULT_CONFIG_FILE
     stored: dict = {}
@@ -1964,11 +2114,13 @@ def load_dashboard_config(repo_root: Path) -> dict:
     }
     result_root = str(stored.get("result_root") or DEFAULT_RESULT_ROOT)
     qgis_dir = str(stored.get("qgis_dir") or DEFAULT_QGIS_DIR)
+    process = stored.get("process") if isinstance(stored.get("process"), dict) else {}
     return {
         "configured": path.exists(),
         "database": database,
         "result_root": result_root,
         "qgis_dir": qgis_dir,
+        "process": {"default_limit": _normalize_process_default_limit(process.get("default_limit"))},
     }
 
 
@@ -1991,6 +2143,17 @@ def save_dashboard_config(repo_root: Path, config: dict) -> dict:
     if port is None:
         raise ValueError("数据库端口必须是 1~65535 的整数")
     raw_password = db.get("password")
+    process = config.get("process") if isinstance(config.get("process"), dict) else {}
+    raw_limit = process.get("default_limit")
+    if raw_limit is None or str(raw_limit).strip() == "":
+        default_limit = 0
+    else:
+        try:
+            default_limit = int(str(raw_limit).strip())
+        except ValueError:
+            raise ValueError("处理默认数量必须是 ≥0 的整数") from None
+        if default_limit < 0:
+            raise ValueError("处理默认数量必须是 ≥0 的整数")
     payload = {
         "database": {
             "host": host,
@@ -2001,6 +2164,7 @@ def save_dashboard_config(repo_root: Path, config: dict) -> dict:
         },
         "result_root": result_root,
         "qgis_dir": qgis_dir,
+        "process": {"default_limit": default_limit},
     }
     path = Path(repo_root) / DEFAULT_CONFIG_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -2735,11 +2899,33 @@ class StatusHandler(BaseHTTPRequestHandler):
             body = json.dumps(build_copy_status(dataset_key), ensure_ascii=False).encode("utf-8")
             self._send(200, body, "application/json; charset=utf-8")
             return
+        if path == "/api/db_updated/not-downloaded":
+            query = parse_qs(urlparse(self.path).query)
+            continent = (query.get("continent") or [""])[0]
+            try:
+                payload = load_not_downloaded_tasks(
+                    repo_root=config["repo_root"],
+                    state_db=config["state_db"],
+                    continent=continent,
+                )
+                status, body = 200, payload
+            except ValueError as exc:
+                status, body = 400, {"ok": False, "error": str(exc)}
+            except (OSError, RuntimeError) as exc:
+                status, body = 500, {"ok": False, "error": str(exc)}
+            self._send(
+                status,
+                json.dumps(body, ensure_ascii=False).encode("utf-8"),
+                "application/json; charset=utf-8",
+            )
+            return
+
         if path == "/api/db_updated":
             snapshot = build_db_update_snapshot(
                 repo_root=config["repo_root"],
                 process_db=config["process_db"],
                 marks_file=config["db_update_file"],
+                state_db=config["state_db"],
             )
             body = json.dumps(snapshot, ensure_ascii=False).encode("utf-8")
             self._send(200, body, "application/json; charset=utf-8")
@@ -3292,7 +3478,12 @@ class StatusHandler(BaseHTTPRequestHandler):
 
         if path == "/api/process/start":
             try:
-                limit = normalize_process_limit(payload.get("limit"))
+                raw_limit = payload.get("limit")
+                if raw_limit is None or str(raw_limit).strip() == "":
+                    # 未显式传 limit 时使用「配置」页的「处理默认数量」（0=全部）
+                    limit = load_dashboard_config(config["repo_root"])["process"]["default_limit"]
+                else:
+                    limit = normalize_process_limit(raw_limit)
                 wait_resources = normalize_wait_resources(payload.get("wait_resources"))
             except ValueError as exc:
                 self._send(
@@ -3504,10 +3695,11 @@ def create_server(args: argparse.Namespace, repo_root: Path) -> ThreadingHTTPSer
 
 def main() -> int:
     args = parse_args()
-    repo_root = Path(args.repo_root).resolve() if args.repo_root else Path(__file__).resolve().parents[1]
+    repo_root = Path(args.repo_root).expanduser().resolve() if args.repo_root else Path.cwd().resolve()
     ensure_log_dirs(repo_root)
     server = create_server(args, repo_root)
     print(f"状态看板已启动: http://127.0.0.1:{args.port}/  (监听 {args.host}:{args.port})")
+    print(f"仓库根目录: {repo_root}")
     print(f"状态库: {server.config['state_db']}")
     print(f"处理队列库: {server.config['process_db']}")
     print(f"数据库已更新看板数据: {server.config['db_update_file']}")
