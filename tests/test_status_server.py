@@ -2848,6 +2848,15 @@ class ControlTests(unittest.TestCase):
             expected = (Path(status_server.DEFAULT_QGIS_DIR) / "bin" / "qgis_process-qgis.bat").is_file()
             self.assertEqual(qgis["exists"], expected)
 
+            custom_bat = str(repo_root / "custom" / "qgis_process-qgis.bat")
+            (repo_root / "data").mkdir(exist_ok=True)
+            (repo_root / "data" / "config.json").write_text(
+                json.dumps({"qgis_process_bat": custom_bat}), encoding="utf-8"
+            )
+            result = status_server.check_environment(config)
+            qgis = next(item for item in result["items"] if item["label"] == "QGIS")
+            self.assertEqual(qgis["path"], custom_bat)
+
     def test_env_endpoint(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)

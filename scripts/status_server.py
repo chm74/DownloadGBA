@@ -2113,6 +2113,15 @@ def _normalize_qgis_process_bat(value: object) -> str:
     return str(Path(text).expanduser())
 
 
+def _resolve_qgis_process_bat(config: dict) -> Path:
+    """优先使用「配置 → QGIS」里实际填写的批处理路径，否则按安装目录推导。"""
+    value = config.get("qgis_process_bat_effective") or config.get("qgis_process_bat")
+    if value:
+        return Path(str(value))
+    qgis_dir = config.get("qgis_dir") or DEFAULT_QGIS_DIR
+    return Path(qgis_dir) / "bin" / "qgis_process-qgis.bat"
+
+
 def load_dashboard_config(repo_root: Path) -> dict:
     path = Path(repo_root) / DEFAULT_CONFIG_FILE
     stored: dict = {}
@@ -2223,10 +2232,7 @@ def build_env_snapshot(config: dict) -> dict:
     process_python = Path(config.get("process_python_exe") or (repo_root / DEFAULT_PROCESS_PYTHON))
     qgis_cfg = load_dashboard_config(repo_root)
     qgis_dir = qgis_cfg.get("qgis_dir") or DEFAULT_QGIS_DIR
-    qgis_bat = Path(
-        qgis_cfg.get("qgis_process_bat_effective")
-        or (Path(qgis_dir) / "bin" / "qgis_process-qgis.bat")
-    )
+    qgis_bat = _resolve_qgis_process_bat(qgis_cfg)
     update_python_exists = update_python.is_file()
     return {
         "repo_root": str(repo_root),
@@ -2262,11 +2268,7 @@ def _probe_imports(python_exe: Path, modules: list[str]) -> dict:
 def check_environment(config: dict) -> dict:
     repo_root = Path(config["repo_root"])
     cfg = load_dashboard_config(repo_root)
-    qgis_dir = cfg.get("qgis_dir") or DEFAULT_QGIS_DIR
-    qgis_bat = Path(
-        cfg.get("qgis_process_bat_effective")
-        or (Path(qgis_dir) / "bin" / "qgis_process-qgis.bat")
-    )
+    qgis_bat = _resolve_qgis_process_bat(cfg)
     process_python = Path(config.get("process_python_exe") or (repo_root / DEFAULT_PROCESS_PYTHON))
 
     items: list[dict] = []
