@@ -83,6 +83,7 @@ uv sync --project Tools\Twopyshp2pgsql            # SHP 入库工具
 | 数据库连接（host/port/dbname/user/password） | 入库/导出需要 | 「更新到库」按此连接 PostgreSQL；默认 `172.16.1.145` / `5432` / `building` / `postgres`（随仓库自带，可改） |
 | 区域成果 SHP 共享目录 `result_root` | 入库需要 | 形如 `\\<服务器>\BuildingData\AutoGenerete`；默认 `\\172.16.0.116\BuildingData\AutoGenerete` |
 | QGIS 安装目录 `qgis_dir` | 处理需要 | 形如 `D:\QGIS`；启动处理时注入环境变量 `QGIS_DIR`（默认 `D:\QGIS`） |
+| qgis_process 路径 `qgis_process_bat` | 可选 | 直接指定 `qgis_process-qgis.bat` 的完整路径，如 `D:\QGIS\bin\qgis_process-qgis.bat`；留空时按 `qgis_dir\bin\qgis_process-qgis.bat` 自动推导。启动处理时注入 `QGIS_PROCESS_BAT` |
 | 处理默认数量 `process.default_limit` | 可选 | 每次「开始执行」处理的待处理任务数（`0`=全部）；修改保存后，在**下一次**「开始执行」时生效（不影响正在运行的处理） |
 
 **B. 环境变量（按需）**
@@ -92,13 +93,14 @@ uv sync --project Tools\Twopyshp2pgsql            # SHP 入库工具
 | `PGPASSWORD` | 可选 | 导出任务清单时的兜底口令；默认已从 `data/config.json` 读取数据库连接 |
 | `GBA_WFS_MIN_INTERVAL` | 可选 | WFS 请求最小间隔，默认 1.05 秒 |
 | `QGIS_DIR` | 可选 | 覆盖 QGIS 安装目录（看板启动处理时会自动注入；CLI 直跑时可手动设置） |
+| `QGIS_PROCESS_BAT` | 可选 | 直接指定 `qgis_process-qgis.bat` 完整路径，优先于 `QGIS_DIR` 推导（看板按「配置」页自动注入） |
 
 **C. 命令行 / 工具级**（不使用看板、直接跑脚本时）
 
 | 配置 | 位置 | 说明 |
 |---|---|---|
 | 数据库 + 共享目录 | `Tools/twopyshp2pgsql/.env`（`PG_*`、`DATA_ROOT`） | **仅直接跑 `main3_region.py` 时用**；走看板「更新到库」以「配置」页为准，**不读该 `.env`** |
-| QGIS 默认路径 | `Tools/Oneshp_pipline_qgis/src/shp_pipeline_qgis/paths.py` | 默认 `D:\QGIS`，可被环境变量 `QGIS_DIR` 覆盖 |
+| QGIS 默认路径 | `Tools/Oneshp_pipline_qgis/src/shp_pipeline_qgis/paths.py` | 默认 `D:\QGIS`；可被 `QGIS_DIR` 覆盖，`QGIS_PROCESS_BAT` 可直接指定批处理文件 |
 
 **D. 机器 / 运维**
 
@@ -133,6 +135,7 @@ uv sync --project Tools\Twopyshp2pgsql            # SHP 入库工具
 - **数据库连接**：主机 / 端口 / 库名 / 用户名 / 密码。
 - **区域成果 SHP 共享目录**：形如 `\\<服务器>\BuildingData\AutoGenerete`。
 - **QGIS 安装目录**：形如 `D:\QGIS`（启动处理队列时以此注入环境变量 `QGIS_DIR`，供数据处理调用 QGIS）。
+- **qgis_process 批处理文件**：可直接指定 `D:\QGIS\bin\qgis_process-qgis.bat`（或自定义安装位置的同名文件）。留空时自动按「QGIS 安装目录」推导；填写后以填写的完整路径为准，启动处理时注入 `QGIS_PROCESS_BAT`。
 - **数据处理**：处理默认数量（`0`=全部）——每次点「开始执行」时读取的处理任务数；保存后对**正在运行**的处理无效，需先「停止处理」再「开始执行」。
 
 页面下方是 **「环境 / 诊断」** 区：
@@ -421,7 +424,7 @@ uv sync --project Tools\Twopyshp2pgsql            # SHP 入库工具
 
 - **`git pull` 连不上 GitHub**：使用代理（见第 3 节「拉取更新」，`-c http.proxy=...`）；无代理时删掉该参数。
 - **报 `No Python at '...'`**：说明拷贝了别的机器的 `.venv`（不可移植）；删除后运行对应工具的 `setup.ps1` 重建。
-- **数据处理报 QGIS 相关错误**：确认已安装 QGIS，并在「配置」页「QGIS 安装目录」填对路径（等价环境变量 `QGIS_DIR`）；未配置时回退到 `Tools/Oneshp_pipline_qgis/src/shp_pipeline_qgis/paths.py` 的默认值。
+- **数据处理报 QGIS 相关错误**：确认已安装 QGIS，并在「配置」页「QGIS 安装目录」填对路径（等价环境变量 `QGIS_DIR`）；如果 `qgis_process-qgis.bat` 不在 `<QGIS>\bin` 下，直接在「qgis_process 批处理文件」填完整路径（等价 `QGIS_PROCESS_BAT`）。未配置时回退到 `Tools/Oneshp_pipline_qgis/src/shp_pipeline_qgis/paths.py` 的默认值。
 - **「更新到库」失败**：确认看板所在机器能访问「配置」页填写的**数据库**与**共享目录**；且共享目录内容需**齐全**（手动拷贝要与 `final` 同名同大小；自动拷贝完成即可），否则会被拦截（见第 8 节）。
 - **点「开始执行」没反应**：先确认已「同步队列」（队列非空）；再看 `data/logs/process/run.log`；若提示资源不足，勾选「资源不足时等待」或先释放磁盘/内存。
 - **「配置」里改了「处理默认数量」，但「本次数量」还显示"全部"**：属正常现象——「本次数量」显示的是**当前正在运行的执行器**实际使用的数量，配置数量只在**下一次**「开始执行」时生效。需要按新数量执行时：先「停止处理」，再「开始执行」（已完成的处理结果不受影响）。

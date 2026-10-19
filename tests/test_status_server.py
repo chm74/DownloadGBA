@@ -2868,6 +2868,10 @@ class ControlTests(unittest.TestCase):
             config = {"repo_root": repo_root, "process_python_exe": str(repo_root / "nope.exe")}
             env = status_server.build_env_snapshot(config)
             self.assertEqual(env["repo_root"], str(repo_root))
+            self.assertEqual(
+                env["qgis_process_bat"],
+                str(Path(status_server.DEFAULT_QGIS_DIR) / "bin" / "qgis_process-qgis.bat"),
+            )
             self.assertFalse(env["update_python_exists"])
             self.assertFalse(env["update_script_exists"])
             self.assertFalse(env["update_log_dir_exists"])
@@ -2883,6 +2887,14 @@ class ControlTests(unittest.TestCase):
             self.assertTrue(env["update_python_exists"])
             self.assertTrue(env["update_script_exists"])
 
+            custom_bat = str(repo_root / "custom" / "qgis_process-qgis.bat")
+            (repo_root / "data").mkdir(exist_ok=True)
+            (repo_root / "data" / "config.json").write_text(
+                json.dumps({"qgis_process_bat": custom_bat}), encoding="utf-8"
+            )
+            env = status_server.build_env_snapshot(config)
+            self.assertEqual(env["qgis_process_bat"], custom_bat)
+
     def test_load_dashboard_config_defaults(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)
@@ -2891,6 +2903,11 @@ class ControlTests(unittest.TestCase):
             self.assertEqual(config["database"]["host"], status_server.DEFAULT_UPDATE_DB["host"])
             self.assertEqual(config["database"]["port"], status_server.DEFAULT_UPDATE_DB["port"])
             self.assertEqual(config["result_root"], status_server.DEFAULT_RESULT_ROOT)
+            self.assertEqual(config["qgis_process_bat"], "")
+            self.assertEqual(
+                config["qgis_process_bat_effective"],
+                str(Path(status_server.DEFAULT_QGIS_DIR) / "bin" / "qgis_process-qgis.bat"),
+            )
             self.assertEqual(config["process"]["default_limit"], 0)
 
     def test_save_and_load_dashboard_config(self):
@@ -2903,11 +2920,13 @@ class ControlTests(unittest.TestCase):
                                  "user": "u1", "password": "p1"},
                     "result_root": "\\\\srv\\share\\AutoGenerte",
                     "qgis_dir": "E:\\QGIS",
+                    "qgis_process_bat": "E:\\QGIS-custom\\bin\\qgis_process-qgis.bat",
                     "process": {"default_limit": 5},
                 },
             )
             self.assertEqual(saved["database"]["port"], 5433)
             self.assertEqual(saved["qgis_dir"], "E:\\QGIS")
+            self.assertEqual(saved["qgis_process_bat"], "E:\\QGIS-custom\\bin\\qgis_process-qgis.bat")
             self.assertEqual(saved["process"]["default_limit"], 5)
             config = status_server.load_dashboard_config(repo_root)
             self.assertTrue(config["configured"])
@@ -2917,6 +2936,11 @@ class ControlTests(unittest.TestCase):
             self.assertEqual(config["database"]["password"], "p1")
             self.assertEqual(config["result_root"], "\\\\srv\\share\\AutoGenerte")
             self.assertEqual(config["qgis_dir"], "E:\\QGIS")
+            self.assertEqual(config["qgis_process_bat"], "E:\\QGIS-custom\\bin\\qgis_process-qgis.bat")
+            self.assertEqual(
+                config["qgis_process_bat_effective"],
+                "E:\\QGIS-custom\\bin\\qgis_process-qgis.bat",
+            )
             self.assertEqual(config["process"]["default_limit"], 5)
             self.assertTrue((repo_root / "data" / "config.json").exists())
 
@@ -2937,6 +2961,7 @@ class ControlTests(unittest.TestCase):
                         "database": {"host": "1.2.3.4", "port": 5555, "dbname": "bld",
                                      "user": "pg", "password": "secret"},
                         "result_root": "\\\\host\\AutoGenerte",
+                        "qgis_process_bat": "D:\\QGIS-custom\\bin\\qgis_process-qgis.bat",
                         "process": {"default_limit": 7},
                     }).encode("utf-8"),
                     headers={"Content-Type": "application/json"},
@@ -2952,6 +2977,7 @@ class ControlTests(unittest.TestCase):
                 self.assertEqual(saved["database"]["port"], 5555)
                 self.assertEqual(saved["database"]["password"], "secret")
                 self.assertEqual(saved["result_root"], "\\\\host\\AutoGenerte")
+                self.assertEqual(saved["qgis_process_bat"], "D:\\QGIS-custom\\bin\\qgis_process-qgis.bat")
                 self.assertEqual(saved["process"]["default_limit"], 7)
             finally:
                 server.shutdown()

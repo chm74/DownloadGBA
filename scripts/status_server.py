@@ -947,6 +947,12 @@ def start_merge_job(config: dict, dataset_key: str, expected_source_dir: str) ->
 
     engine = config.get("merge_engine") or process_queue.MERGE_ENGINE_OGR2OGR
     ogr2ogr_exe = config.get("ogr2ogr") or None
+    if not ogr2ogr_exe:
+        qgis_bat = load_dashboard_config(repo_root).get("qgis_process_bat_effective") or ""
+        if qgis_bat:
+            candidate = Path(qgis_bat).parent / "ogr2ogr.exe"
+            if candidate.is_file():
+                ogr2ogr_exe = str(candidate)
 
     def progress(done: int, total: int) -> None:
         with MERGE_LOCK:
@@ -1882,9 +1888,15 @@ def start_process_action(config: dict, limit: int, wait_resources: bool) -> dict
             }
         python_exe = resolve_process_python(config)
         command = build_process_start_command(python_exe, config["repo_root"], limit, wait_resources)
-        qgis_dir = load_dashboard_config(config["repo_root"]).get("qgis_dir") or ""
-        extra_env = {"QGIS_DIR": qgis_dir} if qgis_dir else None
-        started = start_process_batch(config["repo_root"], command, extra_env)
+        qgis_cfg = load_dashboard_config(config["repo_root"])
+        qgis_dir = qgis_cfg.get("qgis_dir") or ""
+        qgis_process_bat = qgis_cfg.get("qgis_process_bat_effective") or ""
+        extra_env: dict[str, str] = {}
+        if qgis_dir:
+            extra_env["QGIS_DIR"] = qgis_dir
+        if qgis_process_bat:
+            extra_env["QGIS_PROCESS_BAT"] = qgis_process_bat
+        started = start_process_batch(config["repo_root"], command, extra_env or None)
         return {
             "ok": True,
             "runner_pid": started["pid"],
@@ -2114,12 +2126,18 @@ def load_dashboard_config(repo_root: Path) -> dict:
     }
     result_root = str(stored.get("result_root") or DEFAULT_RESULT_ROOT)
     qgis_dir = str(stored.get("qgis_dir") or DEFAULT_QGIS_DIR)
+    qgis_process_bat = str(stored.get("qgis_process_bat") or "").strip().strip('"').strip()
+    qgis_process_bat_effective = qgis_process_bat or str(
+        Path(qgis_dir) / "bin" / "qgis_process-qgis.bat"
+    )
     process = stored.get("process") if isinstance(stored.get("process"), dict) else {}
     return {
         "configured": path.exists(),
         "database": database,
         "result_root": result_root,
         "qgis_dir": qgis_dir,
+        "qgis_process_bat": qgis_process_bat,
+        "qgis_process_bat_effective": qgis_process_bat_effective,
         "process": {"default_limit": _normalize_process_default_limit(process.get("default_limit"))},
     }
 
@@ -2131,6 +2149,7 @@ def save_dashboard_config(repo_root: Path, config: dict) -> dict:
     user = str(db.get("user") or "").strip()
     result_root = str(config.get("result_root") or "").strip()
     qgis_dir = str(config.get("qgis_dir") or "").strip()
+    qgis_process_bat = str(config.get("qgis_process_bat") or "").strip().strip('"').strip()
     if not host:
         raise ValueError("数据库主机不能为空")
     if not dbname:
@@ -2164,6 +2183,7 @@ def save_dashboard_config(repo_root: Path, config: dict) -> dict:
         },
         "result_root": result_root,
         "qgis_dir": qgis_dir,
+        "qgis_process_bat": qgis_process_bat,
         "process": {"default_limit": default_limit},
     }
     path = Path(repo_root) / DEFAULT_CONFIG_FILE
@@ -2193,8 +2213,12 @@ def build_env_snapshot(config: dict) -> dict:
     update_script = repo_root / DEFAULT_UPDATE_SCRIPT
     update_log_dir = repo_root / DEFAULT_UPDATE_LOG_DIR
     process_python = Path(config.get("process_python_exe") or (repo_root / DEFAULT_PROCESS_PYTHON))
-    qgis_dir = load_dashboard_config(repo_root).get("qgis_dir") or DEFAULT_QGIS_DIR
-    qgis_bat = Path(qgis_dir) / "bin" / "qgis_process-qgis.bat"
+    qgis_cfg = load_dashboard_config(repo_root)
+    qgis_dir = qgis_cfg.get("qgis_dir") or DEFAULT_QGIS_DIR
+    qgis_bat = Path(
+        qgis_cfg.get("qgis_process_bat_effective")
+        or (Path(qgis_dir) / "bin" / "qgis_process-qgis.bat")
+    )
     update_python_exists = update_python.is_file()
     return {
         "repo_root": str(repo_root),
@@ -2231,6 +2255,10 @@ def check_environment(config: dict) -> dict:
     repo_root = Path(config["repo_root"])
     cfg = load_dashboard_config(repo_root)
     qgis_dir = cfg.get("qgis_dir") or DEFAULT_QGIS_DIR
+    qgis_bat = Path(
+        cfg.get("qgis_process_bat_effective")
+        or (Path(qgis_dir) / "bin" / "qgis_process-qgis.bat")
+    )
     process_python = Path(config.get("process_python_exe") or (repo_root / DEFAULT_PROCESS_PYTHON))
 
     items: list[dict] = []
@@ -2249,7 +2277,7 @@ def check_environment(config: dict) -> dict:
     add("入库脚本", repo_root / DEFAULT_UPDATE_SCRIPT)
     add("入库日志目录", repo_root / DEFAULT_UPDATE_LOG_DIR, "dir")
     add("处理工具解释器", process_python, "file", ["geopandas", "shapely", "pyproj"])
-    add("QGIS", Path(qgis_dir) / "bin" / "qgis_process-qgis.bat")
+    add("QGIS", qgis_bat)
 
     missing = [item["label"] for item in items if not item["ok"]]
     return {"ok": not missing, "missing": missing, "items": items}

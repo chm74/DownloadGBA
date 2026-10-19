@@ -520,7 +520,7 @@ python scripts/run_shp_process_tasks.py --move-top "宁夏"
 | QGIS 3.34.8 LTR | 数据处理（`qgis_process`） | 仅处理时需要 |
 | PostgreSQL + psql | 重导任务清单 / SHP 入库 | 仅这两项需要 |
 
-> QGIS 安装目录可在看板「配置」页的「QGIS 安装目录」中配置（默认 `D:\QGIS`，启动处理时注入环境变量 `QGIS_DIR`）；未配置时回退到 `Tools/Oneshp_pipline_qgis/src/shp_pipeline_qgis/paths.py` 中的默认值。
+> QGIS 安装目录可在看板「配置」页的「QGIS 安装目录」中配置（默认 `D:\QGIS`，启动处理时注入环境变量 `QGIS_DIR`）；如果 `qgis_process-qgis.bat` 不在 `<QGIS>\bin` 下，可在同页「qgis_process 批处理文件」直接填完整路径（注入 `QGIS_PROCESS_BAT`）。未配置时回退到 `Tools/Oneshp_pipline_qgis/src/shp_pipeline_qgis/paths.py` 中的默认值。
 
 ### Python 环境依赖
 
