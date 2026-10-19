@@ -1566,7 +1566,7 @@ def load_not_downloaded_tasks(
     continent: str,
     available_keys: set[str] | None = None,
 ) -> dict:
-    """按大洲查询尚未成功下载建筑数据的任务。"""
+    """按大洲查询待下载任务，并附上已完成下载/处理/入库的任务。"""
     repo_root = Path(repo_root)
     file_path = Path(state_db)
     label = str(continent or "").strip()
@@ -1590,12 +1590,20 @@ def load_not_downloaded_tasks(
         connection.close()
 
     available = available_keys or set()
+    continent_rows = [
+        dict(row) for row in rows if format_continent(row["continent"]) == label
+    ]
     matched = [
-        dict(row)
-        for row in rows
-        if format_continent(row["continent"]) == label
-        and str(row["status"] or "") == lib.STATUS_PENDING
-        and str(row["task_id"] or "") not in available
+        item
+        for item in continent_rows
+        if str(item["status"] or "") == lib.STATUS_PENDING
+        and str(item["task_id"] or "") not in available
+    ]
+    completed_matched = [
+        item
+        for item in continent_rows
+        if str(item["status"] or "") in lib.SUCCESS_STATUSES
+        or str(item["task_id"] or "") in available
     ]
     priority = {"RUNNING": 0, "PENDING": 1, "FAILED": 2, "SKIPPED": 3}
     matched.sort(
@@ -1606,13 +1614,20 @@ def load_not_downloaded_tasks(
             str(item["task_id"] or ""),
         )
     )
+    completed_matched.sort(
+        key=lambda item: (
+            str(item["finished_at"] or item["updated_at"] or ""),
+            str(item["country"] or ""),
+            str(item["city"] or ""),
+        ),
+        reverse=True,
+    )
 
     counts = {status: 0 for status in ("PENDING", "RUNNING", "FAILED", "SKIPPED")}
     resolved_root = repo_root.resolve()
-    result_rows = []
-    for item in matched:
+
+    def build_row(item: dict, completed: bool) -> dict:
         status = str(item["status"] or "")
-        counts[status] = counts.get(status, 0) + 1
         download_dir = str(item["download_dir"] or "")
         log_path = ""
         if download_dir:
@@ -1625,31 +1640,40 @@ def load_not_downloaded_tasks(
                         break
                 except (OSError, ValueError):
                     continue
-        result_rows.append(
-            {
-                "task_id": item["task_id"],
-                "continent": item["continent"],
-                "country": item["country"],
-                "city": item["city"],
-                "download_dir": download_dir,
-                "status": status,
-                "attempts": item["attempts"],
-                "queue_order": item["queue_order"],
-                "manifest_order": item["manifest_order"],
-                "last_error": str(item["last_error"] or "")[:300],
-                "started_at": item["started_at"],
-                "finished_at": item["finished_at"],
-                "updated_at": item["updated_at"],
-                "log_path": log_path,
-            }
-        )
+        row = {
+            "task_id": item["task_id"],
+            "continent": item["continent"],
+            "country": item["country"],
+            "city": item["city"],
+            "download_dir": download_dir,
+            "status": status,
+            "attempts": item["attempts"],
+            "queue_order": item["queue_order"],
+            "manifest_order": item["manifest_order"],
+            "last_error": str(item["last_error"] or "")[:300],
+            "started_at": item["started_at"],
+            "finished_at": item["finished_at"],
+            "updated_at": item["updated_at"],
+            "log_path": log_path,
+        }
+        if completed:
+            row["completed_at"] = item["finished_at"] or item["updated_at"] or ""
+        return row
+
+    result_rows = [build_row(item, completed=False) for item in matched]
+    for item in matched:
+        status = str(item["status"] or "")
+        counts[status] = counts.get(status, 0) + 1
+    completed_rows = [build_row(item, completed=True) for item in completed_matched]
     return {
         "ok": True,
         "continent": label,
         "total": len(result_rows),
         "counts": counts,
+        "completed_total": len(completed_rows),
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "rows": result_rows,
+        "completed_rows": completed_rows,
     }
 
 
@@ -1747,8 +1771,10 @@ def build_db_update_snapshot(
         "error": None,
         "counts": {"total": 0, "updated": 0, "pending": 0},
         "continent_actual_totals": {},
+        "continent_downloaded": {},
         "continent_not_downloaded": {},
         "actual_total": None,
+        "downloaded_total": None,
         "not_downloaded_total": None,
         "copy_counts": {"done": 0, "copying": 0, "error": 0, "not_copied": 0, "unknown": 0},
         "rows": [],
@@ -1850,10 +1876,16 @@ def build_db_update_snapshot(
         snapshot["continent_actual_totals"] = {
             label: item["total"] for label, item in download_stats.items()
         }
+        snapshot["continent_downloaded"] = {
+            label: item["downloaded"] for label, item in download_stats.items()
+        }
         snapshot["continent_not_downloaded"] = {
             label: item["not_downloaded"] for label, item in download_stats.items()
         }
         snapshot["actual_total"] = sum(item["total"] for item in download_stats.values())
+        snapshot["downloaded_total"] = sum(
+            item["downloaded"] for item in download_stats.values()
+        )
         snapshot["not_downloaded_total"] = sum(
             item["not_downloaded"] for item in download_stats.values()
         )

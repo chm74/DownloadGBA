@@ -83,6 +83,9 @@
   .modal-title { font-size:16px; font-weight:600; }
   .modal-close { background:none; border:none; color:var(--muted); font:24px/1 "Segoe UI", sans-serif; cursor:pointer; padding:0 4px; }
   .modal-close:hover { color:var(--text); }
+  .modal-tabs { display:flex; gap:4px; padding:0 18px; border-bottom:1px solid var(--line); }
+  .modal-tab { background:none; border:none; border-bottom:2px solid transparent; padding:8px 12px; margin-bottom:-1px; cursor:pointer; color:var(--muted); font:inherit; font-size:13px; }
+  .modal-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
   .modal-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:10px 18px; border-bottom:1px solid var(--line); }
   .modal-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-left:auto; }
   .modal-tools input { padding:4px 8px; width:230px; }
@@ -460,6 +463,10 @@
           <div id="d-download-title" class="modal-title">建筑数据未下载</div>
         </div>
         <button type="button" id="d-download-close" class="modal-close" aria-label="关闭">×</button>
+      </div>
+      <div id="d-download-tabs" class="modal-tabs">
+        <button type="button" id="d-download-tab-pending" class="modal-tab active" data-dlmode="pending">未下载（0）</button>
+        <button type="button" id="d-download-tab-completed" class="modal-tab" data-dlmode="completed">已下载（0）</button>
       </div>
       <div class="modal-toolbar">
         <div class="modal-tools">
@@ -1682,6 +1689,7 @@ function renderProcessing(processing) {
 const dbUpdateState = {
   page: 1, pageSize: 15, rows: [], filter: "pending", search: "",
   actualTotals: {}, actualTotal: null,
+  downloaded: {}, downloadedTotal: null,
   notDownloaded: {}, notDownloadedTotal: null,
 };
 const dbImportMsgState = {};
@@ -1689,7 +1697,9 @@ const dbImportChecked = {};
 const dbCopyMsgState = {};
 const dbNoteState = { editingKey: null };
 const notDownloadedModalState = {
-  continent: "", rows: [], total: 0, generatedAt: "", search: "",
+  continent: "", mode: "pending", rows: [], total: 0,
+  completedRows: [], completedTotal: 0,
+  generatedAt: "", search: "",
 };
 
 function dbUpdateFilteredRows() {
@@ -1783,16 +1793,19 @@ function renderDbContinentStats() {
     const actualText = Number.isFinite(actual)
       ? String(actual)
       : (dbUpdateState.actualTotal === null ? "-" : "0");
+    const downloaded = dbUpdateState.downloaded[item.label];
+    const downloadedText = Number.isFinite(downloaded)
+      ? String(downloaded)
+      : (dbUpdateState.downloadedTotal === null ? "-" : "0");
     const notDownloaded = dbUpdateState.notDownloaded[item.label];
     const notDownloadedText = Number.isFinite(notDownloaded)
       ? String(notDownloaded)
       : (dbUpdateState.notDownloadedTotal === null ? "-" : "0");
-    return `<div class="db-stat-card" data-continent="${esc(item.label)}" tabindex="0" role="button" title="点击查看建筑数据未下载任务">
+    return `<div class="db-stat-card" data-continent="${esc(item.label)}" tabindex="0" role="button" title="点击查看建筑数据下载概览">
       <div class="db-stat-name">${esc(item.label)}</div>
       <div class="db-stat-row"><span>实际任务总数</span><b>${actualText}</b></div>
+      <div class="db-stat-row"><span>建筑数据已下载</span><b class="ok">${downloadedText}</b></div>
       <div class="db-stat-row"><span>建筑数据未下载</span><b class="warn">${notDownloadedText}</b></div>
-      <div class="db-stat-row"><span>已更新</span><b class="ok">${item.updated}</b></div>
-      <div class="db-stat-row"><span>未更新</span><b class="err">${item.pending}</b></div>
       <div class="db-stat-row db-stat-total"><span>已处理 ${item.total} 条</span><span>完成 ${percent}%</span></div>
       <div class="db-stat-bar"><i style="width:${percent}%"></i></div>
     </div>`;
@@ -1817,6 +1830,23 @@ async function loadNotDownloadedTasks() {
     notDownloadedModalState.total = Number.isFinite(Number(data.total))
       ? Number(data.total)
       : notDownloadedModalState.rows.length;
+    notDownloadedModalState.completedRows = data.completed_rows || [];
+    notDownloadedModalState.completedTotal = Number.isFinite(Number(data.completed_total))
+      ? Number(data.completed_total)
+      : notDownloadedModalState.completedRows.length;
+    if (
+      notDownloadedModalState.mode === "pending"
+      && notDownloadedModalState.total === 0
+      && notDownloadedModalState.completedTotal > 0
+    ) {
+      notDownloadedModalState.mode = "completed";
+    } else if (
+      notDownloadedModalState.mode === "completed"
+      && notDownloadedModalState.completedTotal === 0
+      && notDownloadedModalState.total > 0
+    ) {
+      notDownloadedModalState.mode = "pending";
+    }
     notDownloadedModalState.generatedAt = data.generated_at || "";
     renderNotDownloadedModal();
   } catch (error) {
@@ -1833,20 +1863,50 @@ function renderNotDownloadedModal() {
   const body = document.getElementById("d-download-body");
   if (!title || !body) return;
 
-  title.textContent = `${state.continent} · 建筑数据未下载（${state.total}）`;
+  title.textContent = `${state.continent} · 建筑数据下载概览`;
+  const pendingTab = document.getElementById("d-download-tab-pending");
+  const completedTab = document.getElementById("d-download-tab-completed");
+  if (pendingTab) {
+    pendingTab.textContent = `未下载（${state.total}）`;
+    pendingTab.classList.toggle("active", state.mode === "pending");
+  }
+  if (completedTab) {
+    completedTab.textContent = `已下载（${state.completedTotal}）`;
+    completedTab.classList.toggle("active", state.mode === "completed");
+  }
   if (timeBox) {
     timeBox.textContent = state.generatedAt ? `数据时间：${state.generatedAt}` : "-";
   }
 
   const query = state.search.trim().toLowerCase();
-  const rows = state.rows.filter((row) => {
+  const matchesQuery = (row) => {
     if (!query) return true;
     return `${row.country || ""} ${row.city || ""} ${row.task_id || ""}`
       .toLowerCase()
       .includes(query);
-  });
+  };
+  const rows = state.rows.filter(matchesQuery);
+  const completedRows = state.completedRows.filter(matchesQuery);
+
+  if (state.mode === "completed") {
+    if (completedRows.length === 0) {
+      body.innerHTML = `<div class="empty">${state.completedTotal ? "没有符合筛选条件的已下载任务" : "该大洲暂无已下载任务"}</div>`;
+      return;
+    }
+    body.innerHTML = `<table class="modal-completed-table">
+      <thead><tr><th>国家</th><th>区域/任务</th><th>下载目录</th><th>完成时间</th></tr></thead>
+      <tbody>${completedRows.map((row) => `<tr>
+        <td>${esc(row.country || "-")}</td>
+        <td>${esc(row.city || "-")}<div class="muted mono" title="${esc(row.task_id || "")}">${esc(row.task_id || "")}</div></td>
+        <td class="mono path-cell" title="${esc(row.download_dir || "")}">${esc(row.download_dir || "-")}</td>
+        <td class="mono">${esc(row.completed_at || row.finished_at || row.updated_at || "-")}</td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+    return;
+  }
+
   if (rows.length === 0) {
-    body.innerHTML = `<div class="empty">${state.rows.length ? "没有符合筛选条件的任务" : "该大洲暂无建筑数据未下载任务"}</div>`;
+    body.innerHTML = `<div class="empty">${state.rows.length ? "没有符合筛选条件的未下载任务" : "该大洲暂无建筑数据未下载任务"}</div>`;
     return;
   }
 
@@ -1879,8 +1939,11 @@ function renderNotDownloadedModal() {
 
 async function openNotDownloadedModal(continent) {
   notDownloadedModalState.continent = continent;
+  notDownloadedModalState.mode = "pending";
   notDownloadedModalState.rows = [];
   notDownloadedModalState.total = 0;
+  notDownloadedModalState.completedRows = [];
+  notDownloadedModalState.completedTotal = 0;
   notDownloadedModalState.generatedAt = "";
   notDownloadedModalState.search = "";
   const search = document.getElementById("d-download-search");
@@ -1888,7 +1951,7 @@ async function openNotDownloadedModal(continent) {
   const modal = document.getElementById("d-download-modal");
   if (modal) modal.hidden = false;
   document.body.style.overflow = "hidden";
-  document.getElementById("d-download-title").textContent = `${continent} · 建筑数据未下载`;
+  document.getElementById("d-download-title").textContent = `${continent} · 建筑数据下载概览`;
   document.getElementById("d-download-body").innerHTML = '<div class="empty">正在加载任务…</div>';
   document.getElementById("d-download-time").textContent = "-";
   document.getElementById("d-download-close").focus();
@@ -1924,6 +1987,17 @@ document.getElementById("d-download-refresh").addEventListener("click", loadNotD
 document.getElementById("d-download-search").addEventListener("input", (event) => {
   notDownloadedModalState.search = event.target.value || "";
   renderNotDownloadedModal();
+});
+document.getElementById("d-download-tabs").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-dlmode]");
+  if (!button) return;
+  const mode = button.dataset.dlmode;
+  if (mode !== "pending" && mode !== "completed") return;
+  if (notDownloadedModalState.mode === mode) return;
+  notDownloadedModalState.mode = mode;
+  renderNotDownloadedModal();
+  const body = document.getElementById("d-download-body");
+  if (body) body.scrollTop = 0;
 });
 if (downloadModal) {
   downloadModal.addEventListener("click", (event) => {
@@ -2148,6 +2222,8 @@ function renderDbUpdated(snapshot) {
   dbUpdateState.rows = snapshot.rows || [];
   dbUpdateState.actualTotals = snapshot.continent_actual_totals || {};
   dbUpdateState.actualTotal = snapshot.actual_total ?? null;
+  dbUpdateState.downloaded = snapshot.continent_downloaded || {};
+  dbUpdateState.downloadedTotal = snapshot.downloaded_total ?? null;
   dbUpdateState.notDownloaded = snapshot.continent_not_downloaded || {};
   dbUpdateState.notDownloadedTotal = snapshot.not_downloaded_total ?? null;
   renderDbUpdateTable();

@@ -621,7 +621,12 @@ class DbUpdateTests(unittest.TestCase):
                 snapshot["continent_not_downloaded"],
                 {"Africa(非洲)": 2, "Europe(欧洲)": 0},
             )
+            self.assertEqual(
+                snapshot["continent_downloaded"],
+                {"Africa(非洲)": 0, "Europe(欧洲)": 1},
+            )
             self.assertEqual(snapshot["actual_total"], 4)
+            self.assertEqual(snapshot["downloaded_total"], 1)
             self.assertEqual(snapshot["not_downloaded_total"], 2)
 
             missing = status_server.build_db_update_snapshot(
@@ -644,9 +649,11 @@ class DbUpdateTests(unittest.TestCase):
             self.assertEqual(africa["counts"]["PENDING"], 2)
             self.assertEqual(africa["rows"][0]["status"], "PENDING")
 
+            self.assertEqual(africa["completed_total"], 0)
             europe = status_server.load_not_downloaded_tasks(repo_root, state_db, "Europe(欧洲)")
             self.assertEqual(europe["total"], 0)
             self.assertEqual(europe["rows"], [])
+            self.assertEqual(europe["completed_total"], 1)
 
             with self.assertRaises(ValueError):
                 status_server.load_not_downloaded_tasks(repo_root, state_db, "")
@@ -696,10 +703,15 @@ class DbUpdateTests(unittest.TestCase):
                 [row["task_id"] for row in africa["rows"]],
                 ["Africa|Benin|Benin"],
             )
+            self.assertEqual(
+                [row["task_id"] for row in africa["completed_rows"]],
+                ["Africa|Angola|Angola"],
+            )
             europe = status_server.load_not_downloaded_tasks(
                 repo_root, state_db, "Europe(欧洲)", available_keys=available
             )
             self.assertEqual(europe["total"], 0)
+            self.assertEqual(europe["completed_total"], 1)
 
     def test_save_db_update_marks_rejects_bad_rows(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1377,6 +1389,7 @@ class ControlTests(unittest.TestCase):
                 self.assertEqual(payload["counts"]["RUNNING"], 0)
                 self.assertEqual(payload["counts"]["PENDING"], 2)
                 self.assertEqual(payload["rows"][0]["status"], "PENDING")
+                self.assertEqual(payload["completed_total"], 0)
             finally:
                 server.shutdown()
                 server.server_close()
