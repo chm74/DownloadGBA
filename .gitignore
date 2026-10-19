@@ -6,6 +6,11 @@
 !/data/logs/
 !/data/logs/**
 
+# SQLite 运行时文件（由 .db 自动生成，不纳入版本控制）
+/data/*.db-wal
+/data/*.db-shm
+/data/*.db-journal
+
 /Tools/Oneshp_pipline_qgis/out_data/
 /repair_staging/
 

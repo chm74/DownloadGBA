@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-10T19:01:03",
+  "updated_at": "2026-10-19T10:09:14",
   "rows": {
     "亚洲|中国|广西壮族自治区": {
       "updated": true,
@@ -98,9 +98,19 @@
       "note": ""
     },
     "亚洲|中国|山东省": {
-      "updated": false,
-      "updated_at": "",
+      "updated": true,
+      "updated_at": "2026-10-19T10:09:13",
       "note": "已更新了"
+    },
+    "亚洲|沙特|利雅得": {
+      "updated": true,
+      "updated_at": "2026-10-14T16:33:17",
+      "note": ""
+    },
+    "Oceania|Australia|Sydney": {
+      "updated": true,
+      "updated_at": "2026-10-16T11:01:37",
+      "note": "人工登记：已确认更新到库"
     }
   }
 }

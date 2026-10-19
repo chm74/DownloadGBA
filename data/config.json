@@ -1,11 +1,14 @@
 {
   "database": {
-    "host": "172.16.1.145",
+    "host": "127.0.0.1",
     "port": 5432,
     "dbname": "building",
     "user": "postgres",
     "password": "frontfree"
   },
-  "result_root": "\\\\172.16.0.116\\BuildingData\\AutoGenerete",
-  "qgis_dir": "D:\\QGIS"
+  "result_root": "\\\\192.168.2.126\\BuildingData\\AutoGenerete",
+  "qgis_dir": "D:\\QGIS",
+  "process": {
+    "default_limit": 3
+  }
 }

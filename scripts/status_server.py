@@ -1385,7 +1385,40 @@ def _update_log_relpath(dataset_key: str) -> str:
     return f"data/logs/update/log_main3_{sanitize(parts[1])}_{sanitize(parts[2])}.log"
 
 
-def load_download_continent_stats(state_db: Path | None) -> dict[str, dict[str, int]] | None:
+def load_available_dataset_keys(
+    process_db: Path | None,
+    marks_file: Path | None = None,
+) -> set[str]:
+    """已完成处理或已登记更新到库的数据集，视为建筑数据已获取。"""
+    keys: set[str] = set()
+    if process_db is not None:
+        process_path = Path(process_db)
+        if process_path.exists():
+            try:
+                connection = _open_state_db(process_path)
+            except sqlite3.Error:
+                connection = None
+            if connection is not None:
+                try:
+                    rows = connection.execute(
+                        "SELECT dataset_key FROM process_tasks WHERE status = ?",
+                        (process_queue.PROCESS_OK,),
+                    ).fetchall()
+                    keys.update(str(row["dataset_key"]) for row in rows)
+                except sqlite3.Error:
+                    pass
+                finally:
+                    connection.close()
+    if marks_file is not None:
+        marks = load_db_update_marks(Path(marks_file))
+        keys.update(key for key, mark in marks.items() if mark.get("updated"))
+    return keys
+
+
+def load_download_continent_stats(
+    state_db: Path | None,
+    available_keys: set[str] | None = None,
+) -> dict[str, dict[str, int]] | None:
     """按大洲统计下载任务总数、已下载数与未下载数（含未处理任务）。"""
     if state_db is None:
         return None
@@ -1398,26 +1431,37 @@ def load_download_continent_stats(state_db: Path | None) -> dict[str, dict[str, 
         return None
     try:
         rows = connection.execute(
-            "SELECT continent, status, COUNT(*) AS total FROM tasks GROUP BY continent, status"
+            "SELECT task_id, continent, status FROM tasks"
         ).fetchall()
     except sqlite3.Error:
         return None
     finally:
         connection.close()
+    available = available_keys or set()
     stats: dict[str, dict[str, int]] = {}
     for row in rows:
         label = format_continent(row["continent"])
-        item = stats.setdefault(label, {"total": 0, "downloaded": 0, "not_downloaded": 0})
-        count = int(row["total"] or 0)
-        item["total"] += count
-        if str(row["status"] or "") in lib.SUCCESS_STATUSES:
-            item["downloaded"] += count
+        item = stats.setdefault(
+            label,
+            {"total": 0, "downloaded": 0, "not_downloaded": 0, "other": 0},
+        )
+        item["total"] += 1
+        status = str(row["status"] or "")
+        if status in lib.SUCCESS_STATUSES or str(row["task_id"] or "") in available:
+            item["downloaded"] += 1
+        elif status == lib.STATUS_PENDING:
+            item["not_downloaded"] += 1
         else:
-            item["not_downloaded"] += count
+            item["other"] += 1
     return stats
 
 
-def load_not_downloaded_tasks(repo_root: Path, state_db: Path, continent: str) -> dict:
+def load_not_downloaded_tasks(
+    repo_root: Path,
+    state_db: Path,
+    continent: str,
+    available_keys: set[str] | None = None,
+) -> dict:
     """按大洲查询尚未成功下载建筑数据的任务。"""
     repo_root = Path(repo_root)
     file_path = Path(state_db)
@@ -1441,11 +1485,13 @@ def load_not_downloaded_tasks(repo_root: Path, state_db: Path, continent: str) -
     finally:
         connection.close()
 
+    available = available_keys or set()
     matched = [
         dict(row)
         for row in rows
         if format_continent(row["continent"]) == label
-        and str(row["status"] or "") not in lib.SUCCESS_STATUSES
+        and str(row["status"] or "") == lib.STATUS_PENDING
+        and str(row["task_id"] or "") not in available
     ]
     priority = {"RUNNING": 0, "PENDING": 1, "FAILED": 2, "SKIPPED": 3}
     matched.sort(
@@ -1590,7 +1636,9 @@ def build_db_update_snapshot(
         "updated": sum(1 for item in rows if item["updated"]),
         "pending": sum(1 for item in rows if not item["updated"]),
     }
-    download_stats = load_download_continent_stats(state_db)
+    available_keys = {str(row["dataset_key"]) for row in records}
+    available_keys.update(key for key, mark in marks.items() if mark.get("updated"))
+    download_stats = load_download_continent_stats(state_db, available_keys)
     if download_stats is not None:
         snapshot["continent_actual_totals"] = {
             label: item["total"] for label, item in download_stats.items()
@@ -2941,10 +2989,15 @@ class StatusHandler(BaseHTTPRequestHandler):
             query = parse_qs(urlparse(self.path).query)
             continent = (query.get("continent") or [""])[0]
             try:
+                available_keys = load_available_dataset_keys(
+                    process_db=config["process_db"],
+                    marks_file=config["db_update_file"],
+                )
                 payload = load_not_downloaded_tasks(
                     repo_root=config["repo_root"],
                     state_db=config["state_db"],
                     continent=continent,
+                    available_keys=available_keys,
                 )
                 status, body = 200, payload
             except ValueError as exc:

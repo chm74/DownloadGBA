@@ -402,7 +402,7 @@
           <div class="db-stat-block">
             <div class="db-stat-head">
               <span class="db-stat-title">按大洲统计</span>
-              <span class="muted">全量统计，不受搜索和翻页影响；实际任务总数含未处理任务</span>
+              <span class="muted">仅统计待下载任务；下载中、失败、跳过以及已完成处理或已更新到库的任务不计入</span>
               <span id="d-continent-total" class="muted">-</span>
             </div>
             <div id="d-continent-stats" class="db-stat-grid">
@@ -1670,7 +1670,6 @@ const DOWNLOAD_STATUS_LABELS = {
   FAILED: "失败",
   SKIPPED: "跳过",
 };
-const DOWNLOAD_STATUS_ORDER = ["PENDING", "RUNNING", "FAILED", "SKIPPED"];
 const notDownloadedModalState = {
   continent: "", rows: [], counts: {}, total: 0, generatedAt: "",
   status: "all", search: "",
@@ -1822,23 +1821,15 @@ function renderNotDownloadedModal() {
   if (!title || !body) return;
 
   title.textContent = `${state.continent} · 建筑数据未下载（${state.total}）`;
-  const knownChips = DOWNLOAD_STATUS_ORDER.map((key) => [
-    key, DOWNLOAD_STATUS_LABELS[key] || key, Number(state.counts[key]) || 0,
-  ]);
-  const unknownKeys = Object.keys(state.counts).filter((key) => !DOWNLOAD_STATUS_ORDER.includes(key));
-  const chips = [["all", "全部", state.total], ...knownChips,
-    ...unknownKeys.map((key) => [key, key, Number(state.counts[key]) || 0])];
+  const pendingCount = Number(state.counts.PENDING) || 0;
+  const chips = [["all", "全部", state.total], ["PENDING", "待下载", pendingCount]];
   if (statusBox) {
     statusBox.innerHTML = chips.map(([value, label, count]) =>
       `<button type="button" class="status-chip${state.status === value ? " active" : ""}" data-status="${esc(value)}">${esc(label)} ${count}</button>`
     ).join("");
   }
   if (meta) {
-    const summary = knownChips
-      .filter(([, , count]) => count > 0)
-      .map(([, label, count]) => `${label} ${count}`)
-      .join(" ｜ ");
-    meta.textContent = summary || "暂无未下载任务";
+    meta.textContent = state.total ? `待下载 ${pendingCount}` : "暂无未下载任务";
   }
   if (timeBox) {
     timeBox.textContent = state.generatedAt ? `数据时间：${state.generatedAt}` : "-";

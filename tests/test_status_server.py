@@ -619,10 +619,10 @@ class DbUpdateTests(unittest.TestCase):
             )
             self.assertEqual(
                 snapshot["continent_not_downloaded"],
-                {"Africa(非洲)": 3, "Europe(欧洲)": 0},
+                {"Africa(非洲)": 2, "Europe(欧洲)": 0},
             )
             self.assertEqual(snapshot["actual_total"], 4)
-            self.assertEqual(snapshot["not_downloaded_total"], 3)
+            self.assertEqual(snapshot["not_downloaded_total"], 2)
 
             missing = status_server.build_db_update_snapshot(
                 repo_root, process_db, marks_file, state_db=repo_root / "missing-state.db"
@@ -639,10 +639,10 @@ class DbUpdateTests(unittest.TestCase):
 
             africa = status_server.load_not_downloaded_tasks(repo_root, state_db, "Africa(非洲)")
             self.assertTrue(africa["ok"])
-            self.assertEqual(africa["total"], 3)
-            self.assertEqual(africa["counts"]["RUNNING"], 1)
+            self.assertEqual(africa["total"], 2)
+            self.assertEqual(africa["counts"]["RUNNING"], 0)
             self.assertEqual(africa["counts"]["PENDING"], 2)
-            self.assertEqual(africa["rows"][0]["status"], "RUNNING")
+            self.assertEqual(africa["rows"][0]["status"], "PENDING")
 
             europe = status_server.load_not_downloaded_tasks(repo_root, state_db, "Europe(欧洲)")
             self.assertEqual(europe["total"], 0)
@@ -655,6 +655,51 @@ class DbUpdateTests(unittest.TestCase):
                 status_server.load_not_downloaded_tasks(
                     repo_root, repo_root / "missing-state.db", "Africa(非洲)"
                 )
+
+    def test_not_downloaded_excludes_processed_and_updated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            state_db = build_repo_fixture(repo_root)
+            process_db = build_process_fixture(repo_root)
+            marks_file = repo_root / "data" / "db_update_status.json"
+
+            store = lib.StateStore(state_db)
+            try:
+                store.set_status("Europe|San_Marino|San_Marino", lib.STATUS_PENDING)
+            finally:
+                store.close()
+
+            snapshot = status_server.build_db_update_snapshot(
+                repo_root, process_db, marks_file, state_db=state_db
+            )
+            self.assertEqual(snapshot["continent_not_downloaded"]["Europe(欧洲)"], 0)
+
+            status_server.save_db_update_marks(
+                marks_file,
+                [{
+                    "dataset_key": "Africa|Angola|Angola",
+                    "updated": True,
+                    "updated_at": "2026-01-01T00:00:00",
+                    "note": "",
+                }],
+            )
+            snapshot = status_server.build_db_update_snapshot(
+                repo_root, process_db, marks_file, state_db=state_db
+            )
+            self.assertEqual(snapshot["continent_not_downloaded"]["Africa(非洲)"], 1)
+
+            available = status_server.load_available_dataset_keys(process_db, marks_file)
+            africa = status_server.load_not_downloaded_tasks(
+                repo_root, state_db, "Africa(非洲)", available_keys=available
+            )
+            self.assertEqual(
+                [row["task_id"] for row in africa["rows"]],
+                ["Africa|Benin|Benin"],
+            )
+            europe = status_server.load_not_downloaded_tasks(
+                repo_root, state_db, "Europe(欧洲)", available_keys=available
+            )
+            self.assertEqual(europe["total"], 0)
 
     def test_save_db_update_marks_rejects_bad_rows(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1328,10 +1373,10 @@ class ControlTests(unittest.TestCase):
                 ) as response:
                     payload = json.loads(response.read().decode("utf-8"))
                 self.assertTrue(payload["ok"])
-                self.assertEqual(payload["total"], 3)
-                self.assertEqual(payload["counts"]["RUNNING"], 1)
+                self.assertEqual(payload["total"], 2)
+                self.assertEqual(payload["counts"]["RUNNING"], 0)
                 self.assertEqual(payload["counts"]["PENDING"], 2)
-                self.assertEqual(payload["rows"][0]["status"], "RUNNING")
+                self.assertEqual(payload["rows"][0]["status"], "PENDING")
             finally:
                 server.shutdown()
                 server.server_close()
