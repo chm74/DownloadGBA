@@ -1996,11 +1996,15 @@ function renderDbUpdateTable() {
   const showDetail = dbUpdateState.filter === "updated";
   const showUpdatedAt = dbUpdateState.filter === "updated";
   const showCopy = dbUpdateState.filter !== "updated";
+  const showOutput = dbUpdateState.filter !== "updated";
   const copyHeader = showCopy ? "<th>数据拷贝状态</th>" : "";
+  const outputHeader = showOutput ? "<th>输出目录</th>" : "";
   const actionHeader = showAction ? "<th>操作</th>" : "";
   const detailHeader = showDetail ? "<th>更新详情</th>" : "";
   const updatedAtHeader = showUpdatedAt ? "<th>更新时间</th>" : "";
-  const colCount = (showCopy ? 6 : 5)
+  const colCount = 4
+    + (showOutput ? 1 : 0)
+    + (showCopy ? 1 : 0)
     + (showUpdatedAt ? 1 : 0)
     + (showDetail ? 1 : 0)
     + (showAction ? 1 : 0);
@@ -2012,7 +2016,7 @@ function renderDbUpdateTable() {
   let lastContinent = "";
   box.innerHTML = `
     <table>
-      <thead><tr><th>数据集</th><th>命名前缀</th><th>处理完成时间</th><th>输出目录</th>${copyHeader}${updatedAtHeader}<th>备注</th>${detailHeader}${actionHeader}</tr></thead>
+      <thead><tr><th>数据集</th><th>命名前缀</th><th>处理完成时间</th>${outputHeader}${copyHeader}${updatedAtHeader}<th>备注</th>${detailHeader}${actionHeader}</tr></thead>
       <tbody>${pageRows.map(item => {
         const row = item;
         let groupRow = "";
@@ -2028,6 +2032,7 @@ function renderDbUpdateTable() {
         const detTitle = det ? `${det.state || ""} ${det.updated_at || ""}`.trim() : "";
         const detailCell = showDetail ? `<td title="${esc(detTitle)}">${esc(detText)}</td>` : "";
         const updatedAtCell = showUpdatedAt ? `<td class="mono">${esc(row.updated_at || "-")}</td>` : "";
+        const outputCell = showOutput ? `<td class="mono">${esc(row.output_dir || "-")}</td>` : "";
         const busy = !!(dbImportMsgState[row.dataset_key] && dbImportMsgState[row.dataset_key].busy);
         const copyState = row.copy_state || "unknown";
         const copyCopied = Number(row.copy_copied) || 0;
@@ -2075,7 +2080,7 @@ function renderDbUpdateTable() {
           <td class="mono">${esc(row.display_name || row.dataset_key)}</td>
           <td class="mono">${esc(row.process_name_prefix || "-")}</td>
           <td>${esc(row.finished_at || "-")}</td>
-          <td class="mono">${esc(row.output_dir || "-")}</td>
+          ${outputCell}
           ${copyCell}
           ${updatedAtCell}
           <td><input class="note-input" type="text" maxlength="200" placeholder="添加备注" data-note-key="${esc(row.dataset_key)}" data-saved="${esc(note)}" value="${esc(note)}"></td>

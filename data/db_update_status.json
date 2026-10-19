@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-19T15:46:04",
+  "updated_at": "2026-10-19T16:46:48",
   "rows": {
     "亚洲|中国|广西壮族自治区": {
       "updated": true,
@@ -121,6 +121,36 @@
       "updated": true,
       "updated_at": "2026-10-19T15:46:04",
       "note": ""
+    },
+    "Africa|Liberia|Liberia": {
+      "updated": true,
+      "updated_at": "2026-10-19T16:46:48",
+      "note": "人工登记：已确认更新到库"
+    },
+    "Africa|Lesotho|Lesotho": {
+      "updated": true,
+      "updated_at": "2026-10-19T16:46:48",
+      "note": "人工登记：已确认更新到库"
+    },
+    "Africa|Israel|Israel": {
+      "updated": true,
+      "updated_at": "2026-10-19T16:46:48",
+      "note": "人工登记：已确认更新到库"
+    },
+    "Africa|GuineaBissau|GuineaBissau": {
+      "updated": true,
+      "updated_at": "2026-10-19T16:46:48",
+      "note": "人工登记：已确认更新到库"
+    },
+    "Africa|Guinea|Guinea": {
+      "updated": true,
+      "updated_at": "2026-10-19T16:46:48",
+      "note": "人工登记：已确认更新到库"
+    },
+    "Africa|Gabon|Gabon": {
+      "updated": true,
+      "updated_at": "2026-10-19T16:46:48",
+      "note": "人工登记：已确认更新到库"
     }
   }
 }
