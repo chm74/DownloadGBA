@@ -77,23 +77,27 @@
   .modal-close { background:none; border:none; color:var(--muted); font:24px/1 "Segoe UI", sans-serif; cursor:pointer; padding:0 4px; }
   .modal-close:hover { color:var(--text); }
   .modal-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:10px 18px; border-bottom:1px solid var(--line); }
-  .status-chips { display:flex; gap:6px; flex-wrap:wrap; }
-  .status-chip { border:1px solid var(--line); background:transparent; color:var(--muted); border-radius:999px; padding:2px 9px; font-size:12px; cursor:pointer; }
-  .status-chip.active { border-color:var(--accent); color:var(--accent); background:rgba(37,99,235,.08); }
-  .modal-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .modal-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-left:auto; }
   .modal-tools input { padding:4px 8px; width:230px; }
   .modal-body { flex:1 1 auto; min-height:180px; overflow:auto; padding:0 18px; }
-  .modal-body table { min-width:980px; }
+  .modal-body table { min-width:760px; }
   .modal-body th, .modal-body td { white-space:nowrap; }
   .modal-body td.path-cell { max-width:280px; overflow:hidden; text-overflow:ellipsis; }
-  .modal-body td.error-cell { max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* 弹窗内按国家分组：滚动时分组标题在各自分组范围内吸顶 */
+  .modal-group-head,
+  .modal-country-group table { table-layout:fixed; }
+  .modal-group-head th:first-child,
+  .modal-country-group td:first-child { width:45%; }
+  .modal-group-head th:last-child,
+  .modal-country-group td:last-child { width:55%; }
+  .modal-group-title {
+    position:sticky; top:0; z-index:2;
+    background:var(--card);
+    font-weight:600; font-size:12px;
+    padding:6px 10px;
+    border-bottom:1px solid var(--line);
+  }
   .modal-foot { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 18px; border-top:1px solid var(--line); }
-  .status-badge { display:inline-block; padding:1px 7px; border-radius:999px; font-size:12px; white-space:nowrap; }
-  .status-badge.pending { color:var(--muted); background:rgba(127,127,127,.12); }
-  .status-badge.running { color:var(--accent); background:rgba(37,99,235,.14); }
-  .status-badge.failed { color:var(--err); background:rgba(220,38,38,.14); }
-  .status-badge.skipped { color:var(--warn); background:rgba(217,119,6,.14); }
-  .status-badge.other { color:var(--muted); background:rgba(127,127,127,.12); }
   .merge-badge { display:inline-block; padding:1px 7px; border-radius:999px; font-size:12px; white-space:nowrap; }
   .merge-badge.warn { color:var(--warn); background:rgba(217,119,6,.15); }
   .merge-badge.err { color:var(--err); background:rgba(220,38,38,.15); cursor:pointer; }
@@ -446,12 +450,10 @@
       <div class="modal-head">
         <div>
           <div id="d-download-title" class="modal-title">建筑数据未下载</div>
-          <div id="d-download-meta" class="muted">-</div>
         </div>
         <button type="button" id="d-download-close" class="modal-close" aria-label="关闭">×</button>
       </div>
       <div class="modal-toolbar">
-        <div id="d-download-status" class="status-chips"></div>
         <div class="modal-tools">
           <input id="d-download-search" type="text" placeholder="搜索国家 / 区域 / 任务ID">
           <button id="d-download-refresh" type="button" style="padding:4px 10px;cursor:pointer;">刷新</button>
@@ -1664,15 +1666,8 @@ const dbImportMsgState = {};
 const dbImportChecked = {};
 const dbCopyMsgState = {};
 const dbNoteState = { editingKey: null };
-const DOWNLOAD_STATUS_LABELS = {
-  PENDING: "待下载",
-  RUNNING: "下载中",
-  FAILED: "失败",
-  SKIPPED: "跳过",
-};
 const notDownloadedModalState = {
-  continent: "", rows: [], counts: {}, total: 0, generatedAt: "",
-  status: "all", search: "",
+  continent: "", rows: [], total: 0, generatedAt: "", search: "",
 };
 
 function dbUpdateFilteredRows() {
@@ -1797,14 +1792,12 @@ async function loadNotDownloadedTasks() {
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || String(response.status));
     notDownloadedModalState.rows = data.rows || [];
-    notDownloadedModalState.counts = data.counts || {};
     notDownloadedModalState.total = Number.isFinite(Number(data.total))
       ? Number(data.total)
       : notDownloadedModalState.rows.length;
     notDownloadedModalState.generatedAt = data.generated_at || "";
     renderNotDownloadedModal();
   } catch (error) {
-    document.getElementById("d-download-meta").textContent = "加载失败";
     if (body) body.innerHTML = `<div class="empty">加载失败：${esc(String(error))}</div>`;
   } finally {
     if (refreshButton) refreshButton.disabled = false;
@@ -1814,30 +1807,17 @@ async function loadNotDownloadedTasks() {
 function renderNotDownloadedModal() {
   const state = notDownloadedModalState;
   const title = document.getElementById("d-download-title");
-  const meta = document.getElementById("d-download-meta");
-  const statusBox = document.getElementById("d-download-status");
   const timeBox = document.getElementById("d-download-time");
   const body = document.getElementById("d-download-body");
   if (!title || !body) return;
 
   title.textContent = `${state.continent} · 建筑数据未下载（${state.total}）`;
-  const pendingCount = Number(state.counts.PENDING) || 0;
-  const chips = [["all", "全部", state.total], ["PENDING", "待下载", pendingCount]];
-  if (statusBox) {
-    statusBox.innerHTML = chips.map(([value, label, count]) =>
-      `<button type="button" class="status-chip${state.status === value ? " active" : ""}" data-status="${esc(value)}">${esc(label)} ${count}</button>`
-    ).join("");
-  }
-  if (meta) {
-    meta.textContent = state.total ? `待下载 ${pendingCount}` : "暂无未下载任务";
-  }
   if (timeBox) {
     timeBox.textContent = state.generatedAt ? `数据时间：${state.generatedAt}` : "-";
   }
 
   const query = state.search.trim().toLowerCase();
   const rows = state.rows.filter((row) => {
-    if (state.status !== "all" && row.status !== state.status) return false;
     if (!query) return true;
     return `${row.country || ""} ${row.city || ""} ${row.task_id || ""}`
       .toLowerCase()
@@ -1847,45 +1827,39 @@ function renderNotDownloadedModal() {
     body.innerHTML = `<div class="empty">${state.rows.length ? "没有符合筛选条件的任务" : "该大洲暂无建筑数据未下载任务"}</div>`;
     return;
   }
-  body.innerHTML = `<table>
-    <thead><tr><th>国家</th><th>区域/任务</th><th>状态</th><th>队列</th><th>尝试</th><th>更新时间</th><th>下载目录</th><th>最后错误/说明</th><th>操作</th></tr></thead>
-    <tbody>${rows.map((row) => {
-      const status = String(row.status || "");
-      const statusClass = ["pending", "running", "failed", "skipped"].includes(status.toLowerCase())
-        ? status.toLowerCase()
-        : "other";
-      const statusLabel = DOWNLOAD_STATUS_LABELS[status] || status || "-";
-      const queue = row.queue_order ?? row.manifest_order ?? "-";
-      const time = row.updated_at || row.finished_at || row.started_at || "-";
-      const error = row.last_error || "";
-      const logButton = row.log_path
-        ? `<button type="button" class="mini" data-download-log="${esc(row.log_path)}">查看日志</button>`
-        : "";
-      const dirButton = row.download_dir
-        ? `<button type="button" class="mini" data-open-dir="${esc(row.download_dir)}">打开目录</button>`
-        : "";
-      return `<tr>
-        <td>${esc(row.country || "-")}</td>
-        <td>${esc(row.city || "-")}<div class="muted mono" title="${esc(row.task_id || "")}">${esc(row.task_id || "")}</div></td>
-        <td><span class="status-badge ${statusClass}">${esc(statusLabel)}</span></td>
-        <td>${esc(queue)}</td>
-        <td>${esc(row.attempts ?? "-")}</td>
-        <td class="mono">${esc(time)}</td>
-        <td class="mono path-cell" title="${esc(row.download_dir || "")}">${esc(row.download_dir || "-")}</td>
-        <td class="error-cell" title="${esc(error)}">${esc(error || "-")}</td>
-        <td>${logButton}${dirButton}</td>
-      </tr>`;
-    }).join("")}</tbody>
-  </table>`;
+
+  /* 按国家分组；组内保持后端返回的待下载顺序 */
+  const groups = new Map();
+  for (const row of rows) {
+    const country = String(row.country || "-");
+    if (!groups.has(country)) groups.set(country, []);
+    groups.get(country).push(row);
+  }
+  const countries = Array.from(groups.keys())
+    .sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+  const groupedRows = countries.map((country) => {
+    const items = groups.get(country);
+    const itemRows = items.map((row) => `<tr>
+      <td>${esc(row.city || "-")}<div class="muted mono" title="${esc(row.task_id || "")}">${esc(row.task_id || "")}</div></td>
+      <td class="mono path-cell" title="${esc(row.download_dir || "")}">${esc(row.download_dir || "-")}</td>
+    </tr>`).join("");
+    /* 每个国家一个容器，滚动时分组标题在本组范围内吸顶，下一组到达时自然顶走 */
+    return `<div class="modal-country-group">
+      <div class="modal-group-title">${esc(country)}（${items.length}）</div>
+      <table><tbody>${itemRows}</tbody></table>
+    </div>`;
+  }).join("");
+
+  body.innerHTML = `<table class="modal-group-head">
+    <thead><tr><th>区域/任务</th><th>下载目录</th></tr></thead>
+  </table>${groupedRows}`;
 }
 
 async function openNotDownloadedModal(continent) {
   notDownloadedModalState.continent = continent;
   notDownloadedModalState.rows = [];
-  notDownloadedModalState.counts = {};
   notDownloadedModalState.total = 0;
   notDownloadedModalState.generatedAt = "";
-  notDownloadedModalState.status = "all";
   notDownloadedModalState.search = "";
   const search = document.getElementById("d-download-search");
   if (search) search.value = "";
@@ -1893,8 +1867,6 @@ async function openNotDownloadedModal(continent) {
   if (modal) modal.hidden = false;
   document.body.style.overflow = "hidden";
   document.getElementById("d-download-title").textContent = `${continent} · 建筑数据未下载`;
-  document.getElementById("d-download-meta").textContent = "加载中…";
-  document.getElementById("d-download-status").innerHTML = "";
   document.getElementById("d-download-body").innerHTML = '<div class="empty">正在加载任务…</div>';
   document.getElementById("d-download-time").textContent = "-";
   document.getElementById("d-download-close").focus();
@@ -1930,22 +1902,6 @@ document.getElementById("d-download-refresh").addEventListener("click", loadNotD
 document.getElementById("d-download-search").addEventListener("input", (event) => {
   notDownloadedModalState.search = event.target.value || "";
   renderNotDownloadedModal();
-});
-document.getElementById("d-download-status").addEventListener("click", (event) => {
-  const button = event.target.closest("[data-status]");
-  if (!button) return;
-  notDownloadedModalState.status = button.dataset.status || "all";
-  renderNotDownloadedModal();
-});
-document.getElementById("d-download-body").addEventListener("click", (event) => {
-  const logButton = event.target.closest("[data-download-log]");
-  if (logButton) {
-    closeNotDownloadedModal();
-    jumpToLog(logButton.dataset.downloadLog);
-    return;
-  }
-  const dirButton = event.target.closest("[data-open-dir]");
-  if (dirButton) openTaskFolder(dirButton.dataset.openDir);
 });
 if (downloadModal) {
   downloadModal.addEventListener("click", (event) => {
