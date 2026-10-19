@@ -2304,13 +2304,13 @@ function pollCopyStatus(datasetKey, button, originalText) {
       clearInterval(timer);
       dbCopyMsgState[datasetKey] = { busy: false };
       if (data.state === "done") {
-        showMessage(`已拷贝 ${data.copied || 0} 个文件到共享目录`, "success");
+        showMessage(`已拷贝 ${data.copied || 0} 个文件到共享目录（日志见「日志 → 库表更新」）`, "success");
         await refreshDbUpdated();
       } else if (data.state === "idle") {
         button.disabled = false;
         button.textContent = originalText;
       } else {
-        showMessage("拷贝失败：" + (data.message || data.error || "未知错误"), "error");
+        showMessage("拷贝失败：" + (data.message || data.error || "未知错误") + "（详情见「日志 → 库表更新」）", "error");
         button.disabled = false;
         button.textContent = originalText;
       }

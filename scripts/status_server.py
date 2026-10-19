@@ -1177,6 +1177,20 @@ def build_copy_status(dataset_key: str) -> dict:
     return snapshot
 
 
+def _append_update_log(repo_root: Path, dataset_key: str, message: str) -> None:
+    """把拷贝过程追加到该数据集的库表更新日志（与入库共用同一份日志）。"""
+    rel_path = _update_log_relpath(dataset_key)
+    if not rel_path:
+        return
+    path = Path(repo_root) / rel_path
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {message}\n")
+    except OSError:
+        pass
+
+
 def copy_final_to_share(config: dict, dataset_key: str) -> dict:
     """清空共享目录该区域文件后，把处理产物 final 拷入，校验齐全后删除 final 内容。"""
     repo_root = Path(config["repo_root"])
@@ -1234,20 +1248,29 @@ def copy_final_to_share(config: dict, dataset_key: str) -> dict:
                 job.update(updated_at=datetime.now().isoformat(timespec="seconds"), **fields)
 
     def worker() -> None:
+        started_at = datetime.now()
+        total = len(files)
+        _append_update_log(repo_root, dataset_key, "===== 开始拷贝到共享目录 =====")
+        _append_update_log(repo_root, dataset_key, f"开始时间: {started_at.strftime('%Y-%m-%d %H:%M:%S')}")
+        _append_update_log(repo_root, dataset_key, f"源目录: {final_dir}")
+        _append_update_log(repo_root, dataset_key, f"目标目录: {share_dir}")
+        _append_update_log(repo_root, dataset_key, f"文件数: {total}")
         try:
             share_dir.mkdir(parents=True, exist_ok=True)
             for entry in share_dir.iterdir():
                 if entry.is_file():
                     try:
                         entry.unlink()
-                    except OSError:
-                        pass
+                    except OSError as exc:
+                        _append_update_log(repo_root, dataset_key, f"清理旧文件失败: {entry.name}（{exc}）")
             copied = 0
-            total = len(files)
+            log_step = max(1, total // 10)
             for src in files:
                 shutil.copy2(src, share_dir / src.name)
                 copied += 1
                 set_job(copied=copied, message=f"已拷贝 {copied}/{total}")
+                if copied == total or copied % log_step == 0:
+                    _append_update_log(repo_root, dataset_key, f"已拷贝 {copied}/{total}")
             missing = [
                 src.name for src in files
                 if not (share_dir / src.name).is_file()
@@ -1255,14 +1278,30 @@ def copy_final_to_share(config: dict, dataset_key: str) -> dict:
             ]
             if missing:
                 raise ValueError(f"拷贝校验失败（缺失/大小不一致 {len(missing)} 个）：" + "、".join(missing[:5]))
+            _append_update_log(repo_root, dataset_key, f"校验通过: {copied} 个文件")
+            final_failed = 0
             for entry in final_dir.iterdir():
                 if entry.is_file():
                     try:
                         entry.unlink()
-                    except OSError:
-                        pass
+                    except OSError as exc:
+                        final_failed += 1
+                        _append_update_log(repo_root, dataset_key, f"清理 final 失败: {entry.name}（{exc}）")
+            finished_at = datetime.now()
+            elapsed = int((finished_at - started_at).total_seconds())
+            if final_failed:
+                _append_update_log(repo_root, dataset_key, f"final 目录仍有 {final_failed} 个文件未能删除")
+            else:
+                _append_update_log(repo_root, dataset_key, "已清空 final 目录")
+            _append_update_log(repo_root, dataset_key, f"结束时间: {finished_at.strftime('%Y-%m-%d %H:%M:%S')}")
+            _append_update_log(repo_root, dataset_key, f"===== 拷贝完成（耗时 {elapsed} 秒）=====")
             set_job(state="done", error=None, message=f"已拷贝 {copied} 个文件并清空 final")
         except Exception as exc:  # noqa: BLE001
+            finished_at = datetime.now()
+            elapsed = int((finished_at - started_at).total_seconds())
+            _append_update_log(repo_root, dataset_key, f"拷贝失败: {exc}")
+            _append_update_log(repo_root, dataset_key, f"结束时间: {finished_at.strftime('%Y-%m-%d %H:%M:%S')}")
+            _append_update_log(repo_root, dataset_key, f"===== 拷贝结束（失败，耗时 {elapsed} 秒）=====")
             set_job(state="error", error=str(exc), message=f"拷贝失败：{exc}")
 
     threading.Thread(target=worker, name=f"copy-{dataset_key}", daemon=True).start()

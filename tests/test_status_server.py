@@ -2902,6 +2902,75 @@ class ControlTests(unittest.TestCase):
             qgis = next(item for item in result["items"] if item["label"] == "QGIS")
             self.assertEqual(qgis["path"], custom_bat)
 
+    def test_copy_final_to_share_appends_update_log(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            process_db = repo_root / "process.db"
+            dataset_key = "Asia|Testland|Testregion"
+            output_dir = "out/test_pipeline"
+            store = run_shp_process_tasks.ProcessStore(process_db)
+            try:
+                store.upsert_source({
+                    "dataset_key": dataset_key,
+                    "task_id": dataset_key,
+                    "display_name": "Testregion",
+                    "source_dir": "data/Asia/Testland/Testregion",
+                    "shp_files": ["data/Asia/Testland/Testregion/test.shp"],
+                    "feature_count": 1,
+                })
+                store.set_status(
+                    dataset_key,
+                    run_shp_process_tasks.PROCESS_OK,
+                    output_dir=output_dir,
+                    finished_at="2026-01-01T00:00:00",
+                )
+            finally:
+                store.close()
+
+            final_dir = repo_root / output_dir / "final"
+            final_dir.mkdir(parents=True)
+            shp = final_dir / "test_001_001_3857.shp"
+            shp.write_bytes(b"shape")
+            (final_dir / "test_001_001_3857.shx").write_bytes(b"index")
+
+            share_root = repo_root / "share"
+            (repo_root / "data").mkdir(exist_ok=True)
+            (repo_root / "data" / "config.json").write_text(
+                json.dumps({"result_root": str(share_root)}), encoding="utf-8"
+            )
+
+            config = {"repo_root": repo_root, "process_db": process_db}
+            started = status_server.copy_final_to_share(config, dataset_key)
+            self.assertTrue(started["ok"])
+
+            status = status_server.build_copy_status(dataset_key)
+            for _ in range(100):
+                status = status_server.build_copy_status(dataset_key)
+                if status["state"] != "running":
+                    break
+                time.sleep(0.05)
+            self.assertEqual(status["state"], "done")
+            self.assertFalse(shp.exists())
+            self.assertTrue((share_root / "Asia" / "Testland" / "Testregion" / shp.name).is_file())
+
+            log_path = repo_root / "data" / "logs" / "update" / "log_main3_Testland_Testregion.log"
+            text = log_path.read_text(encoding="utf-8")
+            self.assertIn("开始拷贝到共享目录", text)
+            self.assertIn(f"源目录: {final_dir}", text)
+            self.assertIn(f"目标目录: {share_root / 'Asia' / 'Testland' / 'Testregion'}", text)
+            self.assertIn("开始时间", text)
+            self.assertIn("结束时间", text)
+            self.assertIn("拷贝完成", text)
+
+            logs = status_server.list_log_files(repo_root, process_db)
+            update_group = next(group for group in logs["groups"] if group["key"] == "update")
+            paths = [
+                file_entry["path"]
+                for task in update_group["tasks"]
+                for file_entry in task["files"]
+            ]
+            self.assertIn("data/logs/update/log_main3_Testland_Testregion.log", paths)
+
     def test_env_endpoint(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)
