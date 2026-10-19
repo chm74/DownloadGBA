@@ -24,6 +24,7 @@
   .blink { animation: blink 1s step-start infinite; }
   .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin:0 0 16px; position:sticky; top:0; z-index:20; background:var(--bg); }
   .queue-toolbar, .sticky-toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; padding-bottom:8px; position:sticky; top:var(--tabs-bottom, 40px); z-index:15; background:var(--card); border-bottom:1px solid var(--line); }
+  .db-page-toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; padding:8px 0; position:sticky; top:var(--tabs-bottom, 40px); z-index:15; background:var(--card); border-bottom:1px solid var(--line); }
   .queue-toolbar { gap:6px 12px; }
   .queue-toolbar .qt-group { display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; }
   .queue-toolbar .qt-left { flex:1 1 auto; min-width:0; }
@@ -423,7 +424,7 @@
             <button type="button" class="subtab active" data-dfilter="pending">未更新到库（<span id="d-count-pending">0</span>）</button>
             <button type="button" class="subtab" data-dfilter="updated">更新到库（<span id="d-count-updated">0</span>）</button>
           </div>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+          <div class="db-page-toolbar">
             <label class="muted">搜索
               <input id="d-search" type="text" placeholder="数据集 / 前缀，如 中国 / jilin" style="margin-left:4px;padding:4px 6px;width:200px;">
             </label>
@@ -1960,7 +1961,8 @@ function renderDbUpdateTable() {
   }
   const copySummary = document.getElementById("d-copy-summary");
   if (copySummary) {
-    copySummary.textContent = `共享目录：已拷贝 ${copyCounts.done} · 拷贝中 ${copyCounts.copying} · 未拷贝 ${copyCounts.not_copied} · 未记录 ${copyCounts.unknown} · 失败 ${copyCounts.error}`;
+    const notCopied = copyCounts.not_copied + copyCounts.unknown;
+    copySummary.textContent = `数据拷贝状态：已拷贝 ${copyCounts.done} · 拷贝中 ${copyCounts.copying} · 未拷贝 ${notCopied} · 拷贝失败 ${copyCounts.error}`;
   }
   document.querySelectorAll(".subtab").forEach((button) => {
     button.classList.toggle("active", button.dataset.dfilter === dbUpdateState.filter);
@@ -1993,10 +1995,15 @@ function renderDbUpdateTable() {
   const showAction = dbUpdateState.filter !== "updated";
   const showDetail = dbUpdateState.filter === "updated";
   const showUpdatedAt = dbUpdateState.filter === "updated";
+  const showCopy = dbUpdateState.filter !== "updated";
+  const copyHeader = showCopy ? "<th>数据拷贝状态</th>" : "";
   const actionHeader = showAction ? "<th>操作</th>" : "";
   const detailHeader = showDetail ? "<th>更新详情</th>" : "";
   const updatedAtHeader = showUpdatedAt ? "<th>更新时间</th>" : "";
-  const colCount = 6 + (showUpdatedAt ? 1 : 0) + (showDetail ? 1 : 0) + (showAction ? 1 : 0);
+  const colCount = (showCopy ? 6 : 5)
+    + (showUpdatedAt ? 1 : 0)
+    + (showDetail ? 1 : 0)
+    + (showAction ? 1 : 0);
   const groupTotals = new Map();
   for (const item of rows) {
     const label = dbRowContinent(item);
@@ -2005,7 +2012,7 @@ function renderDbUpdateTable() {
   let lastContinent = "";
   box.innerHTML = `
     <table>
-      <thead><tr><th>数据集</th><th>命名前缀</th><th>处理完成时间</th><th>输出目录</th><th>共享目录</th>${updatedAtHeader}<th>备注</th>${detailHeader}${actionHeader}</tr></thead>
+      <thead><tr><th>数据集</th><th>命名前缀</th><th>处理完成时间</th><th>输出目录</th>${copyHeader}${updatedAtHeader}<th>备注</th>${detailHeader}${actionHeader}</tr></thead>
       <tbody>${pageRows.map(item => {
         const row = item;
         let groupRow = "";
@@ -2041,13 +2048,16 @@ function renderDbUpdateTable() {
           copyBadge = `<span class="copy-badge running" title="${esc(copyTitle)}">拷贝中 ${copyCopied}/${copyTotal || "?"}</span>`;
         } else if (copyState === "error") {
           const logAttr = row.copy_log ? ` data-copy-log="${esc(row.copy_log)}"` : "";
-          copyBadge = `<span class="copy-badge error"${logAttr} title="${esc(copyTitle || "拷贝失败")}">拷贝失败</span>`;
+          const logLink = row.copy_log
+            ? ` <span class="db-import-log" data-copy-log="${esc(row.copy_log)}" title="查看拷贝失败原因">查看日志</span>`
+            : "";
+          copyBadge = `<span class="copy-badge error"${logAttr} title="${esc(copyTitle || "拷贝失败")}">拷贝失败</span>${logLink}`;
         } else if (copyState === "not_copied") {
           copyBadge = `<span class="copy-badge not-copied" title="${esc(copyTitle || "处理产物仍在 final，尚未拷贝到共享目录")}">未拷贝</span>`;
         } else {
-          copyBadge = `<span class="copy-badge unknown" title="${esc(copyTitle || "尚未通过看板拷贝，或为旧数据；可重新拷贝以记录状态")}">未记录</span>`;
+          copyBadge = `<span class="copy-badge not-copied" title="${esc(copyTitle || "未检测到拷贝记录；按未拷贝处理，可点「拷贝到共享目录」重新拷贝并记录状态")}">未拷贝</span>`;
         }
-        const copyCell = `<td>${copyBadge}</td>`;
+        const copyCell = showCopy ? `<td>${copyBadge}</td>` : "";
         const copyButtonLabel = copyBusy
           ? (copyTotal ? `拷贝中 ${copyCopied}/${copyTotal}…` : "拷贝中…")
           : (copyState === "done" ? "重新拷贝" : "拷贝到共享目录");

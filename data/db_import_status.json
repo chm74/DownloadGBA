@@ -15,5 +15,15 @@
     "deleted": 0,
     "inserted": 13,
     "skipped": 0
+  },
+  "Europe|Switzerland|Switzerland": {
+    "state": "done",
+    "message": "入库完成，已登记为已更新",
+    "error": null,
+    "log_tail": "126\\BuildingData\\AutoGenerete\\Europe\\Switzerland\\Switzerland\\Switzerland_001_014_3857.shp\n2026-10-19 15:45:30,354 - INFO - 处理文件: \\\\192.168.2.126\\BuildingData\\AutoGenerete\\Europe\\Switzerland\\Switzerland\\Switzerland_001_015_3857.shp\n2026-10-19 15:45:33,755 - INFO - 处理文件: \\\\192.168.2.126\\BuildingData\\AutoGenerete\\Europe\\Switzerland\\Switzerland\\Switzerland_001_016_3857.shp\n2026-10-19 15:45:37,610 - INFO - 处理文件: \\\\192.168.2.126\\BuildingData\\AutoGenerete\\Europe\\Switzerland\\Switzerland\\Switzerland_001_017_3857.shp\n2026-10-19 15:45:40,954 - INFO - 处理文件: \\\\192.168.2.126\\BuildingData\\AutoGenerete\\Europe\\Switzerland\\Switzerland\\Switzerland_001_018_3857.shp\n2026-10-19 15:45:43,145 - INFO - 处理文件: \\\\192.168.2.126\\BuildingData\\AutoGenerete\\Europe\\Switzerland\\Switzerland\\Switzerland_001_019_3857.shp\n2026-10-19 15:45:46,060 - INFO - 处理文件: \\\\192.168.2.126\\BuildingData\\AutoGenerete\\Europe\\Switzerland\\Switzerland\\Switzerland_001_020_3857.shp\n2026-10-19 15:45:48,823 - INFO - 处理文件: \\\\192.168.2.126\\BuildingData\\AutoGenerete\\Europe\\Switzerland\\Switzerland\\Switzerland_001_021_3857.shp\n2026-10-19 15:45:52,423 - INFO - 处理文件: \\\\192.168.2.126\\BuildingData\\AutoGenerete\\Europe\\Switzerland\\Switzerland\\Switzerland_001_022_3857.shp\n2026-10-19 15:45:54,979 - INFO - 处理文件: \\\\192.168.2.126\\BuildingData\\AutoGenerete\\Europe\\Switzerland\\Switzerland\\Switzerland_001_023_3857.shp\n2026-10-19 15:45:57,059 - INFO - 处理文件: \\\\192.168.2.126\\BuildingData\\AutoGenerete\\Europe\\Switzerland\\Switzerland\\Switzerland_001_024_3857.shp\n2026-10-19 15:45:59,744 - INFO - 处理文件: \\\\192.168.2.126\\BuildingData\\AutoGenerete\\Europe\\Switzerland\\Switzerland\\Switzerland_001_025_3857.shp\n2026-10-19 15:46:01,209 - INFO - 处理文件: \\\\192.168.2.126\\BuildingData\\AutoGenerete\\Europe\\Switzerland\\Switzerland\\Switzerland_001_026_3857.shp\n2026-10-19 15:46:02,599 - INFO - 处理文件: \\\\192.168.2.126\\BuildingData\\AutoGenerete\\Europe\\Switzerland\\Switzerland\\Switzerland_001_027_3857.shp\n2026-10-19 15:46:04,403 - INFO - 更新完成: region=Switzerland, 删除=1, 新增=27, 跳过=0\n",
+    "updated_at": "2026-10-19T15:46:04",
+    "deleted": 1,
+    "inserted": 27,
+    "skipped": 0
   }
 }

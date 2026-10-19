@@ -1,0 +1,18 @@
+2026-10-14 16:32:26,424 - INFO - 目标目录: \\192.168.2.126\BuildingData\AutoGenerete\亚洲\沙特\利雅得
+2026-10-14 16:32:26,425 - INFO - 识别区域: 亚洲 / 沙特 / 利雅得
+2026-10-14 16:32:26,425 - INFO - 共发现 13 个 shp 文件
+2026-10-14 16:32:26,549 - INFO - 已删除旧数据 0 条
+2026-10-14 16:32:26,549 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\亚洲\沙特\利雅得\Riyadh_001_001_3857.shp
+2026-10-14 16:32:32,766 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\亚洲\沙特\利雅得\Riyadh_001_002_3857.shp
+2026-10-14 16:32:38,626 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\亚洲\沙特\利雅得\Riyadh_001_003_3857.shp
+2026-10-14 16:32:41,527 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\亚洲\沙特\利雅得\Riyadh_001_004_3857.shp
+2026-10-14 16:32:44,692 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\亚洲\沙特\利雅得\Riyadh_001_005_3857.shp
+2026-10-14 16:32:49,453 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\亚洲\沙特\利雅得\Riyadh_001_006_3857.shp
+2026-10-14 16:32:53,376 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\亚洲\沙特\利雅得\Riyadh_001_007_3857.shp
+2026-10-14 16:32:58,925 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\亚洲\沙特\利雅得\Riyadh_001_008_3857.shp
+2026-10-14 16:33:00,744 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\亚洲\沙特\利雅得\Riyadh_001_009_3857.shp
+2026-10-14 16:33:03,429 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\亚洲\沙特\利雅得\Riyadh_001_010_3857.shp
+2026-10-14 16:33:06,986 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\亚洲\沙特\利雅得\Riyadh_001_011_3857.shp
+2026-10-14 16:33:10,436 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\亚洲\沙特\利雅得\Riyadh_001_012_3857.shp
+2026-10-14 16:33:13,918 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\亚洲\沙特\利雅得\Riyadh_001_013_3857.shp
+2026-10-14 16:33:16,977 - INFO - 更新完成: region=利雅得, 删除=0, 新增=13, 跳过=0

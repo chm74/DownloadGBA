@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "updated_at": "2026-10-19T15:56:06",
+  "rows": {
+    "Europe|Switzerland|Switzerland": {
+      "state": "done",
+      "copied": 135,
+      "total": 135,
+      "source_dir": "F:\\建筑数据下载\\DownloadGBA\\Tools\\Oneshp_pipline_qgis\\out_data\\Switzerland_pipeline\\final",
+      "share_dir": "\\\\192.168.2.126\\BuildingData\\AutoGenerete\\Europe\\Switzerland\\Switzerland",
+      "started_at": "2026-10-19T15:43:26",
+      "finished_at": "2026-10-19T15:44:20",
+      "error": null,
+      "log_path": "data/logs/update/log_main3_Switzerland_Switzerland.log"
+    },
+    "Africa|Liberia|Liberia": {
+      "state": "done",
+      "copied": 45,
+      "total": 45,
+      "source_dir": "F:\\建筑数据下载\\DownloadGBA\\Tools\\Oneshp_pipline_qgis\\out_data\\Liberia_pipeline\\final",
+      "share_dir": "\\\\192.168.2.126\\BuildingData\\AutoGenerete\\Africa\\Liberia\\Liberia",
+      "started_at": "2026-10-19T15:56:02",
+      "finished_at": "2026-10-19T15:56:06",
+      "error": null,
+      "log_path": "data/logs/update/log_main3_Liberia_Liberia.log"
+    }
+  }
+}

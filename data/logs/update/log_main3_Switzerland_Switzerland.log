@@ -1,0 +1,52 @@
+2026-10-19 15:43:26 - ===== 开始拷贝到共享目录 =====
+2026-10-19 15:43:26 - 开始时间: 2026-10-19 15:43:26
+2026-10-19 15:43:27 - 源目录: F:\建筑数据下载\DownloadGBA\Tools\Oneshp_pipline_qgis\out_data\Switzerland_pipeline\final
+2026-10-19 15:43:27 - 目标目录: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland
+2026-10-19 15:43:27 - 文件数: 135
+2026-10-19 15:43:36 - 已拷贝 13/135
+2026-10-19 15:43:40 - 已拷贝 26/135
+2026-10-19 15:43:46 - 已拷贝 39/135
+2026-10-19 15:43:52 - 已拷贝 52/135
+2026-10-19 15:43:57 - 已拷贝 65/135
+2026-10-19 15:44:02 - 已拷贝 78/135
+2026-10-19 15:44:06 - 已拷贝 91/135
+2026-10-19 15:44:11 - 已拷贝 104/135
+2026-10-19 15:44:13 - 已拷贝 117/135
+2026-10-19 15:44:16 - 已拷贝 130/135
+2026-10-19 15:44:20 - 已拷贝 135/135
+2026-10-19 15:44:20 - 校验通过: 135 个文件
+2026-10-19 15:44:20 - 已清空 final 目录
+2026-10-19 15:44:20 - 结束时间: 2026-10-19 15:44:20
+2026-10-19 15:44:20 - ===== 拷贝完成（耗时 54 秒）=====
+2026-10-19 15:44:41,607 - INFO - 目标目录: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland
+2026-10-19 15:44:41,608 - INFO - 识别区域: Europe / Switzerland / Switzerland
+2026-10-19 15:44:41,608 - INFO - 共发现 27 个 shp 文件
+2026-10-19 15:44:41,733 - INFO - 已删除旧数据 1 条
+2026-10-19 15:44:41,733 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_001_3857.shp
+2026-10-19 15:44:52,473 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_002_3857.shp
+2026-10-19 15:44:55,762 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_003_3857.shp
+2026-10-19 15:44:59,159 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_004_3857.shp
+2026-10-19 15:45:00,414 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_005_3857.shp
+2026-10-19 15:45:02,056 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_006_3857.shp
+2026-10-19 15:45:05,433 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_007_3857.shp
+2026-10-19 15:45:10,033 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_008_3857.shp
+2026-10-19 15:45:12,538 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_009_3857.shp
+2026-10-19 15:45:16,982 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_010_3857.shp
+2026-10-19 15:45:20,072 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_011_3857.shp
+2026-10-19 15:45:22,586 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_012_3857.shp
+2026-10-19 15:45:24,998 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_013_3857.shp
+2026-10-19 15:45:26,962 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_014_3857.shp
+2026-10-19 15:45:30,354 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_015_3857.shp
+2026-10-19 15:45:33,755 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_016_3857.shp
+2026-10-19 15:45:37,610 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_017_3857.shp
+2026-10-19 15:45:40,954 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_018_3857.shp
+2026-10-19 15:45:43,145 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_019_3857.shp
+2026-10-19 15:45:46,060 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_020_3857.shp
+2026-10-19 15:45:48,823 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_021_3857.shp
+2026-10-19 15:45:52,423 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_022_3857.shp
+2026-10-19 15:45:54,979 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_023_3857.shp
+2026-10-19 15:45:57,059 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_024_3857.shp
+2026-10-19 15:45:59,744 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_025_3857.shp
+2026-10-19 15:46:01,209 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_026_3857.shp
+2026-10-19 15:46:02,599 - INFO - 处理文件: \\192.168.2.126\BuildingData\AutoGenerete\Europe\Switzerland\Switzerland\Switzerland_001_027_3857.shp
+2026-10-19 15:46:04,403 - INFO - 更新完成: region=Switzerland, 删除=1, 新增=27, 跳过=0

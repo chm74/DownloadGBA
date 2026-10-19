@@ -1688,9 +1688,6 @@ def _build_copy_info(
             "share_dir": active_job.get("share_dir") or "",
             "source_dir": active_job.get("source_dir") or "",
         }
-    if updated:
-        # 已入库的历史任务，按共享目录已交付处理（旧数据没有拷贝记录）
-        return {**base, "state": "done"}
     if isinstance(record, dict):
         state = str(record.get("state") or "")
         merged = {
@@ -1705,11 +1702,17 @@ def _build_copy_info(
         }
         if state == "done":
             return {**merged, "state": "done", "error": None}
+        if updated:
+            # 已入库的任务即使拷贝记录异常，也按历史已交付显示
+            return {**base, "state": "done"}
         if state == "error":
             return {**merged, "state": "error"}
         if state == "copying":
             # 后台任务已不在内存中，说明上次拷贝中断，不能继续显示“拷贝中”
             return {**merged, "state": "error", "error": "上次拷贝任务已中断，请重新拷贝"}
+    elif updated:
+        # 已入库的历史任务，按共享目录已交付处理（旧数据没有拷贝记录）
+        return {**base, "state": "done"}
     # 没有记录且尚未入库：final 还有待交付 SHP，说明还未拷贝
     if output_dir:
         final_dir = (Path(repo_root) / output_dir).resolve() / "final"
