@@ -2947,6 +2947,11 @@ class ControlTests(unittest.TestCase):
             self.assertTrue(log_path.is_file())
             self.assertIn("开始拷贝到共享目录", log_path.read_text(encoding="utf-8"))
 
+            copy_status_file = repo_root / "data" / "db_copy_status.json"
+            self.assertTrue(copy_status_file.is_file())
+            initial_records = json.loads(copy_status_file.read_text(encoding="utf-8"))["rows"]
+            self.assertIn(initial_records[dataset_key]["state"], ("copying", "done"))
+
             status = status_server.build_copy_status(dataset_key)
             for _ in range(100):
                 status = status_server.build_copy_status(dataset_key)
@@ -2956,6 +2961,24 @@ class ControlTests(unittest.TestCase):
             self.assertEqual(status["state"], "done")
             self.assertFalse(shp.exists())
             self.assertTrue((share_root / "Asia" / "Testland" / "Testregion" / shp.name).is_file())
+
+            record = json.loads(copy_status_file.read_text(encoding="utf-8"))["rows"][dataset_key]
+            self.assertEqual(record["state"], "done")
+            self.assertEqual(record["copied"], 2)
+            self.assertEqual(record["total"], 2)
+            self.assertEqual(record["source_dir"], str(final_dir))
+            self.assertEqual(record["share_dir"], str(share_root / "Asia" / "Testland" / "Testregion"))
+            self.assertEqual(record["log_path"], "data/logs/update/log_main3_Testland_Testregion.log")
+
+            snapshot = status_server.build_db_update_snapshot(
+                repo_root, process_db, repo_root / "marks.json"
+            )
+            self.assertEqual(snapshot["copy_counts"]["done"], 1)
+            copy_row = next(item for item in snapshot["rows"] if item["dataset_key"] == dataset_key)
+            self.assertEqual(copy_row["copy_state"], "done")
+            self.assertEqual(copy_row["copy_copied"], 2)
+            self.assertEqual(copy_row["copy_total"], 2)
+            self.assertEqual(copy_row["copy_share_dir"], str(share_root / "Asia" / "Testland" / "Testregion"))
 
             text = log_path.read_text(encoding="utf-8")
             self.assertIn("开始拷贝到共享目录", text)

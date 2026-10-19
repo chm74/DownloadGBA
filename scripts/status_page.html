@@ -52,6 +52,12 @@
   .merge-msg.error { color:var(--err); }
   .merge-msg.clickable { cursor:pointer; text-decoration:underline; }
   .db-import-log { color:var(--err); cursor:pointer; text-decoration:underline; font-size:12px; margin-left:6px; white-space:nowrap; }
+  .copy-badge { display:inline-block; padding:1px 7px; border-radius:999px; font-size:12px; white-space:nowrap; }
+  .copy-badge.done { color:var(--ok); background:rgba(22,163,74,.14); }
+  .copy-badge.running { color:var(--accent); background:rgba(37,99,235,.14); }
+  .copy-badge.error { color:var(--err); background:rgba(220,38,38,.14); cursor:pointer; text-decoration:underline; }
+  .copy-badge.not-copied { color:var(--muted); background:rgba(127,127,127,.12); }
+  .copy-badge.unknown { color:var(--warn); background:rgba(217,119,6,.12); }
   .db-group-row td { background:rgba(127,127,127,.08); font-weight:600; font-size:12px; }
   .db-stat-block { border:1px solid var(--line); border-radius:10px; background:rgba(127,127,127,.04); padding:12px 14px; margin:0 0 12px; }
   .db-stat-head { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
@@ -424,6 +430,7 @@
             <button id="d-search-button" type="button" style="padding:4px 10px;cursor:pointer;">搜索</button>
             <button id="d-search-clear" type="button" style="padding:4px 10px;cursor:pointer;">清除</button>
             <span id="d-summary" class="muted">-</span>
+            <span id="d-copy-summary" class="muted">-</span>
             <label class="muted">每页
               <select id="d-page-size" style="margin-left:4px;padding:3px 6px;">
                 <option value="15" selected>15</option>
@@ -565,6 +572,7 @@
         <section id="log-detail" style="border:none;background:transparent;padding:0;" hidden>
           <div class="sticky-toolbar">
             <span id="log-current" class="muted">未选择日志</span>
+            <button id="log-refresh" type="button" style="padding:4px 12px;cursor:pointer;" title="重新读取日志末尾最新内容">刷新</button>
           </div>
           <pre id="log-view" class="log" style="min-height:320px;max-height:72vh;overflow:auto;white-space:pre;">未选择日志</pre>
         </section>
@@ -1003,6 +1011,19 @@ async function openTaskFolder(relPath) {
 document.getElementById("log-list").addEventListener("click", (event) => {
   const item = event.target.closest(".log-item");
   if (item && item.dataset.logPath) openLog(item.dataset.logPath);
+});
+
+document.getElementById("log-refresh").addEventListener("click", async () => {
+  const button = document.getElementById("log-refresh");
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "刷新中…";
+  try {
+    await reloadCurrentLog();
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
 });
 
 function renderRecent(items) {
@@ -1932,6 +1953,15 @@ function renderDbUpdateTable() {
   document.getElementById("d-count-updated").textContent = updatedCount;
   document.getElementById("d-count-pending").textContent = allRows.length - updatedCount;
   renderDbContinentStats();
+  const copyCounts = { done: 0, copying: 0, error: 0, not_copied: 0, unknown: 0 };
+  for (const item of allRows) {
+    const state = item.copy_state || "unknown";
+    copyCounts[state] = (copyCounts[state] || 0) + 1;
+  }
+  const copySummary = document.getElementById("d-copy-summary");
+  if (copySummary) {
+    copySummary.textContent = `共享目录：已拷贝 ${copyCounts.done} · 拷贝中 ${copyCounts.copying} · 未拷贝 ${copyCounts.not_copied} · 未记录 ${copyCounts.unknown} · 失败 ${copyCounts.error}`;
+  }
   document.querySelectorAll(".subtab").forEach((button) => {
     button.classList.toggle("active", button.dataset.dfilter === dbUpdateState.filter);
   });
@@ -1966,7 +1996,7 @@ function renderDbUpdateTable() {
   const actionHeader = showAction ? "<th>操作</th>" : "";
   const detailHeader = showDetail ? "<th>更新详情</th>" : "";
   const updatedAtHeader = showUpdatedAt ? "<th>更新时间</th>" : "";
-  const colCount = 5 + (showUpdatedAt ? 1 : 0) + (showDetail ? 1 : 0) + (showAction ? 1 : 0);
+  const colCount = 6 + (showUpdatedAt ? 1 : 0) + (showDetail ? 1 : 0) + (showAction ? 1 : 0);
   const groupTotals = new Map();
   for (const item of rows) {
     const label = dbRowContinent(item);
@@ -1975,7 +2005,7 @@ function renderDbUpdateTable() {
   let lastContinent = "";
   box.innerHTML = `
     <table>
-      <thead><tr><th>数据集</th><th>命名前缀</th><th>处理完成时间</th><th>输出目录</th>${updatedAtHeader}<th>备注</th>${detailHeader}${actionHeader}</tr></thead>
+      <thead><tr><th>数据集</th><th>命名前缀</th><th>处理完成时间</th><th>输出目录</th><th>共享目录</th>${updatedAtHeader}<th>备注</th>${detailHeader}${actionHeader}</tr></thead>
       <tbody>${pageRows.map(item => {
         const row = item;
         let groupRow = "";
@@ -1992,13 +2022,41 @@ function renderDbUpdateTable() {
         const detailCell = showDetail ? `<td title="${esc(detTitle)}">${esc(detText)}</td>` : "";
         const updatedAtCell = showUpdatedAt ? `<td class="mono">${esc(row.updated_at || "-")}</td>` : "";
         const busy = !!(dbImportMsgState[row.dataset_key] && dbImportMsgState[row.dataset_key].busy);
-        const copyBusy = !!(dbCopyMsgState[row.dataset_key] && dbCopyMsgState[row.dataset_key].busy);
+        const copyState = row.copy_state || "unknown";
+        const copyCopied = Number(row.copy_copied) || 0;
+        const copyTotal = Number(row.copy_total) || 0;
+        const copyBusy = copyState === "copying"
+          || !!(dbCopyMsgState[row.dataset_key] && dbCopyMsgState[row.dataset_key].busy);
+        const copyTitleParts = [];
+        if (row.copy_source_dir) copyTitleParts.push(`源目录：${row.copy_source_dir}`);
+        if (row.copy_share_dir) copyTitleParts.push(`目标目录：${row.copy_share_dir}`);
+        if (row.copy_started_at) copyTitleParts.push(`开始时间：${row.copy_started_at}`);
+        if (row.copy_finished_at) copyTitleParts.push(`完成时间：${row.copy_finished_at}`);
+        if (row.copy_error) copyTitleParts.push(`错误：${row.copy_error}`);
+        const copyTitle = copyTitleParts.join("\n");
+        let copyBadge = "";
+        if (copyState === "done") {
+          copyBadge = `<span class="copy-badge done" title="${esc(copyTitle)}">已拷贝</span>`;
+        } else if (copyState === "copying") {
+          copyBadge = `<span class="copy-badge running" title="${esc(copyTitle)}">拷贝中 ${copyCopied}/${copyTotal || "?"}</span>`;
+        } else if (copyState === "error") {
+          const logAttr = row.copy_log ? ` data-copy-log="${esc(row.copy_log)}"` : "";
+          copyBadge = `<span class="copy-badge error"${logAttr} title="${esc(copyTitle || "拷贝失败")}">拷贝失败</span>`;
+        } else if (copyState === "not_copied") {
+          copyBadge = `<span class="copy-badge not-copied" title="${esc(copyTitle || "处理产物仍在 final，尚未拷贝到共享目录")}">未拷贝</span>`;
+        } else {
+          copyBadge = `<span class="copy-badge unknown" title="${esc(copyTitle || "尚未通过看板拷贝，或为旧数据；可重新拷贝以记录状态")}">未记录</span>`;
+        }
+        const copyCell = `<td>${copyBadge}</td>`;
+        const copyButtonLabel = copyBusy
+          ? (copyTotal ? `拷贝中 ${copyCopied}/${copyTotal}…` : "拷贝中…")
+          : (copyState === "done" ? "重新拷贝" : "拷贝到共享目录");
         const importFailed = row.import_detail && row.import_detail.state === "error" && row.import_detail.import_log;
         const importFailLink = importFailed
           ? ` <span class="db-import-log" data-import-log="${esc(row.import_detail.import_log)}" title="点击查看入库日志">入库失败 · 查看日志</span>`
           : "";
         const actionCell = showAction
-          ? `<td><button type="button" class="mini" data-copy-share="${esc(row.dataset_key)}" title="清空共享目录该区域文件后，把处理产物拷入（完成后删除 final）" ${copyBusy ? "disabled" : ""}>${copyBusy ? "拷贝中…" : "拷贝到共享目录"}</button>` +
+          ? `<td><button type="button" class="mini" data-copy-share="${esc(row.dataset_key)}" title="清空共享目录该区域文件后，把处理产物拷入（完成后删除 final）" ${copyBusy ? "disabled" : ""}>${copyButtonLabel}</button>` +
             `<button type="button" class="mini" data-import-db="${esc(row.dataset_key)}" title="以共享目录为准写入数据库；数据处理内容到共享目录可自动或手动拷贝" ${busy ? "disabled" : ""}>更新到库</button>${importFailLink}</td>`
           : "";
         const note = row.note || "";
@@ -2008,6 +2066,7 @@ function renderDbUpdateTable() {
           <td class="mono">${esc(row.process_name_prefix || "-")}</td>
           <td>${esc(row.finished_at || "-")}</td>
           <td class="mono">${esc(row.output_dir || "-")}</td>
+          ${copyCell}
           ${updatedAtCell}
           <td><input class="note-input" type="text" maxlength="200" placeholder="添加备注" data-note-key="${esc(row.dataset_key)}" data-saved="${esc(note)}" value="${esc(note)}"></td>
           ${detailCell}
@@ -2023,6 +2082,14 @@ function importRowButton(key) {
   let found = null;
   document.querySelectorAll("#d-table button[data-import-db]").forEach((button) => {
     if (button.dataset.importDb === key) found = button;
+  });
+  return found;
+}
+
+function copyRowButton(key) {
+  let found = null;
+  document.querySelectorAll("#d-table button[data-copy-share]").forEach((button) => {
+    if (button.dataset.copyShare === key) found = button;
   });
   return found;
 }
@@ -2248,6 +2315,11 @@ document.getElementById("d-table").addEventListener("click", (event) => {
     jumpToLog(logLink.dataset.importLog);
     return;
   }
+  const copyLogLink = event.target.closest("[data-copy-log]");
+  if (copyLogLink) {
+    jumpToLog(copyLogLink.dataset.copyLog);
+    return;
+  }
   const copyButton = event.target.closest("button[data-copy-share]");
   if (copyButton && !copyButton.disabled) {
     copyFinalToShare(copyButton.dataset.copyShare, copyButton);
@@ -2276,16 +2348,19 @@ async function copyFinalToShare(datasetKey, button) {
     if (!response.ok || !data.ok) {
       dbCopyMsgState[datasetKey] = { busy: false };
       showMessage("拷贝失败：" + (data.error || response.status), "error");
-      button.disabled = false;
-      button.textContent = originalText;
+      const currentButton = copyRowButton(datasetKey) || button;
+      currentButton.disabled = false;
+      currentButton.textContent = originalText;
       return;
     }
+    await refreshDbUpdated();
     pollCopyStatus(datasetKey, button, originalText);
   } catch (error) {
     dbCopyMsgState[datasetKey] = { busy: false };
     showMessage("拷贝请求失败：" + error, "error");
-    button.disabled = false;
-    button.textContent = originalText;
+    const currentButton = copyRowButton(datasetKey) || button;
+    currentButton.disabled = false;
+    currentButton.textContent = originalText;
   }
 }
 
@@ -2297,8 +2372,13 @@ function pollCopyStatus(datasetKey, button, originalText) {
         { cache: "no-store" }
       );
       const data = await response.json();
+      const currentButton = copyRowButton(datasetKey) || button;
       if (data.state === "running") {
-        button.textContent = `拷贝中 ${data.copied || 0}/${data.total || "?"}…`;
+        dbCopyMsgState[datasetKey] = { busy: true };
+        if (currentButton) {
+          currentButton.disabled = true;
+          currentButton.textContent = `拷贝中 ${data.copied || 0}/${data.total || "?"}…`;
+        }
         return;
       }
       clearInterval(timer);
@@ -2307,19 +2387,25 @@ function pollCopyStatus(datasetKey, button, originalText) {
         showMessage(`已拷贝 ${data.copied || 0} 个文件到共享目录（日志见「日志 → 库表更新」）`, "success");
         await refreshDbUpdated();
       } else if (data.state === "idle") {
-        button.disabled = false;
-        button.textContent = originalText;
+        if (currentButton) {
+          currentButton.disabled = false;
+          currentButton.textContent = originalText;
+        }
+        await refreshDbUpdated();
       } else {
         showMessage("拷贝失败：" + (data.message || data.error || "未知错误") + "（详情见「日志 → 库表更新」）", "error");
-        button.disabled = false;
-        button.textContent = originalText;
+        await refreshDbUpdated();
       }
     } catch (error) {
       clearInterval(timer);
       dbCopyMsgState[datasetKey] = { busy: false };
       showMessage("拷贝状态查询失败：" + error, "error");
-      button.disabled = false;
-      button.textContent = originalText;
+      const currentButton = copyRowButton(datasetKey) || button;
+      if (currentButton) {
+        currentButton.disabled = false;
+        currentButton.textContent = originalText;
+      }
+      await refreshDbUpdated();
     }
   }, 1500);
 }

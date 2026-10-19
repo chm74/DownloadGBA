@@ -43,6 +43,7 @@ DEFAULT_UPDATE_PYTHON = "Tools/Twopyshp2pgsql/.venv/Scripts/python.exe"
 DEFAULT_UPDATE_SCRIPT = "Tools/Twopyshp2pgsql/main3_region.py"
 DEFAULT_UPDATE_LOG_DIR = "data/logs/update"
 DEFAULT_DB_IMPORT_STATUS = "data/db_import_status.json"
+DEFAULT_DB_COPY_STATUS = "data/db_copy_status.json"
 RUNNER_MARKER = "run_world_building_tasks.py"
 WORKER_MARKER = "download_gba_lod1_wfs"
 PROCESS_RUNNER_MARKER = "run_shp_process_tasks.py"
@@ -91,6 +92,7 @@ DB_IMPORT_JOBS: dict[str, dict] = {}
 DB_IMPORT_LOCK = threading.Lock()
 DB_COPY_JOBS: dict[str, dict] = {}
 DB_COPY_LOCK = threading.Lock()
+DB_COPY_STATUS_LOCK = threading.Lock()
 
 CONTINENT_ZH = {
     "Africa": "非洲",
@@ -1166,6 +1168,37 @@ def check_publish_ready(config: dict, dataset_key: str) -> dict:
     return {**base, "ready": True, "message": "已发布，可入库"}
 
 
+def _load_db_copy_records(path: Path) -> dict:
+    path = Path(path)
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        rows = raw.get("rows") if isinstance(raw, dict) else None
+        return rows if isinstance(rows, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_db_copy_record(path: Path, dataset_key: str, record: dict) -> None:
+    path = Path(path)
+    with DB_COPY_STATUS_LOCK:
+        records = _load_db_copy_records(path)
+        records[dataset_key] = record
+        payload = {
+            "version": 1,
+            "updated_at": datetime.now().isoformat(timespec="seconds"),
+            "rows": records,
+        }
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_name(f".{path.name}.tmp")
+            temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            temporary.replace(path)
+        except OSError:
+            pass
+
+
 def build_copy_status(dataset_key: str) -> dict:
     with DB_COPY_LOCK:
         job = DB_COPY_JOBS.get(dataset_key)
@@ -1226,6 +1259,23 @@ def copy_final_to_share(config: dict, dataset_key: str) -> dict:
                 files.append(side)
 
     share_dir = Path(result_root) / continent / country / region
+    copy_status_file = repo_root / DEFAULT_DB_COPY_STATUS
+    copy_log_rel = _update_log_relpath(dataset_key)
+    started_at = datetime.now()
+    total = len(files)
+
+    def save_copy_record(state: str, copied_count: int, finished: str = "", error: str | None = None) -> None:
+        _save_db_copy_record(copy_status_file, dataset_key, {
+            "state": state,
+            "copied": copied_count,
+            "total": total,
+            "source_dir": str(final_dir),
+            "share_dir": str(share_dir),
+            "started_at": started_at.isoformat(timespec="seconds"),
+            "finished_at": finished,
+            "error": error,
+            "log_path": copy_log_rel,
+        })
 
     with DB_COPY_LOCK:
         existing = DB_COPY_JOBS.get(dataset_key)
@@ -1234,21 +1284,24 @@ def copy_final_to_share(config: dict, dataset_key: str) -> dict:
         DB_COPY_JOBS[dataset_key] = {
             "state": "running",
             "copied": 0,
-            "total": len(files),
+            "total": total,
             "message": "开始拷贝…",
             "error": None,
+            "source_dir": str(final_dir),
             "share_dir": str(share_dir),
+            "log_path": copy_log_rel,
+            "started_at": started_at.isoformat(timespec="seconds"),
+            "finished_at": "",
             "updated_at": datetime.now().isoformat(timespec="seconds"),
         }
 
-    # 在启动后台线程前同步创建日志，保证点击后立即能在「日志 → 库表更新」看到文件
-    started_at = datetime.now()
-    total = len(files)
+    # 在启动后台线程前同步创建日志和状态记录，保证点击后立即可见
     _append_update_log(repo_root, dataset_key, "===== 开始拷贝到共享目录 =====")
     _append_update_log(repo_root, dataset_key, f"开始时间: {started_at.strftime('%Y-%m-%d %H:%M:%S')}")
     _append_update_log(repo_root, dataset_key, f"源目录: {final_dir}")
     _append_update_log(repo_root, dataset_key, f"目标目录: {share_dir}")
     _append_update_log(repo_root, dataset_key, f"文件数: {total}")
+    save_copy_record("copying", 0)
 
     def set_job(**fields) -> None:
         with DB_COPY_LOCK:
@@ -1257,6 +1310,7 @@ def copy_final_to_share(config: dict, dataset_key: str) -> dict:
                 job.update(updated_at=datetime.now().isoformat(timespec="seconds"), **fields)
 
     def worker() -> None:
+        copied = 0
         try:
             share_dir.mkdir(parents=True, exist_ok=True)
             for entry in share_dir.iterdir():
@@ -1265,7 +1319,6 @@ def copy_final_to_share(config: dict, dataset_key: str) -> dict:
                         entry.unlink()
                     except OSError as exc:
                         _append_update_log(repo_root, dataset_key, f"清理旧文件失败: {entry.name}（{exc}）")
-            copied = 0
             log_step = max(1, total // 10)
             for src in files:
                 shutil.copy2(src, share_dir / src.name)
@@ -1273,6 +1326,7 @@ def copy_final_to_share(config: dict, dataset_key: str) -> dict:
                 set_job(copied=copied, message=f"已拷贝 {copied}/{total}")
                 if copied == total or copied % log_step == 0:
                     _append_update_log(repo_root, dataset_key, f"已拷贝 {copied}/{total}")
+                    save_copy_record("copying", copied)
             missing = [
                 src.name for src in files
                 if not (share_dir / src.name).is_file()
@@ -1297,14 +1351,23 @@ def copy_final_to_share(config: dict, dataset_key: str) -> dict:
                 _append_update_log(repo_root, dataset_key, "已清空 final 目录")
             _append_update_log(repo_root, dataset_key, f"结束时间: {finished_at.strftime('%Y-%m-%d %H:%M:%S')}")
             _append_update_log(repo_root, dataset_key, f"===== 拷贝完成（耗时 {elapsed} 秒）=====")
-            set_job(state="done", error=None, message=f"已拷贝 {copied} 个文件并清空 final")
+            save_copy_record("done", copied, finished_at.isoformat(timespec="seconds"))
+            set_job(
+                state="done", error=None,
+                message=f"已拷贝 {copied} 个文件并清空 final",
+                finished_at=finished_at.isoformat(timespec="seconds"),
+            )
         except Exception as exc:  # noqa: BLE001
             finished_at = datetime.now()
             elapsed = int((finished_at - started_at).total_seconds())
             _append_update_log(repo_root, dataset_key, f"拷贝失败: {exc}")
             _append_update_log(repo_root, dataset_key, f"结束时间: {finished_at.strftime('%Y-%m-%d %H:%M:%S')}")
             _append_update_log(repo_root, dataset_key, f"===== 拷贝结束（失败，耗时 {elapsed} 秒）=====")
-            set_job(state="error", error=str(exc), message=f"拷贝失败：{exc}")
+            save_copy_record("error", copied, finished_at.isoformat(timespec="seconds"), error=str(exc))
+            set_job(
+                state="error", error=str(exc), message=f"拷贝失败：{exc}",
+                finished_at=finished_at.isoformat(timespec="seconds"),
+            )
 
     threading.Thread(target=worker, name=f"copy-{dataset_key}", daemon=True).start()
     return {"ok": True, "state": "running", "total": len(files), "share_dir": str(share_dir)}
@@ -1590,6 +1653,80 @@ def load_not_downloaded_tasks(
     }
 
 
+def _build_copy_info(
+    repo_root: Path,
+    dataset_key: str,
+    output_dir: str | None,
+    record: dict | None,
+    active_job: dict | None,
+    updated: bool,
+) -> dict:
+    """合并内存任务与持久化拷贝记录，给出该行共享目录状态。"""
+    log_path = _update_log_relpath(dataset_key)
+    base = {
+        "state": "unknown",
+        "copied": 0,
+        "total": 0,
+        "started_at": "",
+        "finished_at": "",
+        "error": None,
+        "share_dir": "",
+        "source_dir": "",
+        "log_path": log_path,
+    }
+    if active_job:
+        state_map = {"running": "copying", "done": "done", "error": "error"}
+        state = state_map.get(str(active_job.get("state") or ""), "copying")
+        return {
+            **base,
+            "state": state,
+            "copied": int(active_job.get("copied") or 0),
+            "total": int(active_job.get("total") or 0),
+            "started_at": active_job.get("started_at") or "",
+            "finished_at": active_job.get("finished_at") or "",
+            "error": active_job.get("error"),
+            "share_dir": active_job.get("share_dir") or "",
+            "source_dir": active_job.get("source_dir") or "",
+        }
+    if updated:
+        # 已入库的历史任务，按共享目录已交付处理（旧数据没有拷贝记录）
+        return {**base, "state": "done"}
+    if isinstance(record, dict):
+        state = str(record.get("state") or "")
+        merged = {
+            **base,
+            "copied": int(record.get("copied") or 0),
+            "total": int(record.get("total") or 0),
+            "started_at": record.get("started_at") or "",
+            "finished_at": record.get("finished_at") or "",
+            "error": record.get("error"),
+            "share_dir": record.get("share_dir") or "",
+            "source_dir": record.get("source_dir") or "",
+        }
+        if state == "done":
+            return {**merged, "state": "done", "error": None}
+        if state == "error":
+            return {**merged, "state": "error"}
+        if state == "copying":
+            # 后台任务已不在内存中，说明上次拷贝中断，不能继续显示“拷贝中”
+            return {**merged, "state": "error", "error": "上次拷贝任务已中断，请重新拷贝"}
+    # 没有记录且尚未入库：final 还有待交付 SHP，说明还未拷贝
+    if output_dir:
+        final_dir = (Path(repo_root) / output_dir).resolve() / "final"
+        try:
+            final_files = list(final_dir.glob("*_3857.shp")) if final_dir.is_dir() else []
+        except OSError:
+            final_files = []
+        if final_files:
+            return {
+                **base,
+                "state": "not_copied",
+                "total": len(final_files),
+                "source_dir": str(final_dir),
+            }
+    return base
+
+
 def build_db_update_snapshot(
     repo_root: Path,
     process_db: Path,
@@ -1610,6 +1747,7 @@ def build_db_update_snapshot(
         "continent_not_downloaded": {},
         "actual_total": None,
         "not_downloaded_total": None,
+        "copy_counts": {"done": 0, "copying": 0, "error": 0, "not_copied": 0, "unknown": 0},
         "rows": [],
     }
     if not process_db.exists():
@@ -1618,6 +1756,9 @@ def build_db_update_snapshot(
         )
         return snapshot
     marks = load_db_update_marks(marks_file)
+    copy_records = _load_db_copy_records(repo_root / DEFAULT_DB_COPY_STATUS)
+    with DB_COPY_LOCK:
+        active_copy_jobs = {key: dict(job) for key, job in DB_COPY_JOBS.items()}
     try:
         connection = _open_state_db(process_db)
     except sqlite3.Error as exc:
@@ -1642,6 +1783,14 @@ def build_db_update_snapshot(
         continent_display = "其它(EXT)" if continent_raw.upper() == "EXT" else format_continent(continent_raw)
         mark = marks.get(key, {})
         record = import_records.get(key)
+        copy_info = _build_copy_info(
+            repo_root,
+            key,
+            row["output_dir"],
+            copy_records.get(key),
+            active_copy_jobs.get(key),
+            bool(mark.get("updated")),
+        )
         import_detail = None
         if isinstance(record, dict):
             import_detail = {
@@ -1669,9 +1818,23 @@ def build_db_update_snapshot(
                 "updated_at": mark.get("updated_at") or "",
                 "note": mark.get("note") or "",
                 "import_detail": import_detail,
+                "copy_state": copy_info["state"],
+                "copy_copied": copy_info["copied"],
+                "copy_total": copy_info["total"],
+                "copy_started_at": copy_info["started_at"],
+                "copy_finished_at": copy_info["finished_at"],
+                "copy_error": copy_info["error"],
+                "copy_share_dir": copy_info["share_dir"],
+                "copy_source_dir": copy_info["source_dir"],
+                "copy_log": copy_info["log_path"],
             }
         )
     snapshot["rows"] = rows
+    copy_counts = {"done": 0, "copying": 0, "error": 0, "not_copied": 0, "unknown": 0}
+    for item in rows:
+        state = str(item.get("copy_state") or "unknown")
+        copy_counts[state] = copy_counts.get(state, 0) + 1
+    snapshot["copy_counts"] = copy_counts
     snapshot["counts"] = {
         "total": len(rows),
         "updated": sum(1 for item in rows if item["updated"]),
