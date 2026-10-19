@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-19T17:02:37",
+  "updated_at": "2026-10-19T17:09:31",
   "rows": {
     "亚洲|中国|广西壮族自治区": {
       "updated": true,
@@ -151,6 +151,11 @@
       "updated": true,
       "updated_at": "2026-10-19T16:46:48",
       "note": ""
+    },
+    "EXT|data/亚洲/中国/深圳市": {
+      "updated": true,
+      "updated_at": "2026-10-19T17:09:31",
+      "note": "人工登记：已确认更新到库"
     }
   }
 }
