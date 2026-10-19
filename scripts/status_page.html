@@ -2391,7 +2391,10 @@ async function loadConfig() {
     document.getElementById("cfg-result-root").value = data.result_root || "";
     document.getElementById("cfg-qgis-dir").value = data.qgis_dir || "";
     const customBat = data.qgis_process_bat || "";
-    const effectiveBatValue = data.qgis_process_bat_effective || "";
+    /* 旧版服务端没有 qgis_process_bat_effective 时，退回使用环境快照中的值 */
+    const effectiveBatValue = data.qgis_process_bat_effective
+      || (data.env && data.env.qgis_process_bat)
+      || "";
     qgisBatAuto = !customBat;
     document.getElementById("cfg-qgis-process-bat").value = customBat || effectiveBatValue;
     const effectiveBat = document.getElementById("cfg-qgis-process-bat-effective");
@@ -2467,6 +2470,25 @@ async function checkEnv() {
 
 document.getElementById("env-check").addEventListener("click", checkEnv);
 
+async function refreshConfigEnvOnly() {
+  /* 只刷新环境快照，不回填表单，避免覆盖用户尚未保存的输入 */
+  try {
+    const response = await fetch("/api/config", { cache: "no-store" });
+    const data = await response.json();
+    renderConfigEnv(data.env || {});
+    const effectiveBat = document.getElementById("cfg-qgis-process-bat-effective");
+    const effectiveBatValue = data.qgis_process_bat_effective
+      || (data.env && data.env.qgis_process_bat)
+      || "";
+    if (effectiveBat) {
+      effectiveBat.textContent = effectiveBatValue || "-";
+      effectiveBat.title = effectiveBatValue;
+    }
+  } catch (error) {
+    /* 刷新失败时保留上一次显示 */
+  }
+}
+
 function switchConfigPane(name) {
   const target = name || "db";
   document.querySelectorAll(".cfg-nav-item").forEach((button) => {
@@ -2475,10 +2497,7 @@ function switchConfigPane(name) {
   document.querySelectorAll(".cfg-pane").forEach((pane) => {
     pane.hidden = pane.dataset.cfgpane !== target;
   });
-  if (target === "env") {
-    const root = document.getElementById("env-repo-root");
-    if (root && !root.value) loadConfig();
-  }
+  if (target === "env") refreshConfigEnvOnly();
 }
 
 document.querySelectorAll(".cfg-nav-item").forEach((button) => {
@@ -2514,16 +2533,9 @@ async function saveConfig() {
       if (message) message.textContent = "保存失败：" + (data.error || response.status);
       return;
     }
-    const effectiveBatValue = payload.qgis_process_bat
-      || (payload.qgis_dir
-        ? `${payload.qgis_dir.replace(/[\\/]+$/, "")}\\bin\\qgis_process-qgis.bat`
-        : "");
-    const effectiveBat = document.getElementById("cfg-qgis-process-bat-effective");
-    if (effectiveBat) {
-      effectiveBat.textContent = effectiveBatValue || "-";
-      effectiveBat.title = effectiveBatValue;
-    }
-    if (message) message.textContent = "配置已保存";
+    /* 保存后重新读取配置，让「环境 / 诊断」中的 QGIS（qgis_process）同步显示新值 */
+    await loadConfig();
+    if (message && !message.textContent) message.textContent = "配置已保存";
   } catch (error) {
     if (message) message.textContent = "保存请求失败：" + error;
   }

@@ -2105,6 +2105,14 @@ def _normalize_process_default_limit(value: object) -> int:
     return parsed if parsed >= 0 else 0
 
 
+def _normalize_qgis_process_bat(value: object) -> str:
+    """统一 qgis_process 批处理路径的引号与分隔符，避免页面显示值不一致。"""
+    text = str(value or "").strip().strip('"').strip()
+    if not text:
+        return ""
+    return str(Path(text).expanduser())
+
+
 def load_dashboard_config(repo_root: Path) -> dict:
     path = Path(repo_root) / DEFAULT_CONFIG_FILE
     stored: dict = {}
@@ -2126,7 +2134,7 @@ def load_dashboard_config(repo_root: Path) -> dict:
     }
     result_root = str(stored.get("result_root") or DEFAULT_RESULT_ROOT)
     qgis_dir = str(stored.get("qgis_dir") or DEFAULT_QGIS_DIR)
-    qgis_process_bat = str(stored.get("qgis_process_bat") or "").strip().strip('"').strip()
+    qgis_process_bat = _normalize_qgis_process_bat(stored.get("qgis_process_bat"))
     qgis_process_bat_effective = qgis_process_bat or str(
         Path(qgis_dir) / "bin" / "qgis_process-qgis.bat"
     )
@@ -2149,7 +2157,7 @@ def save_dashboard_config(repo_root: Path, config: dict) -> dict:
     user = str(db.get("user") or "").strip()
     result_root = str(config.get("result_root") or "").strip()
     qgis_dir = str(config.get("qgis_dir") or "").strip()
-    qgis_process_bat = str(config.get("qgis_process_bat") or "").strip().strip('"').strip()
+    qgis_process_bat = _normalize_qgis_process_bat(config.get("qgis_process_bat"))
     if not host:
         raise ValueError("数据库主机不能为空")
     if not dbname:
