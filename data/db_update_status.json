@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-20T10:34:17",
+  "updated_at": "2026-10-20T13:38:37",
   "rows": {
     "亚洲|中国|广西壮族自治区": {
       "updated": true,
@@ -161,6 +161,11 @@
       "updated": true,
       "updated_at": "2026-10-20T10:32:07",
       "note": ""
+    },
+    "Africa|Ivory_Coast|Ivory_Coast": {
+      "updated": true,
+      "updated_at": "2026-10-20T13:38:37",
+      "note": "人工登记：已确认更新到库"
     }
   }
 }
