@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -215,6 +216,92 @@ class LogTailTests(unittest.TestCase):
             tail = status_server._tail_lines(log_path, 1)
 
             self.assertEqual(tail, ["[WFS-RATE] 429 限流，等待 5 秒后重试"])
+
+    def test_log_files_sorted_newest_first(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            update_dir = repo_root / "data" / "logs" / "update"
+            update_dir.mkdir(parents=True)
+            older = update_dir / "log_main3_Old_Region.log"
+            newer = update_dir / "log_main3_New_Region.log"
+            older.write_text("older\n", encoding="utf-8")
+            newer.write_text("newer\n", encoding="utf-8")
+            os.utime(older, (1_700_000_000, 1_700_000_000))
+            os.utime(newer, (1_700_000_100, 1_700_000_100))
+
+            region = repo_root / "data" / "Asia" / "Testland" / "Testregion"
+            region.mkdir(parents=True)
+            run_log = region / "run.log"
+            err_log = region / "run.err.log"
+            run_log.write_text("run\n", encoding="utf-8")
+            err_log.write_text("err\n", encoding="utf-8")
+            os.utime(run_log, (1_700_000_050, 1_700_000_050))
+            os.utime(err_log, (1_700_000_200, 1_700_000_200))
+
+            logs = status_server.list_log_files(repo_root)
+
+            update_group = next(group for group in logs["groups"] if group["key"] == "update")
+            self.assertEqual(
+                [task["key"] for task in update_group["tasks"]],
+                [
+                    "data/logs/update/log_main3_New_Region.log",
+                    "data/logs/update/log_main3_Old_Region.log",
+                ],
+            )
+            download_group = next(group for group in logs["groups"] if group["key"] == "download")
+            task = download_group["tasks"][0]
+            self.assertEqual(task["key"], "Asia/Testland/Testregion")
+            self.assertEqual([item["name"] for item in task["files"]], ["run.err.log", "run.log"])
+
+
+class StateStoreTests(unittest.TestCase):
+    def test_requeue_running_tasks_can_target_only_stale_task(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state_db = Path(tmp) / "state.db"
+            store = lib.StateStore(state_db)
+            try:
+                store.sync_manifest(
+                    [
+                        make_task("Africa", "Ethiopia", "Ethiopia", "data/Africa/Ethiopia/Ethiopia"),
+                        make_task("Africa", "Angola", "Angola", "data/Africa/Angola/Angola"),
+                    ]
+                )
+                store.set_status(
+                    "Africa|Ethiopia|Ethiopia",
+                    lib.STATUS_RUNNING,
+                    attempts=1,
+                    started_at="2026-01-01T00:00:00",
+                )
+                store.set_status(
+                    "Africa|Angola|Angola",
+                    lib.STATUS_RUNNING,
+                    attempts=1,
+                    started_at="2026-01-01T00:01:00",
+                )
+            finally:
+                store.close()
+
+            requeued = lib.requeue_running_tasks(
+                state_db,
+                event="STALE_RECONCILE",
+                detail="无对应 worker，已回到队列",
+                task_ids=["Africa|Ethiopia|Ethiopia"],
+            )
+
+            store = lib.StateStore(state_db)
+            try:
+                ethiopia = store.get("Africa|Ethiopia|Ethiopia")
+                angola = store.get("Africa|Angola|Angola")
+                events = store.recent_events("Africa|Ethiopia|Ethiopia")
+            finally:
+                store.close()
+
+            self.assertEqual(requeued, ["Africa|Ethiopia|Ethiopia"])
+            self.assertEqual(ethiopia["status"], lib.STATUS_PENDING)
+            self.assertIsNone(ethiopia["started_at"])
+            self.assertEqual(angola["status"], lib.STATUS_RUNNING)
+            self.assertEqual(events[0]["event"], "STALE_RECONCILE")
+            self.assertIn("无对应 worker", events[0]["detail"])
 
 
 class SnapshotTests(unittest.TestCase):
@@ -898,20 +985,61 @@ class ControlTests(unittest.TestCase):
             "workers": [{"pid": 201, "command_line": "python download_gba_lod1_wfs_adaptive.py"}],
             "tile_workers": None,
         }
-        config = {"repo_root": Path("."), "python_exe": "python", "action_token": ""}
-        with patch.object(status_server, "detect_batch", side_effect=[detected, detected_after]):
+        detected_clean = {
+            "runner": None,
+            "runners": [],
+            "runner_count": 0,
+            "workers": [],
+            "tile_workers": None,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            state_db = repo_root / "state.db"
+            store = lib.StateStore(state_db)
+            try:
+                store.sync_manifest(
+                    [make_task("Africa", "Ethiopia", "Ethiopia", "data/Africa/Ethiopia/Ethiopia")]
+                )
+                store.set_status(
+                    "Africa|Ethiopia|Ethiopia",
+                    lib.STATUS_RUNNING,
+                    attempts=1,
+                    started_at="2026-01-01T00:00:00",
+                )
+            finally:
+                store.close()
+            config = {
+                "repo_root": repo_root,
+                "python_exe": "python",
+                "state_db": state_db,
+                "action_token": "",
+            }
             with patch.object(
                 status_server,
-                "stop_batch",
-                side_effect=lambda pids: calls.append(list(pids)) or list(pids),
+                "detect_batch",
+                side_effect=[detected, detected_after, detected_clean],
             ):
-                with patch.object(status_server, "_wait_for_exit"):
-                    result = status_server.stop_batch_action(config)
+                with patch.object(
+                    status_server,
+                    "stop_batch",
+                    side_effect=lambda pids: calls.append(list(pids)) or list(pids),
+                ):
+                    with patch.object(status_server, "_wait_for_exit"):
+                        result = status_server.stop_batch_action(config)
+
+            store = lib.StateStore(state_db)
+            try:
+                task = store.get("Africa|Ethiopia|Ethiopia")
+            finally:
+                store.close()
 
         self.assertEqual(calls[0], [100])
         self.assertEqual(calls[1], [200, 201])
         self.assertTrue(result["ok"])
         self.assertEqual(result["stopped_pids"], [100, 200, 201])
+        self.assertEqual(result["requeued"], ["Africa|Ethiopia|Ethiopia"])
+        self.assertEqual(task["status"], lib.STATUS_PENDING)
+        self.assertIsNone(task["started_at"])
 
     def test_stop_endpoint_calls_stop_action(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1980,10 +2108,34 @@ class ControlTests(unittest.TestCase):
             "workers": [{"pid": 201, "command_line": "python download_gba_lod1_wfs_adaptive.py"}],
             "tile_workers": None,
         }
+        detected_clean = {"runner": None, "workers": [], "tile_workers": None}
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)
-            config = {"repo_root": repo_root, "python_exe": "python", "action_token": ""}
-            with patch.object(status_server, "detect_batch", side_effect=[detected, detected_after]):
+            state_db = repo_root / "state.db"
+            store = lib.StateStore(state_db)
+            try:
+                store.sync_manifest(
+                    [make_task("Africa", "Ethiopia", "Ethiopia", "data/Africa/Ethiopia/Ethiopia")]
+                )
+                store.set_status(
+                    "Africa|Ethiopia|Ethiopia",
+                    lib.STATUS_RUNNING,
+                    attempts=1,
+                    started_at="2026-01-01T00:00:00",
+                )
+            finally:
+                store.close()
+            config = {
+                "repo_root": repo_root,
+                "python_exe": "python",
+                "state_db": state_db,
+                "action_token": "",
+            }
+            with patch.object(
+                status_server,
+                "detect_batch",
+                side_effect=[detected, detected_after, detected_clean],
+            ):
                 with patch.object(
                     status_server,
                     "stop_batch",
@@ -1997,10 +2149,20 @@ class ControlTests(unittest.TestCase):
                         ):
                             result = status_server.restart_batch(config, 3)
 
+            store = lib.StateStore(state_db)
+            try:
+                task = store.get("Africa|Ethiopia|Ethiopia")
+            finally:
+                store.close()
+
         self.assertEqual(calls[0], [100])
         self.assertEqual(calls[1], [200, 201])
         self.assertEqual(result["runner_pid"], 999)
         self.assertEqual(result["tile_workers"], 3)
+        self.assertEqual(result["requeued"], ["Africa|Ethiopia|Ethiopia"])
+        self.assertEqual(task["status"], lib.STATUS_PENDING)
+        self.assertIsNone(task["started_at"])
+        self.assertEqual(task["attempts"], 1)
 
     def _make_completed_download(self, repo_root: Path) -> Path:
         task_dir = repo_root / "data" / "Europe" / "San_Marino" / "San_Marino"

@@ -2744,10 +2744,18 @@ def list_log_files(repo_root: Path, process_db: Path | None = None) -> dict:
         update_tasks[item["path"]] = {"key": item["path"], "label": label, "files": [file_entry]}
 
     def sort_tasks(tasks: dict[str, dict]) -> list[dict]:
-        return sorted(
+        ordered = sorted(
             (task for task in tasks.values() if task["files"]),
             key=lambda task: task["key"].lower(),
         )
+        for task in ordered:
+            task["files"].sort(key=lambda item: item["path"].lower())
+            task["files"].sort(key=lambda item: item["mtime"], reverse=True)
+        ordered.sort(
+            key=lambda task: max(item["mtime"] for item in task["files"]),
+            reverse=True,
+        )
+        return ordered
 
     return {
         "ok": True,
@@ -2861,10 +2869,19 @@ def _stop_all_batch_processes() -> tuple[dict, list[int]]:
 def stop_batch_action(config: dict) -> dict:
     with CONTROL_LOCK:
         detected, stopped = _stop_all_batch_processes()
+        remaining = detect_batch()
+        if remaining.get("runner") or remaining.get("workers"):
+            raise RuntimeError("下载进程未完全停止，任务状态保持 RUNNING，请稍后重试")
+        requeued = lib.requeue_running_tasks(
+            Path(config["state_db"]),
+            event="BATCH_STOP_REQUEUE",
+            detail="批处理已停止，中断任务回到待执行队列",
+        )
         return {
             "ok": True,
             "stopped_pids": stopped,
             "runner_pid": detected["runner"]["pid"] if detected["runner"] else None,
+            "requeued": requeued,
         }
 
 
@@ -2900,6 +2917,14 @@ def stop_current_task_action(config: dict, task_id: str) -> dict:
 def restart_batch(config: dict, tile_workers: int) -> dict:
     with CONTROL_LOCK:
         detected, stopped = _stop_all_batch_processes()
+        remaining = detect_batch()
+        if remaining.get("runner") or remaining.get("workers"):
+            raise RuntimeError("下载进程未完全停止，未重启批处理，任务状态保持 RUNNING")
+        requeued = lib.requeue_running_tasks(
+            Path(config["state_db"]),
+            event="BATCH_RESTART_REQUEUE",
+            detail="批处理重启，中断任务回到待执行队列",
+        )
         base_command_line = detected["runner"]["command_line"] if detected["runner"] else None
 
         command = build_restart_command(
@@ -2915,6 +2940,7 @@ def restart_batch(config: dict, tile_workers: int) -> dict:
             "stopped_pids": stopped,
             "runner_pid": started["pid"],
             "command": command,
+            "requeued": requeued,
         }
 
 

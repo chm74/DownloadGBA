@@ -236,7 +236,6 @@
     </div>
     <div class="stats">
       <span>批处理：<b id="ctl-running">-</b></span>
-      <span>当前 tile-workers：<b id="ctl-current">-</b></span>
       <span>runner PID：<span id="ctl-pid">-</span></span>
       <span>runner 数量：<b id="ctl-runner-count">-</b></span>
     </div>
@@ -2732,7 +2731,6 @@ async function refreshControl() {
     const data = await response.json();
     controlState.actionTokenRequired = !!data.action_token_required;
     document.getElementById("ctl-running").textContent = data.running ? "运行中" : "未运行";
-    document.getElementById("ctl-current").textContent = data.tile_workers ?? "-";
     document.getElementById("ctl-pid").textContent = data.runner_pid ?? "-";
     const runnerCount = data.runner_count ?? 0;
     const runnerCountEl = document.getElementById("ctl-runner-count");
@@ -2749,7 +2747,7 @@ async function refreshControl() {
 
 document.getElementById("ctl-restart").addEventListener("click", async () => {
   const message = document.getElementById("ctl-message");
-  if (!window.confirm("确认重启批处理？\n已完成分块会复用，任务从断点继续。")) {
+  if (!window.confirm("确认重启批处理？\n已完成分块会复用；被中断的任务会放回待执行队列，按队列顺序继续。")) {
     return;
   }
   message.textContent = "正在重启…";
@@ -2764,7 +2762,9 @@ document.getElementById("ctl-restart").addEventListener("click", async () => {
       message.textContent = "重启失败：" + (data.error || response.status);
       return;
     }
-    message.textContent = `已重启：runner PID=${data.runner_pid}，tile-workers=${data.tile_workers}`;
+    const requeued = (data.requeued || []).length;
+    message.textContent = `已重启：runner PID=${data.runner_pid}`
+      + (requeued ? `，${requeued} 个中断任务已回到队列` : "");
     await refreshControl();
   } catch (error) {
     message.textContent = "重启请求失败：" + error;
@@ -2773,7 +2773,7 @@ document.getElementById("ctl-restart").addEventListener("click", async () => {
 
 document.getElementById("ctl-stop").addEventListener("click", async () => {
   const message = document.getElementById("ctl-message");
-  if (!window.confirm("确认停止当前下载任务？\n已完成分块会保留，之后可用「重启批处理」恢复续跑。")) {
+  if (!window.confirm("确认停止当前下载任务？\n已完成分块会保留；被中断的任务会放回待执行队列，之后可点「重启批处理」继续。")) {
     return;
   }
   message.textContent = "正在停止…";
@@ -2788,7 +2788,15 @@ document.getElementById("ctl-stop").addEventListener("click", async () => {
       return;
     }
     const pids = (data.stopped_pids || []).join(", ");
-    message.textContent = pids ? `已停止下载任务（PID: ${pids}）` : "当前没有正在运行的任务";
+    const requeued = (data.requeued || []).length;
+    if (pids) {
+      message.textContent = `已停止下载任务（PID: ${pids}）`
+        + (requeued ? `，${requeued} 个中断任务已回到队列` : "");
+    } else if (requeued) {
+      message.textContent = `已恢复 ${requeued} 个中断任务到待执行队列`;
+    } else {
+      message.textContent = "当前没有正在运行的任务";
+    }
     await refreshControl();
   } catch (error) {
     message.textContent = "停止请求失败：" + error;

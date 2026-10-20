@@ -1234,6 +1234,55 @@ class StateStore:
         self.add_event(task_id, "REQUEUE", f"position={position}")
         return ordered
 
+    def requeue_running_tasks(
+        self,
+        *,
+        event: str = "BATCH_REQUEUE",
+        detail: str = "",
+        task_ids: list[str] | None = None,
+    ) -> list[str]:
+        """把 RUNNING 任务放回待执行队列（保留 queue_order 与 attempts）。
+
+        仅用于已确认批处理/worker 停止后的状态修复；下载执行器本身不调用。
+        """
+        try:
+            self.conn.execute("BEGIN IMMEDIATE")
+            query = "SELECT task_id FROM tasks WHERE status = ?"
+            params: list[str] = [STATUS_RUNNING]
+            if task_ids:
+                unique_ids = list(dict.fromkeys(task_ids))
+                placeholders = ",".join("?" for _ in unique_ids)
+                query += f" AND task_id IN ({placeholders})"
+                params.extend(unique_ids)
+            query += " ORDER BY queue_order IS NULL, queue_order, manifest_order, task_id"
+            rows = self.conn.execute(query, params).fetchall()
+            selected = [row["task_id"] for row in rows]
+            if not selected:
+                self.conn.commit()
+                return []
+
+            now = utc_now()
+            for task_id in selected:
+                self.conn.execute(
+                    """
+                    UPDATE tasks
+                    SET status = ?, exit_code = NULL, feature_count = NULL,
+                        last_error = ?, started_at = NULL, finished_at = NULL,
+                        duration_seconds = NULL, updated_at = ?
+                    WHERE task_id = ? AND status = ?
+                    """,
+                    (STATUS_PENDING, detail or None, now, task_id, STATUS_RUNNING),
+                )
+                self.conn.execute(
+                    "INSERT INTO task_events (task_id, event, detail, created_at) VALUES (?, ?, ?, ?)",
+                    (task_id, event, detail, now),
+                )
+            self.conn.commit()
+            return selected
+        except Exception:
+            self.conn.rollback()
+            raise
+
     def stop_running_task_to_tail(self, task_id: str) -> list[str]:
         try:
             self.conn.execute("BEGIN IMMEDIATE")
@@ -1306,6 +1355,20 @@ def requeue_task(state_db: Path, task_id: str, position: str = "tail") -> list[s
     store = StateStore(state_db)
     try:
         return store.requeue_task(task_id, position)
+    finally:
+        store.close()
+
+
+def requeue_running_tasks(
+    state_db: Path,
+    *,
+    event: str = "BATCH_REQUEUE",
+    detail: str = "",
+    task_ids: list[str] | None = None,
+) -> list[str]:
+    store = StateStore(state_db)
+    try:
+        return store.requeue_running_tasks(event=event, detail=detail, task_ids=task_ids)
     finally:
         store.close()
 
