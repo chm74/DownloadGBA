@@ -25,5 +25,15 @@
     "deleted": 1,
     "inserted": 27,
     "skipped": 0
+  },
+  "亚洲|中国|江西省": {
+    "state": "done",
+    "message": "其他机器已完成闭环，人工登记为已更新",
+    "error": null,
+    "log_tail": "人工登记：其他机器已完成闭环，未在本机执行入库",
+    "updated_at": "2026-10-20T10:32:07",
+    "deleted": null,
+    "inserted": null,
+    "skipped": null
   }
 }

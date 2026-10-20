@@ -1,4 +1,5 @@
 [SYNC] manifest=F:\建筑数据下载\DownloadGBA\data\world_building_download_tasks.csv tasks=259 added=0 updated=0 reset=0
+[VERIFY] 3 个已完成任务的标记失效，已置回 PENDING: ['亚洲|沙特|利雅得', 'Oceania|Australia|Australia', 'Europe|Switzerland|Switzerland']
 [SELECT] 250 个任务待执行（状态过滤=['PENDING', 'RUNNING']）
---- [1/250] Africa|Ivory_Coast|Ivory_Coast ---
-[RUN] Africa|Ivory_Coast|Ivory_Coast -> F:\建筑数据下载\DownloadGBA\data\Africa\Ivory_Coast\Ivory_Coast
+--- [1/250] Africa|Angola|Angola ---
+[RUN] Africa|Angola|Angola -> F:\建筑数据下载\DownloadGBA\data\Africa\Angola\Angola

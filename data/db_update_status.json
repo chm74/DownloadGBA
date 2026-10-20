@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-19T17:10:21",
+  "updated_at": "2026-10-20T10:34:17",
   "rows": {
     "亚洲|中国|广西壮族自治区": {
       "updated": true,
@@ -60,12 +60,12 @@
     "亚洲|中国|重庆市": {
       "updated": false,
       "updated_at": "",
-      "note": "手动移入；原处理进程已中断，产物未核验"
+      "note": ""
     },
     "亚洲|中国|陕西省": {
       "updated": true,
       "updated_at": "2026-09-22T15:34:13",
-      "note": "手动移入；产物未核验"
+      "note": ""
     },
     "亚洲|中国|黑龙江省": {
       "updated": true,
@@ -156,6 +156,11 @@
       "updated": true,
       "updated_at": "2026-10-19T17:09:31",
       "note": "人工登记：已确认更新到库"
+    },
+    "亚洲|中国|江西省": {
+      "updated": true,
+      "updated_at": "2026-10-20T10:32:07",
+      "note": ""
     }
   }
 }

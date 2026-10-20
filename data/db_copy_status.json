@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-19T15:56:06",
+  "updated_at": "2026-10-20T10:32:08",
   "rows": {
     "Europe|Switzerland|Switzerland": {
       "state": "done",
@@ -23,6 +23,17 @@
       "finished_at": "2026-10-19T15:56:06",
       "error": null,
       "log_path": "data/logs/update/log_main3_Liberia_Liberia.log"
+    },
+    "亚洲|中国|江西省": {
+      "state": "done",
+      "copied": 0,
+      "total": 0,
+      "source_dir": "F:\\建筑数据下载\\DownloadGBA\\Tools\\Oneshp_pipline_qgis\\out_data\\jiangxi_pipeline\\final",
+      "share_dir": "\\\\192.168.2.126\\BuildingData\\AutoGenerete\\亚洲\\中国\\江西省",
+      "started_at": "2026-10-20T10:32:07",
+      "finished_at": "2026-10-20T10:32:07",
+      "error": null,
+      "log_path": "data/logs/update/log_main3_中国_江西省.log"
     }
   }
 }

@@ -1,11 +1,7 @@
 [SYNC] process_db=F:\建筑数据下载\DownloadGBA\data\shp_process_state.db 发现=9 新增=0 更新=9
-[PLAN 1/3] Africa|Israel|Israel  prefix=Israel  features=1434052  shp=1  source=data/Africa/Israel/Israel
-[DONE] Africa|Israel|Israel status=OK tiles=14 features=1434027
-[PLAN 2/3] Africa|Lesotho|Lesotho  prefix=Lesotho  features=1555362  shp=1  source=data/Africa/Lesotho/Lesotho
-[DONE] Africa|Lesotho|Lesotho status=OK tiles=14 features=1526184
-[PLAN 3/3] Africa|Liberia|Liberia  prefix=Liberia  features=1351866  shp=1  source=data/Africa/Liberia/Liberia
-[DONE] Africa|Liberia|Liberia status=OK tiles=9 features=343673
-[PROCESS] total=44 ok=38 pending=0 running=0 failed=4 blocked=0 waiting=2
+[PLAN 1/1] Africa|Ivory_Coast|Ivory_Coast  prefix=Ivory  features=10363784  shp=1  source=data/Africa/Ivory_Coast/Ivory_Coast
+[DONE] Africa|Ivory_Coast|Ivory_Coast status=OK tiles=89 features=5359225
+[PROCESS] total=45 ok=39 pending=0 running=0 failed=4 blocked=0 waiting=2
 [FAILED] Africa|Benin|Benin  attempts=2  准备输入失败: [WinError 2] 系统找不到指定的文件。
 [FAILED] Africa|Ghana|Ghana  attempts=1  处理进程退出码 1；points = _representative_points(working_gdf) | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ | File "F:\建筑数据下载\DownloadGBA\Tools\Oneshp_pipline_qgis\src\shp_pipeline_qgis\splitter.py", line 97, in _representative_points | result.append((float(point.x), float(point.y))) | MemoryError
 [FAILED] Africa|Botswana|Botswana  attempts=3  准备输入失败: [WinError 3] 系统找不到指定的路径。
