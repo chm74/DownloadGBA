@@ -707,6 +707,41 @@ class SnapshotTests(unittest.TestCase):
                 server.server_close()
 
 
+class ManifestSyncTests(unittest.TestCase):
+    def test_new_tasks_only_allows_running_download(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            data_dir = repo_root / "data"
+            data_dir.mkdir()
+            manifest = data_dir / "world_building_download_tasks.csv"
+            manifest.write_text(
+                "continent,country,city,download_dir,process_name_prefix\n"
+                "Africa,Benin,Benin,data/Africa/Benin/Benin,Benin\n",
+                encoding="utf-8",
+            )
+            config = {
+                "repo_root": str(repo_root),
+                "state_db": str(data_dir / "world_building_download_tasks_state.db"),
+            }
+            running = {"runner": {"pid": 123}, "workers": []}
+
+            with patch.object(status_server, "detect_batch", return_value=running):
+                result = status_server.sync_manifest_to_state(config, new_tasks_only=True)
+
+            self.assertEqual(result["added"], 1)
+            store = lib.StateStore(Path(config["state_db"]))
+            try:
+                pending = store.pending_tasks()
+                self.assertEqual([row["task_id"] for row in pending], ["Africa|Benin|Benin"])
+                self.assertEqual(pending[0]["queue_order"], 1)
+            finally:
+                store.close()
+
+            with patch.object(status_server, "detect_batch", return_value=running):
+                with self.assertRaises(RuntimeError):
+                    status_server.sync_manifest_to_state(config)
+
+
 class DbUpdateTests(unittest.TestCase):
     def test_build_db_update_snapshot_merges_marks(self):
         with tempfile.TemporaryDirectory() as tmp:

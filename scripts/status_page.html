@@ -241,7 +241,7 @@
   <section>
     <h2>批处理控制</h2>
     <div class="muted" style="margin-bottom:10px;">
-      开始下载会按当前队列顺序执行；如果下载正在运行，按钮会变为「重启下载」，先停止当前下载并重新排队，已完成分块复用，任务从断点继续（约几秒中断）。任务清单的检查 / 追加（含同步）已移至「CSV清单管理」页。
+      开始下载会按当前队列顺序执行；如果下载正在运行，按钮会变为「重启下载」，先停止当前下载并重新排队，已完成分块复用，任务从断点继续（约几秒中断）。调整队列排序无需重启，当前任务完成后自动按新顺序执行。任务清单的检查 / 追加（含同步）已移至「CSV清单管理」页。
     </div>
     <div class="stats">
       <span>批处理：<b id="ctl-running">-</b></span>
@@ -287,7 +287,7 @@
         <button id="queue-next" style="padding:4px 10px;cursor:pointer;">下一页</button>
         <button id="queue-last" style="padding:4px 10px;cursor:pointer;">末页</button>
       </div>
-      <div class="qt-hint">点「排序」列按钮调整执行顺序（下次启动批处理生效）｜<span id="queue-reorder-message"></span></div>
+      <div class="qt-hint">点「排序」列按钮调整执行顺序（当前任务完成后按新顺序执行）｜<span id="queue-reorder-message"></span></div>
     </div>
     <div id="queue-table"><div class="empty">暂无待执行任务</div></div>
   </section>
@@ -295,7 +295,7 @@
   <section>
     <h2>最近完成</h2>
     <div class="muted" style="margin-bottom:10px;">
-      点「重新下载」可删除旧下载数据并将任务重置到队首重下（下次启动批处理生效）｜<span id="recent-message"></span>
+      点「重新下载」可删除旧下载数据并将任务重置到队首重下（当前任务完成后优先执行）｜<span id="recent-message"></span>
     </div>
     <div class="recent-toolbar">
       <span id="recent-summary" class="muted">-</span>
@@ -311,7 +311,7 @@
   <section id="failed-section" style="display:none">
     <h2>失败任务</h2>
     <div class="muted" style="margin-bottom:10px;">
-      点「重新入队」把失败任务重新排入待执行队首（下次启动批处理生效）｜<span id="failed-message"></span>
+      点「重新入队」把失败任务重新排入待执行队首（当前任务完成后优先执行）｜<span id="failed-message"></span>
     </div>
     <div id="failed-table"></div>
   </section>
@@ -625,7 +625,7 @@
         向任务清单 <code>data/world_building_download_tasks.csv</code> 追加一行，并同步到下载状态库（把整份清单登记 / 更新 / 对账进状态库）。同步后该任务才会出现在「建筑数据下载」队列中。下载目录按 <code>data\洲\国家\城市</code> 自动生成；重复追加同一任务会自动跳过追加、直接同步，可放心重试。
       </div>
       <div class="muted" style="margin-bottom:10px;color:var(--warn);">
-        <b>备注</b>：点「追加并同步」前，需先停止「建筑数据下载」任务——到「建筑数据下载」页签点「停止下载任务」；下载运行中时同步会被拒绝。
+        <b>备注</b>：下载运行中也可以追加新任务——只新增任务并插入队首，当前任务完成后生效，不会中断当前下载；若要修改已有任务或执行全量对账，请先停止「建筑数据下载」任务。
       </div>
       <div id="mf-diff-note" class="muted" style="display:none;margin-bottom:10px;color:var(--warn);"></div>
       <div class="cfg-grid">
@@ -639,10 +639,10 @@
         <span id="mf-append-message" class="muted"></span>
       </div>
       <div class="muted" style="margin-top:10px;">
-        「追加并同步」将依次执行：① 向任务清单 CSV 追加一行　→　② 把 CSV 同步到状态库（登记 / 更新 / 对账）；同步成功后，该任务才会出现在「建筑数据下载」队列中。若同步被拒（下载运行中），停止下载后再点一次即可（任务已存在时自动跳过追加）。
+        「追加并同步」将依次执行：① 向任务清单 CSV 末尾追加一行　→　② 把 CSV 同步到状态库。新任务会按 CSV 顺序插入队列队首，已有任务相对顺序不变；下载运行中只新增任务，不会修改已有任务。同步成功后，新任务才会出现在「建筑数据下载」队列中。
       </div>
       <div class="muted" style="margin-top:6px;">
-        提示：追加并同步 ≠ 开始下载。之后请到「建筑数据下载」页搜索该任务，（可选）点「⤒ 置顶」，再点「开始下载」。
+        提示：追加并同步 ≠ 开始下载。新任务已加入队首，下载运行中会在当前任务完成后优先执行；未运行时点「开始下载」即可。
       </div>
     </section>
   </div>
@@ -838,7 +838,7 @@ async function reorderDownload(taskId, direction) {
       message.textContent = `${labels[direction] || direction}失败：` + (data.error || response.status);
       return;
     }
-    message.textContent = `${labels[direction] || direction}成功（下次启动批处理生效）`;
+    message.textContent = `${labels[direction] || direction}成功（当前任务完成后按新顺序执行）`;
     await refresh();
   } catch (error) {
     message.textContent = "排序请求失败：" + error;
@@ -1118,7 +1118,7 @@ function renderFailed(items) {
           <td>${esc(item.last_error)}</td>
           <td>${esc(item.finished_at || "-")}</td>
           <td>
-            <button type="button" class="mini" data-requeue="${esc(item.task_id)}" data-position="top" title="重新入队并添加到队首（下次启动批处理生效）">重新入队</button>
+            <button type="button" class="mini" data-requeue="${esc(item.task_id)}" data-position="top" title="重新入队并添加到队首（当前任务完成后优先执行）">重新入队</button>
           </td>
         </tr>`).join("")}
       </tbody>
@@ -1142,7 +1142,7 @@ async function requeueDownload(taskId, position, button, messageId = "failed-mes
       message.textContent = `${label}失败：` + (data.error || response.status);
       return;
     }
-    message.textContent = `${label}成功，已添加到队首（当前待执行 ${data.pending_total} 条，下次启动批处理生效）`;
+    message.textContent = `${label}成功，已添加到队首（当前待执行 ${data.pending_total} 条，当前任务完成后优先执行）`;
     await refresh();
   } catch (error) {
     message.textContent = "入队请求失败：" + error;
@@ -1179,7 +1179,7 @@ async function requeueCompletedDownload(taskId, button) {
       if (data.queue) refresh();
       return;
     }
-    message.textContent = `已删除旧下载数据并退回下载队列（待执行 ${data.pending_total} 条，下次启动批处理生效）`;
+    message.textContent = `已删除旧下载数据并退回下载队列（待执行 ${data.pending_total} 条，当前任务完成后优先执行）`;
     refresh();
   } catch (error) {
     message.textContent = "重新下载请求失败：" + error;
@@ -2980,14 +2980,23 @@ async function appendManifestTask() {
     ? `该任务已存在（第 ${appended.row_number} 行），跳过追加，正在同步到状态库…`
     : `已追加（第 ${appended.row_number} 行），正在同步到状态库…`;
   try {
-    const { response, data } = await mfApi("/api/sync-manifest", {});
+    const syncPayload = controlState.running ? { new_tasks_only: true } : {};
+    let { response, data } = await mfApi("/api/sync-manifest", syncPayload);
+    if (!response.ok && response.status === 409 && !controlState.running) {
+      ({ response, data } = await mfApi("/api/sync-manifest", { new_tasks_only: true }));
+    }
     if (!response.ok || !data.ok) {
       const text = `（第 ${appended.row_number} 行）同步失败：${data.error || response.status}。请停止下载任务后重新点「追加并同步」重试。`;
       message.textContent = text;
       showMessage(text, "error", 8000);
       return;
     }
-    const text = `${appended.existed ? "已同步（任务已存在）" : "已追加并同步"}（第 ${appended.row_number} 行）：新增 ${data.added}，更新 ${data.updated}，重置 ${data.reset}（共 ${data.total}）。请到「建筑数据下载」页搜索该任务并启动批处理。`;
+    const queueHint = data.added > 0
+      ? (controlState.running
+        ? "新增任务已按 CSV 顺序加入队首，当前任务完成后优先执行。"
+        : "新增任务已按 CSV 顺序加入队首，点「开始下载」后优先执行。")
+      : "没有新增任务，已有任务未修改。";
+    const text = `${appended.existed ? "已同步（任务已存在）" : "已追加并同步"}（第 ${appended.row_number} 行）：新增 ${data.added}，更新 ${data.updated}，重置 ${data.reset}（共 ${data.total}）。${queueHint}`;
     message.textContent = text;
     showMessage("已追加并同步：" + payload.continent + " / " + payload.country + " / " + payload.city, "success", 5000);
     mfResetForm();

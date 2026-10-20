@@ -105,6 +105,36 @@ class VerifySuccessTasksTests(unittest.TestCase):
             self.assertEqual(row["status"], lib.STATUS_OK)
 
 
+class DynamicQueueSelectionTests(unittest.TestCase):
+    def test_select_next_task_uses_latest_queue_order(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            store = lib.StateStore(repo_root / "state.db")
+            try:
+                tasks = [
+                    lib.Task("Africa", "Alpha", "Alpha", "data/Africa/Alpha/Alpha"),
+                    lib.Task("Africa", "Bravo", "Bravo", "data/Africa/Bravo/Bravo"),
+                    lib.Task("Africa", "Charlie", "Charlie", "data/Africa/Charlie/Charlie"),
+                ]
+                store.sync_manifest(tasks)
+                args = argparse.Namespace(only="", continent="", country="")
+                seen: set[str] = set()
+
+                first = runner.select_next_task(store, args, [lib.STATUS_PENDING], seen)
+                self.assertEqual(first["task_id"], "Africa|Alpha|Alpha")
+                seen.add(first["task_id"])
+
+                store.move_task("Africa|Charlie|Charlie", "top")
+                second = runner.select_next_task(store, args, [lib.STATUS_PENDING], seen)
+                self.assertEqual(second["task_id"], "Africa|Charlie|Charlie")
+                seen.add(second["task_id"])
+
+                third = runner.select_next_task(store, args, [lib.STATUS_PENDING], seen)
+                self.assertEqual(third["task_id"], "Africa|Bravo|Bravo")
+            finally:
+                store.close()
+
+
 class ExecuteTaskTests(unittest.TestCase):
     def test_execute_task_success_writes_marker_and_state(self):
         with tempfile.TemporaryDirectory() as tmp:

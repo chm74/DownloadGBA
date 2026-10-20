@@ -669,6 +669,27 @@ def print_running_tasks(store: lib.StateStore, repo_root: Path) -> None:
         )
 
 
+def select_next_task(
+    store: lib.StateStore,
+    args: argparse.Namespace,
+    status_filter: list[str] | None,
+    seen: set[str],
+) -> dict | None:
+    """按最新队列顺序选择下一个尚未在本轮执行的任务。"""
+    candidates = lib.select_tasks(
+        store.all_tasks(),
+        only=split_tokens(args.only),
+        continents=split_tokens(args.continent),
+        countries=split_tokens(args.country),
+        statuses=status_filter,
+        max_tasks=0,
+    )
+    for row in candidates:
+        if row["task_id"] not in seen:
+            return row
+    return None
+
+
 def resolve_pending_task(store: lib.StateStore, token: str) -> str:
     pending = [row["task_id"] for row in store.pending_tasks()]
     if token in pending:
@@ -787,7 +808,10 @@ def main() -> int:
             print_counts(store)
             return 0
 
-        print(f"[SELECT] {len(selected)} 个任务待执行（状态过滤={status_filter or '全部'}）")
+        print(
+            f"[SELECT] 初始待执行 {len(selected)} 个任务"
+            f"（状态过滤={status_filter or '全部'}；每完成一个任务重新读取最新排序）"
+        )
 
         worker_script = repo_root / "scripts" / WORKER_SCRIPTS[options.engine]
 
@@ -803,10 +827,21 @@ def main() -> int:
         empty = 0
         failed = 0
         skipped = 0
+        started = 0
+        seen: set[str] = set()
         signalled_stop = False
 
-        for index, row in enumerate(selected, start=1):
-            print(f"--- [{index}/{len(selected)}] {row['task_id']} ---")
+        while not signalled_stop:
+            if args.max_tasks and started >= args.max_tasks:
+                break
+            row = select_next_task(store, args, status_filter, seen)
+            if row is None:
+                print("[DONE] 当前队列已无未执行任务")
+                break
+
+            seen.add(row["task_id"])
+            started += 1
+            print(f"--- [{started}] {row['task_id']} ---")
             result = None
             for attempt in range(1, max(args.task_attempts, 1) + 1):
                 if attempt > 1:
@@ -837,11 +872,11 @@ def main() -> int:
                     signalled_stop = True
                     print("[STOP] --stop-on-error 生效，提前结束")
                     break
-            if index < len(selected) and args.sleep_seconds > 0:
+            if args.sleep_seconds > 0:
                 time.sleep(args.sleep_seconds)
 
         print(
-            f"[SUMMARY] selected={len(selected)} ok={succeeded} ok_empty={empty} "
+            f"[SUMMARY] started={started} ok={succeeded} ok_empty={empty} "
             f"skipped={skipped} failed={failed}"
         )
         print_counts(store)

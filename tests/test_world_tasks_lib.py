@@ -757,6 +757,67 @@ class LocalBoundaryTests(unittest.TestCase):
             finally:
                 store.close()
 
+    def test_sync_manifest_inserts_new_tasks_at_front_in_csv_order(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = lib.StateStore(Path(tmp) / "state.db")
+            try:
+                existing = [
+                    make_task(country="Algeria", city="Algeria"),
+                    make_task(country="Angola", city="Angola", download_dir="data/Africa/Angola/Angola"),
+                ]
+                store.sync_manifest(existing)
+                store.move_task(existing[1].task_id, "top")
+                new_tasks = [
+                    make_task(country="Benin", city="Benin", download_dir="data/Africa/Benin/Benin"),
+                    make_task(country="Chad", city="Chad", download_dir="data/Africa/Chad/Chad"),
+                ]
+                result = store.sync_manifest([*existing, *new_tasks])
+
+                self.assertEqual(result["added"], 2)
+                self.assertEqual(
+                    [row["task_id"] for row in store.pending_tasks()],
+                    [
+                        new_tasks[0].task_id,
+                        new_tasks[1].task_id,
+                        existing[1].task_id,
+                        existing[0].task_id,
+                    ],
+                )
+                self.assertEqual(
+                    [row["queue_order"] for row in store.pending_tasks()],
+                    [1, 2, 3, 4],
+                )
+            finally:
+                store.close()
+
+    def test_sync_manifest_new_tasks_only_does_not_update_existing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = lib.StateStore(Path(tmp) / "state.db")
+            try:
+                task = make_task()
+                store.sync_manifest([task])
+                changed = make_task(download_dir="data/Africa/Algeria/changed")
+                new_task = make_task(
+                    country="Benin",
+                    city="Benin",
+                    download_dir="data/Africa/Benin/Benin",
+                )
+
+                result = store.sync_manifest(
+                    [changed, new_task],
+                    new_tasks_only=True,
+                )
+
+                row = store.get(task.task_id)
+                self.assertEqual(result, {"added": 1, "updated": 0, "reset": 0})
+                self.assertEqual(row["download_dir"], "data/Africa/Algeria/Algeria")
+                self.assertEqual(
+                    [item["task_id"] for item in store.pending_tasks()],
+                    [new_task.task_id, task.task_id],
+                )
+            finally:
+                store.close()
+
 
 class AppendManifestTests(unittest.TestCase):
     def _base_content(self) -> str:

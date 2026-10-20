@@ -1021,14 +1021,41 @@ class StateStore:
     def close(self) -> None:
         self.conn.close()
 
-    def sync_manifest(self, tasks: list[Task], dry_run: bool = False) -> dict:
-        added = 0
+    def sync_manifest(
+        self,
+        tasks: list[Task],
+        dry_run: bool = False,
+        new_tasks_only: bool = False,
+    ) -> dict:
+        """把清单同步进状态库。
+
+        新增任务按 CSV 顺序插入队列队首，已有任务整体后移并保持相对顺序。
+        ``new_tasks_only=True`` 时只插入新任务，不更新/重置已有任务，供下载
+        运行中安全追加使用。
+        """
         updated = 0
         reset = 0
         now = utc_now()
-        next_queue_order = int(
-            self.conn.execute("SELECT COALESCE(MAX(queue_order), 0) AS max_order FROM tasks").fetchone()["max_order"]
-        ) + 1
+        existing_ids = {
+            row["task_id"] for row in self.conn.execute("SELECT task_id FROM tasks")
+        }
+        new_tasks: list[Task] = []
+        new_ids: set[str] = set()
+        for task in tasks:
+            if task.task_id in existing_ids or task.task_id in new_ids:
+                continue
+            new_ids.add(task.task_id)
+            new_tasks.append(task)
+        added = len(new_tasks)
+        new_positions = {
+            task.task_id: position for position, task in enumerate(new_tasks, start=1)
+        }
+        if added and not dry_run:
+            self.conn.execute(
+                "UPDATE tasks SET queue_order = queue_order + ? WHERE queue_order IS NOT NULL",
+                (added,),
+            )
+
         for order, task in enumerate(tasks):
             row = self.get(task.task_id)
             if row is None:
@@ -1047,16 +1074,16 @@ class StateStore:
                             task.city,
                             task.download_dir,
                             order,
-                            next_queue_order,
+                            new_positions[task.task_id],
                             STATUS_PENDING,
                             now,
                         ),
                     )
                     self.add_event(task.task_id, "IMPORT", f"source_row={task.source_row}")
-                next_queue_order += 1
-                added += 1
                 continue
 
+            if new_tasks_only:
+                continue
             if (
                 row["continent"] != task.continent
                 or row["country"] != task.country

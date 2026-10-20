@@ -2956,21 +2956,26 @@ def restart_batch(config: dict, tile_workers: int) -> dict:
         }
 
 
-def sync_manifest_to_state(config: dict) -> dict:
-    """把任务清单 CSV 同步进下载状态库（只登记/更新/对账，不下载）。"""
+def sync_manifest_to_state(config: dict, new_tasks_only: bool = False) -> dict:
+    """把任务清单 CSV 同步进下载状态库（只登记/更新/对账，不下载）。
+
+    ``new_tasks_only=True`` 只插入新任务，可在下载运行中安全调用；
+    完整同步仍要求先停止下载。
+    """
     repo_root = Path(config["repo_root"])
     manifest_path = repo_root / DEFAULT_TASKS_CSV
     if not manifest_path.is_file():
         raise ValueError(f"未找到清单文件：{manifest_path}")
 
-    detected = detect_batch()
-    if detected.get("runner") or detected.get("workers"):
-        raise RuntimeError("下载运行中，请先「停止下载任务」再同步")
+    if not new_tasks_only:
+        detected = detect_batch()
+        if detected.get("runner") or detected.get("workers"):
+            raise RuntimeError("下载运行中，请先「停止下载任务」再同步")
 
     tasks = lib.read_manifest(manifest_path)
     store = lib.StateStore(Path(config["state_db"]))
     try:
-        result = store.sync_manifest(tasks)
+        result = store.sync_manifest(tasks, new_tasks_only=new_tasks_only)
     finally:
         store.close()
     return {
@@ -2979,6 +2984,7 @@ def sync_manifest_to_state(config: dict) -> dict:
         "added": result["added"],
         "updated": result["updated"],
         "reset": result["reset"],
+        "new_tasks_only": new_tasks_only,
     }
 
 
@@ -3923,7 +3929,10 @@ class StatusHandler(BaseHTTPRequestHandler):
 
         if path == "/api/sync-manifest":
             try:
-                result = sync_manifest_to_state(config)
+                result = sync_manifest_to_state(
+                    config,
+                    new_tasks_only=payload.get("new_tasks_only") is True,
+                )
             except ValueError as exc:
                 self._send(
                     400,
