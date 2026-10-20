@@ -431,6 +431,61 @@ class SnapshotTests(unittest.TestCase):
             self.assertEqual(recent[0]["task_id"], "Europe|San_Marino|San_Marino")
             self.assertEqual(recent[0]["existing_data_dir"], "data/Europe/San_Marino/San_Marino")
 
+    def test_build_snapshot_recent_done_pages_keep_newest_first(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            state_db = build_repo_fixture(repo_root)
+            store = lib.StateStore(state_db)
+            try:
+                tasks = [
+                    make_task(
+                        "Recent",
+                        "Area",
+                        f"City{index:02d}",
+                        f"data/Recent/Area/City{index:02d}",
+                    )
+                    for index in range(12)
+                ]
+                store.sync_manifest(tasks)
+                for index, task in enumerate(tasks):
+                    store.set_status(
+                        task.task_id,
+                        lib.STATUS_OK,
+                        finished_at=f"2026-02-01T00:{index:02d}:00",
+                    )
+            finally:
+                store.close()
+
+            first = status_server.build_snapshot(
+                repo_root,
+                state_db,
+                recent_page_size=10,
+            )
+            second = status_server.build_snapshot(
+                repo_root,
+                state_db,
+                recent_page_size=10,
+                recent_offset=10,
+            )
+
+            self.assertEqual(first["recent_total"], 13)
+            self.assertEqual(first["recent_limit"], 10)
+            self.assertEqual(first["recent_offset"], 0)
+            self.assertEqual(
+                [item["task_id"] for item in first["recent_done"]],
+                [f"Recent|Area|City{index:02d}" for index in range(11, 1, -1)],
+            )
+            self.assertEqual(second["recent_total"], 13)
+            self.assertEqual(second["recent_offset"], 10)
+            self.assertEqual(
+                [item["task_id"] for item in second["recent_done"]],
+                [
+                    "Recent|Area|City01",
+                    "Recent|Area|City00",
+                    "Europe|San_Marino|San_Marino",
+                ],
+            )
+
     def test_build_snapshot_queue_search_matches_english_and_chinese(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)

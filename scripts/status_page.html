@@ -26,6 +26,7 @@
   .queue-toolbar, .sticky-toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; padding-bottom:8px; position:sticky; top:var(--tabs-bottom, 40px); z-index:15; background:var(--card); border-bottom:1px solid var(--line); }
   .db-page-toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; padding:8px 0; position:sticky; top:var(--tabs-bottom, 40px); z-index:15; background:var(--card); border-bottom:1px solid var(--line); }
   .queue-toolbar { gap:6px 12px; }
+  .recent-toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
   .queue-toolbar .qt-group { display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; }
   .queue-toolbar .qt-left { flex:1 1 auto; min-width:0; }
   .queue-toolbar .qt-right { margin-left:auto; }
@@ -100,6 +101,14 @@
   .modal-country-group td:first-child { width:45%; }
   .modal-group-head th:last-child,
   .modal-country-group td:last-child { width:55%; }
+  .modal-completed-head,
+  .modal-completed-group table { table-layout:fixed; }
+  .modal-completed-head th:nth-child(1),
+  .modal-completed-group td:nth-child(1) { width:30%; }
+  .modal-completed-head th:nth-child(2),
+  .modal-completed-group td:nth-child(2) { width:45%; }
+  .modal-completed-head th:nth-child(3),
+  .modal-completed-group td:nth-child(3) { width:25%; }
   .modal-group-title {
     position:sticky; top:0; z-index:2;
     background:var(--card);
@@ -232,7 +241,7 @@
   <section>
     <h2>批处理控制</h2>
     <div class="muted" style="margin-bottom:10px;">
-      重启会停止当前批处理并重新启动；已完成分块全部复用，任务从断点继续（约几秒中断）。任务清单的检查 / 追加（含同步）已移至「CSV清单管理」页。
+      开始下载会按当前队列顺序执行；如果下载正在运行，按钮会变为「重启下载」，先停止当前下载并重新排队，已完成分块复用，任务从断点继续（约几秒中断）。任务清单的检查 / 追加（含同步）已移至「CSV清单管理」页。
     </div>
     <div class="stats">
       <span>批处理：<b id="ctl-running">-</b></span>
@@ -240,7 +249,7 @@
       <span>runner 数量：<b id="ctl-runner-count">-</b></span>
     </div>
     <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-      <button id="ctl-restart" style="padding:6px 14px;cursor:pointer;">重启批处理</button>
+      <button id="ctl-restart" style="padding:6px 14px;cursor:pointer;" title="按当前队列顺序开始下载" disabled>开始下载</button>
       <button id="ctl-stop" style="padding:6px 14px;cursor:pointer;color:#b91c1c;border-color:#b91c1c;">停止下载任务</button>
       <span id="ctl-message" class="muted"></span>
     </div>
@@ -287,6 +296,14 @@
     <h2>最近完成</h2>
     <div class="muted" style="margin-bottom:10px;">
       点「重新下载」可删除旧下载数据并将任务重置到队首重下（下次启动批处理生效）｜<span id="recent-message"></span>
+    </div>
+    <div class="recent-toolbar">
+      <span id="recent-summary" class="muted">-</span>
+      <button id="recent-first" type="button" style="padding:4px 10px;cursor:pointer;">首页</button>
+      <button id="recent-prev" type="button" style="padding:4px 10px;cursor:pointer;">上一页</button>
+      <span id="recent-page-label" class="muted">-</span>
+      <button id="recent-next" type="button" style="padding:4px 10px;cursor:pointer;">下一页</button>
+      <button id="recent-last" type="button" style="padding:4px 10px;cursor:pointer;">末页</button>
     </div>
     <div id="recent-table"><div class="empty">暂无已完成任务</div></div>
   </section>
@@ -625,7 +642,7 @@
         「追加并同步」将依次执行：① 向任务清单 CSV 追加一行　→　② 把 CSV 同步到状态库（登记 / 更新 / 对账）；同步成功后，该任务才会出现在「建筑数据下载」队列中。若同步被拒（下载运行中），停止下载后再点一次即可（任务已存在时自动跳过追加）。
       </div>
       <div class="muted" style="margin-top:6px;">
-        提示：追加并同步 ≠ 开始下载。之后请到「建筑数据下载」页搜索该任务，（可选）点「⤒ 置顶」，再点「重启批处理」。
+        提示：追加并同步 ≠ 开始下载。之后请到「建筑数据下载」页搜索该任务，（可选）点「⤒ 置顶」，再点「开始下载」。
       </div>
     </section>
   </div>
@@ -637,9 +654,10 @@
 const REFRESH_MS = %%REFRESH_MS%%;
 let countdownTimer = null;
 let refreshSequence = 0;
-const controlState = { actionTokenRequired: false };
+const controlState = { actionTokenRequired: false, running: false };
 const noteState = { editingKey: null };
 const queueState = { page: 1, pageSize: 15, total: 0, search: "" };
+const downloadRecentState = { page: 1, pageSize: 10, total: 0 };
 const processingRecentState = { page: 1, pageSize: 10, total: 0 };
 const mergeMsgState = {};
 let processDefaultLimit = null; // 「配置」页处理默认数量缓存（0=全部）；null 表示尚未读取到
@@ -1034,6 +1052,16 @@ document.getElementById("log-refresh").addEventListener("click", async () => {
 });
 
 function renderRecent(items) {
+  const totalPages = Math.max(1, Math.ceil(downloadRecentState.total / downloadRecentState.pageSize));
+  document.getElementById("recent-summary").textContent =
+    `共 ${downloadRecentState.total} 条，每页 ${downloadRecentState.pageSize} 条`;
+  document.getElementById("recent-page-label").textContent =
+    `第 ${downloadRecentState.page}/${totalPages} 页`;
+  document.getElementById("recent-first").disabled = downloadRecentState.page <= 1;
+  document.getElementById("recent-prev").disabled = downloadRecentState.page <= 1;
+  document.getElementById("recent-next").disabled = downloadRecentState.page >= totalPages;
+  document.getElementById("recent-last").disabled = downloadRecentState.page >= totalPages;
+
   const box = document.getElementById("recent-table");
   if (!items || items.length === 0) {
     box.innerHTML = '<div class="empty">暂无已完成任务</div>';
@@ -1056,6 +1084,20 @@ function renderRecent(items) {
       </tbody>
     </table>`;
 }
+
+function bindDownloadRecentNav(buttonId, targetPage) {
+  document.getElementById(buttonId).addEventListener("click", () => {
+    const totalPages = Math.max(1, Math.ceil(downloadRecentState.total / downloadRecentState.pageSize));
+    const page = typeof targetPage === "function" ? targetPage(totalPages) : targetPage;
+    downloadRecentState.page = Math.min(Math.max(page, 1), totalPages);
+    refresh();
+  });
+}
+
+bindDownloadRecentNav("recent-first", 1);
+bindDownloadRecentNav("recent-prev", () => downloadRecentState.page - 1);
+bindDownloadRecentNav("recent-next", () => downloadRecentState.page + 1);
+bindDownloadRecentNav("recent-last", (totalPages) => totalPages);
 
 function renderFailed(items) {
   const section = document.getElementById("failed-section");
@@ -1892,15 +1934,29 @@ function renderNotDownloadedModal() {
       body.innerHTML = `<div class="empty">${state.completedTotal ? "没有符合筛选条件的已下载任务" : "该大洲暂无已下载任务"}</div>`;
       return;
     }
-    body.innerHTML = `<table class="modal-completed-table">
-      <thead><tr><th>国家</th><th>区域/任务</th><th>下载目录</th><th>完成时间</th></tr></thead>
-      <tbody>${completedRows.map((row) => `<tr>
-        <td>${esc(row.country || "-")}</td>
+    const groups = new Map();
+    for (const row of completedRows) {
+      const country = String(row.country || "-");
+      if (!groups.has(country)) groups.set(country, []);
+      groups.get(country).push(row);
+    }
+    const countries = Array.from(groups.keys())
+      .sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+    const groupedRows = countries.map((country) => {
+      const items = groups.get(country);
+      const itemRows = items.map((row) => `<tr>
         <td>${esc(row.city || "-")}<div class="muted mono" title="${esc(row.task_id || "")}">${esc(row.task_id || "")}</div></td>
         <td class="mono path-cell" title="${esc(row.download_dir || "")}">${esc(row.download_dir || "-")}</td>
         <td class="mono">${esc(row.completed_at || row.finished_at || row.updated_at || "-")}</td>
-      </tr>`).join("")}</tbody>
-    </table>`;
+      </tr>`).join("");
+      return `<div class="modal-completed-group">
+        <div class="modal-group-title">${esc(country)}（${items.length}）</div>
+        <table><tbody>${itemRows}</tbody></table>
+      </div>`;
+    }).join("");
+    body.innerHTML = `<table class="modal-completed-head">
+      <thead><tr><th>区域/任务</th><th>下载目录</th><th>完成时间</th></tr></thead>
+    </table>${groupedRows}`;
     return;
   }
 
@@ -2730,15 +2786,23 @@ async function refreshControl() {
     const response = await fetch("/api/control", { cache: "no-store" });
     const data = await response.json();
     controlState.actionTokenRequired = !!data.action_token_required;
-    document.getElementById("ctl-running").textContent = data.running ? "运行中" : "未运行";
+    const running = !!data.running;
+    controlState.running = running;
+    document.getElementById("ctl-running").textContent = running ? "运行中" : "未运行";
     document.getElementById("ctl-pid").textContent = data.runner_pid ?? "-";
     const runnerCount = data.runner_count ?? 0;
     const runnerCountEl = document.getElementById("ctl-runner-count");
     runnerCountEl.textContent = runnerCount;
     runnerCountEl.style.color = runnerCount > 1 ? "var(--err)" : "";
+    const restartButton = document.getElementById("ctl-restart");
+    restartButton.disabled = false;
+    restartButton.textContent = running ? "重启下载" : "开始下载";
+    restartButton.title = running
+      ? "停止当前下载并按队列重新启动"
+      : "按当前队列顺序开始下载";
     if (runnerCount > 1) {
       document.getElementById("ctl-message").textContent =
-        "检测到多个 runner 进程，建议点击「重启批处理」清理";
+        `检测到多个下载进程，建议点击「${running ? "重启下载" : "开始下载"}」清理`;
     }
   } catch (error) {
     document.getElementById("ctl-running").textContent = "查询失败";
@@ -2747,10 +2811,14 @@ async function refreshControl() {
 
 document.getElementById("ctl-restart").addEventListener("click", async () => {
   const message = document.getElementById("ctl-message");
-  if (!window.confirm("确认重启批处理？\n已完成分块会复用；被中断的任务会放回待执行队列，按队列顺序继续。")) {
+  const running = controlState.running;
+  const confirmText = running
+    ? "确认重启下载？\n将停止当前下载并重新排队；已完成分块会复用，任务会从断点继续。"
+    : "确认开始下载？\n将按当前队列顺序执行待下载任务；已完成分块会复用。";
+  if (!window.confirm(confirmText)) {
     return;
   }
-  message.textContent = "正在重启…";
+  message.textContent = running ? "正在重启下载…" : "正在启动下载…";
   try {
     const response = await fetch("/api/restart", {
       method: "POST",
@@ -2759,21 +2827,21 @@ document.getElementById("ctl-restart").addEventListener("click", async () => {
     });
     const data = await response.json();
     if (!response.ok || !data.ok) {
-      message.textContent = "重启失败：" + (data.error || response.status);
+      message.textContent = (running ? "重启" : "启动") + "失败：" + (data.error || response.status);
       return;
     }
     const requeued = (data.requeued || []).length;
-    message.textContent = `已重启：runner PID=${data.runner_pid}`
+    message.textContent = `${running ? "下载已重启" : "下载已启动"}：runner PID=${data.runner_pid}`
       + (requeued ? `，${requeued} 个中断任务已回到队列` : "");
     await refreshControl();
   } catch (error) {
-    message.textContent = "重启请求失败：" + error;
+    message.textContent = (running ? "重启" : "启动") + "请求失败：" + error;
   }
 });
 
 document.getElementById("ctl-stop").addEventListener("click", async () => {
   const message = document.getElementById("ctl-message");
-  if (!window.confirm("确认停止当前下载任务？\n已完成分块会保留；被中断的任务会放回待执行队列，之后可点「重启批处理」继续。")) {
+  if (!window.confirm("确认停止当前下载任务？\n已完成分块会保留；被中断的任务会放回待执行队列，之后可点「开始下载」继续。")) {
     return;
   }
   message.textContent = "正在停止…";
@@ -3058,9 +3126,10 @@ async function refresh() {
   checkManifestDiff();
   try {
     const offset = (queueState.page - 1) * queueState.pageSize;
+    const downloadRecentOffset = (downloadRecentState.page - 1) * downloadRecentState.pageSize;
     const processRecentOffset = (processingRecentState.page - 1) * processingRecentState.pageSize;
     const response = await fetch(
-      `/api/status?queue_offset=${offset}&queue_limit=${queueState.pageSize}&queue_search=${encodeURIComponent(queueState.search)}&process_recent_offset=${processRecentOffset}`,
+      `/api/status?queue_offset=${offset}&queue_limit=${queueState.pageSize}&queue_search=${encodeURIComponent(queueState.search)}&recent_offset=${downloadRecentOffset}&recent_page_size=${downloadRecentState.pageSize}&process_recent_offset=${processRecentOffset}`,
       { cache: "no-store" },
     );
     const data = await response.json();
@@ -3094,6 +3163,18 @@ async function refresh() {
     const queueTotalPages = Math.max(1, Math.ceil(queueTotal / queueState.pageSize));
     if (queueState.page > queueTotalPages) {
       queueState.page = queueTotalPages;
+      refresh();
+      return;
+    }
+
+    downloadRecentState.total = data.recent_total ?? (data.recent_done || []).length;
+    downloadRecentState.pageSize = Math.max(1, data.recent_limit ?? 10);
+    const downloadRecentTotalPages = Math.max(
+      1,
+      Math.ceil(downloadRecentState.total / downloadRecentState.pageSize),
+    );
+    if (downloadRecentState.page > downloadRecentTotalPages) {
+      downloadRecentState.page = downloadRecentTotalPages;
       refresh();
       return;
     }

@@ -1,21 +1,21 @@
 {
   "version": 1,
-  "updated_at": "2026-10-20T13:55:29",
+  "updated_at": "2026-10-20T15:22:35",
   "rows": {
     "亚洲|中国|广西壮族自治区": {
       "updated": true,
       "updated_at": "2026-10-20T13:55:29",
-      "note": "人工登记：已确认更新到库"
+      "note": ""
     },
     "亚洲|中国|上海市": {
       "updated": true,
       "updated_at": "2026-10-20T13:55:29",
-      "note": "人工登记：已确认更新到库"
+      "note": ""
     },
     "亚洲|中国|宁夏回族自治区": {
       "updated": true,
       "updated_at": "2026-10-20T13:55:29",
-      "note": "人工登记：已确认更新到库"
+      "note": ""
     },
     "亚洲|中国|云南省": {
       "updated": true,
@@ -25,12 +25,12 @@
     "亚洲|中国|新疆维吾尔自治区": {
       "updated": true,
       "updated_at": "2026-10-20T13:55:29",
-      "note": "人工登记：已确认更新到库"
+      "note": ""
     },
     "亚洲|中国|江苏省": {
       "updated": true,
       "updated_at": "2026-10-20T13:55:29",
-      "note": "人工登记：已确认更新到库"
+      "note": ""
     },
     "Asia|United_Arab_Emirates|United_Arab_Emirates": {
       "updated": true,
@@ -40,7 +40,7 @@
     "EXT|data/mongolia_gba_wfs": {
       "updated": true,
       "updated_at": "2026-10-19T17:10:21",
-      "note": "人工登记：已确认更新到库"
+      "note": ""
     },
     "Asia|Malaysia|Malaysia": {
       "updated": true,
@@ -65,12 +65,12 @@
     "亚洲|中国|陕西省": {
       "updated": true,
       "updated_at": "2026-10-20T13:55:29",
-      "note": "人工登记：已确认更新到库"
+      "note": ""
     },
     "亚洲|中国|黑龙江省": {
       "updated": true,
       "updated_at": "2026-10-20T13:55:29",
-      "note": "人工登记：已确认更新到库"
+      "note": ""
     },
     "亚洲|中国|福建省": {
       "updated": true,
@@ -90,7 +90,7 @@
     "亚洲|中国|香港澳门": {
       "updated": true,
       "updated_at": "2026-10-20T13:55:29",
-      "note": "人工登记：已确认更新到库"
+      "note": ""
     },
     "亚洲|中国|安徽省": {
       "updated": true,
@@ -100,7 +100,7 @@
     "亚洲|中国|山东省": {
       "updated": true,
       "updated_at": "2026-10-20T13:55:29",
-      "note": "人工登记：已确认更新到库"
+      "note": ""
     },
     "亚洲|沙特|利雅得": {
       "updated": true,
@@ -155,32 +155,32 @@
     "EXT|data/亚洲/中国/深圳市": {
       "updated": true,
       "updated_at": "2026-10-19T17:09:31",
-      "note": "人工登记：已确认更新到库"
+      "note": ""
     },
     "亚洲|中国|江西省": {
       "updated": true,
       "updated_at": "2026-10-20T13:55:29",
-      "note": "人工登记：已确认更新到库"
+      "note": ""
     },
     "Africa|Ivory_Coast|Ivory_Coast": {
       "updated": true,
       "updated_at": "2026-10-20T13:38:37",
-      "note": "人工登记：已确认更新到库"
+      "note": ""
     },
     "亚洲|中国|北京市": {
       "updated": true,
       "updated_at": "2026-10-20T13:55:29",
-      "note": "人工登记：已确认更新到库"
+      "note": ""
     },
     "亚洲|中国|吉林省": {
       "updated": true,
       "updated_at": "2026-10-20T13:55:29",
-      "note": "人工登记：已确认更新到库"
+      "note": ""
     },
     "亚洲|中国|广东省": {
       "updated": true,
       "updated_at": "2026-10-20T13:55:29",
-      "note": "人工登记：已确认更新到库"
+      "note": ""
     }
   }
 }

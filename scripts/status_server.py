@@ -188,11 +188,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--page", default=DEFAULT_PAGE, help="状态页面 HTML 路径。")
     parser.add_argument("--boundaries-dir", default=DEFAULT_BOUNDARIES_DIR, help="本地行政边界目录，用于国家/城市中文名。")
     parser.add_argument("--queue-limit", type=int, default=DEFAULT_QUEUE_LIMIT, help="队列显示条数。")
-    parser.add_argument("--recent-limit", type=int, default=DEFAULT_RECENT_LIMIT, help="最近完成显示条数。")
+    parser.add_argument("--recent-limit", type=int, default=DEFAULT_RECENT_LIMIT, help="最近完成默认每页条数（失败任务同限）。")
     parser.add_argument("--log-stale-minutes", type=float, default=DEFAULT_STALE_MINUTES, help="日志多久未更新视为可能卡住。")
     parser.add_argument("--refresh-seconds", type=int, default=DEFAULT_REFRESH_SECONDS, help="页面自动刷新间隔秒数。")
     parser.add_argument("--log-tail-lines", type=int, default=2, help="当前任务日志尾部行数。")
-    parser.add_argument("--python-exe", default=sys.executable, help="重启批处理时使用的 Python 解释器。")
+    parser.add_argument("--python-exe", default=sys.executable, help="启动/重启下载时使用的 Python 解释器。")
     parser.add_argument(
         "--process-python-exe",
         default=DEFAULT_PROCESS_PYTHON,
@@ -201,7 +201,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--action-token",
         default="",
-        help="可选操作令牌；设置后页面重启操作必须携带匹配令牌（局域网防误操作）。",
+        help="可选操作令牌；设置后页面控制类/删除类操作必须携带匹配令牌（局域网防误操作）。",
     )
     parser.add_argument(
         "--merge-engine",
@@ -369,11 +369,14 @@ def build_snapshot(
     log_tail_lines: int = 2,
     boundaries_dir: Path | None = None,
     queue_offset: int = 0,
+    recent_offset: int = 0,
+    recent_page_size: int | None = None,
     worker_command_lines: list[str] | None = None,
     queue_search: str = "",
 ) -> dict:
     repo_root = Path(repo_root)
     state_db = Path(state_db)
+    page_size = max(int(recent_page_size), 1) if recent_page_size is not None else max(int(recent_limit), 1)
     snapshot = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "repo_root": str(repo_root),
@@ -390,6 +393,9 @@ def build_snapshot(
         "queue_offset": max(int(queue_offset), 0),
         "queue_limit": max(int(queue_limit), 1),
         "recent_done": [],
+        "recent_total": 0,
+        "recent_limit": page_size,
+        "recent_offset": max(int(recent_offset), 0),
         "failed": [],
         "disk_free_bytes": None,
     }
@@ -488,10 +494,16 @@ def build_snapshot(
             )
         snapshot["queue"] = queue_items
 
+        recent_statuses = (lib.STATUS_OK, lib.STATUS_OK_EMPTY)
+        snapshot["recent_total"] = connection.execute(
+            "SELECT COUNT(*) FROM tasks WHERE status IN (?, ?)",
+            recent_statuses,
+        ).fetchone()[0]
         recent_items = []
         for row in connection.execute(
-            "SELECT * FROM tasks WHERE status IN (?, ?) ORDER BY finished_at DESC LIMIT ?",
-            (lib.STATUS_OK, lib.STATUS_OK_EMPTY, max(recent_limit, 0)),
+            "SELECT * FROM tasks WHERE status IN (?, ?) "
+            "ORDER BY finished_at DESC, task_id DESC LIMIT ? OFFSET ?",
+            (*recent_statuses, snapshot["recent_limit"], snapshot["recent_offset"]),
         ):
             row_keys = row.keys() if hasattr(row, "keys") else []
             existing_data_dir = row["existing_data_dir"] if "existing_data_dir" in row_keys else None
@@ -2919,7 +2931,7 @@ def restart_batch(config: dict, tile_workers: int) -> dict:
         detected, stopped = _stop_all_batch_processes()
         remaining = detect_batch()
         if remaining.get("runner") or remaining.get("workers"):
-            raise RuntimeError("下载进程未完全停止，未重启批处理，任务状态保持 RUNNING")
+            raise RuntimeError("下载进程未完全停止，未重新启动下载，任务状态保持 RUNNING")
         requeued = lib.requeue_running_tasks(
             Path(config["state_db"]),
             event="BATCH_RESTART_REQUEUE",
@@ -3164,6 +3176,10 @@ class StatusHandler(BaseHTTPRequestHandler):
             query = parse_qs(urlparse(self.path).query)
             queue_offset = parse_int_query(query, "queue_offset", 0, 0, 10_000_000)
             queue_limit = parse_int_query(query, "queue_limit", config["queue_limit"], 1, 500)
+            recent_offset = parse_int_query(query, "recent_offset", 0, 0, 10_000_000)
+            recent_page_size = parse_int_query(
+                query, "recent_page_size", config["recent_limit"], 1, 500
+            )
             process_recent_offset = parse_int_query(query, "process_recent_offset", 0, 0, 10_000_000)
             queue_search = (query.get("queue_search") or [""])[0]
             worker_lines = [
@@ -3176,6 +3192,8 @@ class StatusHandler(BaseHTTPRequestHandler):
                 queue_limit=queue_limit,
                 queue_offset=queue_offset,
                 recent_limit=config["recent_limit"],
+                recent_offset=recent_offset,
+                recent_page_size=recent_page_size,
                 stale_minutes=config["stale_minutes"],
                 log_tail_lines=config["log_tail_lines"],
                 boundaries_dir=config["boundaries_dir"],
