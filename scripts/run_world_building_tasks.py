@@ -499,6 +499,40 @@ def execute_task(
     return {"status": status, "feature_count": feature_count}
 
 
+def _updated_dataset_keys(repo_root: Path) -> set[str]:
+    path = Path(repo_root) / "data" / "db_update_status.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    rows = payload.get("rows") if isinstance(payload, dict) else None
+    if not isinstance(rows, dict):
+        return set()
+    return {
+        str(key)
+        for key, value in rows.items()
+        if isinstance(value, dict) and value.get("updated")
+    }
+
+
+def _processed_output_available(repo_root: Path, row: dict) -> bool:
+    value = row["processed_3857_dir"]
+    if not value:
+        return False
+    path = Path(value)
+    if not path.is_absolute():
+        path = Path(repo_root) / path
+    try:
+        if not path.is_dir():
+            return False
+        if (path / "_PROCESS_DONE.json").is_file():
+            return True
+        final_dir = path / "final"
+        return final_dir.is_dir() and any(final_dir.glob("*.shp"))
+    except OSError:
+        return False
+
+
 def verify_success_tasks(
     store: lib.StateStore,
     repo_root: Path,
@@ -506,6 +540,7 @@ def verify_success_tasks(
     dry_run: bool,
 ) -> list[str]:
     broken: list[str] = []
+    updated_keys = _updated_dataset_keys(repo_root)
     for row in store.all_tasks():
         if row["status"] not in lib.SUCCESS_STATUSES:
             continue
@@ -524,6 +559,10 @@ def verify_success_tasks(
             merge_output,
             expected_delivery_params=expected_delivery_params,
         ):
+            continue
+        # 原始下载目录可能已在处理/入库后清理。只要有处理产物或已登记更新到库，
+        # 就不应把任务重置为待下载，否则会重复下载。
+        if row["task_id"] in updated_keys or _processed_output_available(repo_root, row):
             continue
         broken.append(row["task_id"])
         if not dry_run:

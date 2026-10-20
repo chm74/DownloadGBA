@@ -372,6 +372,7 @@ python scripts/run_gba_province_batch.py ^
 - 自动识别清单编码（UTF-8 / GBK），校验字段与路径
 - 边界解析：覆盖表 `skip` 首先判定；其余情况优先复用任务目录缓存 `place_boundary.gpkg`，无缓存时依次为覆盖表（`bbox` / `boundary` / `query`）→ 本地行政边界（Natural Earth）→ 在线地名解析。已缓存任务新增/修改覆盖后需加 `--refresh-boundary` 才重新解析
 - 逐任务调用下载脚本（viewerSession 自动刷新、0.09° 请求自动切分），产物、日志、完成标记写入标准下载目录
+- 原始下载目录清理后，只要任务已处理或已登记更新到库，启动校验不会再把状态重置为 `PENDING`，避免重复下载
 - 任务完成自动导出交付用 SHP，超大任务按要素数自动分卷（`--shp-max-features`）
 - SQLite 状态库支撑断点续跑、只跑失败项、强制重跑，`--export-shp-only` 可为历史成果补导出 SHP
 - 待执行队列支持手动排序（上移 / 下移 / 置顶），页面与 CLI 均可操作，改动在下次启动批处理时生效

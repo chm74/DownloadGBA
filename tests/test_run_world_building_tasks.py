@@ -1,6 +1,7 @@
 import argparse
 import contextlib
 import io
+import json
 import subprocess
 import sys
 import tempfile
@@ -33,6 +34,75 @@ def build_row(
         "city": city,
         "download_dir": download_dir,
     }
+
+
+class VerifySuccessTasksTests(unittest.TestCase):
+    def _options(self):
+        return argparse.Namespace(
+            merge_format="gpkg",
+            boundary_filter="representative-point",
+            boundary_buffer_meters=0.0,
+        )
+
+    def _make_task(self):
+        return lib.Task(
+            continent="Asia",
+            country="Saudi_Arabia",
+            city="Riyadh",
+            download_dir="data/Asia/Saudi_Arabia/Riyadh",
+        )
+
+    def test_keeps_processed_task_without_raw_marker(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            store = lib.StateStore(repo_root / "state.db")
+            try:
+                task = self._make_task()
+                store.sync_manifest([task])
+                final_dir = repo_root / "out_data" / "Riyadh_pipeline" / "final"
+                final_dir.mkdir(parents=True)
+                (final_dir / "Riyadh_001_3857.shp").write_bytes(b"shp")
+                store.set_status(
+                    task.task_id,
+                    lib.STATUS_OK,
+                    processed_3857_dir="out_data/Riyadh_pipeline",
+                    finished_at="2026-10-14T13:26:41",
+                )
+
+                broken = runner.verify_success_tasks(store, repo_root, self._options(), dry_run=False)
+                row = store.get(task.task_id)
+            finally:
+                store.close()
+
+            self.assertEqual(broken, [])
+            self.assertEqual(row["status"], lib.STATUS_OK)
+
+    def test_keeps_updated_task_without_processed_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            store = lib.StateStore(repo_root / "state.db")
+            try:
+                task = self._make_task()
+                store.sync_manifest([task])
+                store.set_status(
+                    task.task_id,
+                    lib.STATUS_OK,
+                    finished_at="2026-10-14T13:26:41",
+                )
+                marks_path = repo_root / "data" / "db_update_status.json"
+                marks_path.parent.mkdir(parents=True)
+                marks_path.write_text(
+                    json.dumps({"rows": {task.task_id: {"updated": True}}}),
+                    encoding="utf-8",
+                )
+
+                broken = runner.verify_success_tasks(store, repo_root, self._options(), dry_run=False)
+                row = store.get(task.task_id)
+            finally:
+                store.close()
+
+            self.assertEqual(broken, [])
+            self.assertEqual(row["status"], lib.STATUS_OK)
 
 
 class ExecuteTaskTests(unittest.TestCase):
