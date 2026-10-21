@@ -2,3 +2,13 @@
 [SELECT] 初始待执行 234 个任务（状态过滤=['PENDING', 'RUNNING']；每完成一个任务重新读取最新排序）
 --- [1] 亚洲|中国|重庆市 ---
 [RUN] 亚洲|中国|重庆市 -> F:\建筑数据下载\DownloadGBA\data\亚洲\中国\重庆市
+[SHP] 亚洲|中国|重庆市 -> 5 个分卷
+[PROCESS] 已登记处理队列: 亚洲|中国|重庆市 added=0 updated=1
+[OK] 亚洲|中国|重庆市 features=4530987 elapsed=9223s
+--- [2] Africa|Angola|Angola ---
+[RUN] Africa|Angola|Angola -> F:\建筑数据下载\DownloadGBA\data\Africa\Angola\Angola
+[SHP] Africa|Angola|Angola -> 13 个分卷
+[PROCESS] 已登记处理队列: Africa|Angola|Angola added=0 updated=1
+[OK] Africa|Angola|Angola features=12665385 elapsed=48035s
+--- [3] Africa|Libya|Libya ---
+[RUN] Africa|Libya|Libya -> F:\建筑数据下载\DownloadGBA\data\Africa\Libya\Libya

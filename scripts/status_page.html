@@ -241,7 +241,7 @@
   <section>
     <h2>批处理控制</h2>
     <div class="muted" style="margin-bottom:10px;">
-      开始下载会按当前队列顺序执行；如果下载正在运行，按钮会变为「重启下载」，先停止当前下载并重新排队，已完成分块复用，任务从断点继续（约几秒中断）。调整队列排序无需重启，当前任务完成后自动按新顺序执行。任务清单的检查 / 追加（含同步）已移至「CSV清单管理」页。
+      开始下载会按当前队列顺序执行。下载运行中「开始下载」按钮会禁用；如需重启下载进程，请先点「停止下载任务」，再重新开始。调整队列排序无需停止或重启，当前任务完成后自动按新顺序执行。任务清单的检查 / 追加（含同步）已移至「CSV清单管理」页。
     </div>
     <div class="stats">
       <span>批处理：<b id="ctl-running">-</b></span>
@@ -249,7 +249,7 @@
       <span>runner 数量：<b id="ctl-runner-count">-</b></span>
     </div>
     <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-      <button id="ctl-restart" style="padding:6px 14px;cursor:pointer;" title="按当前队列顺序开始下载" disabled>开始下载</button>
+      <button id="ctl-start" style="padding:6px 14px;cursor:pointer;" title="按当前队列顺序开始下载" disabled>开始下载</button>
       <button id="ctl-stop" style="padding:6px 14px;cursor:pointer;color:#b91c1c;border-color:#b91c1c;">停止下载任务</button>
       <span id="ctl-message" class="muted"></span>
     </div>
@@ -2794,31 +2794,30 @@ async function refreshControl() {
     const runnerCountEl = document.getElementById("ctl-runner-count");
     runnerCountEl.textContent = runnerCount;
     runnerCountEl.style.color = runnerCount > 1 ? "var(--err)" : "";
-    const restartButton = document.getElementById("ctl-restart");
-    restartButton.disabled = false;
-    restartButton.textContent = running ? "重启下载" : "开始下载";
-    restartButton.title = running
-      ? "停止当前下载并按队列重新启动"
+    const startButton = document.getElementById("ctl-start");
+    startButton.disabled = running;
+    startButton.textContent = running ? "下载运行中" : "开始下载";
+    startButton.title = running
+      ? "下载运行中；如需重启，请先停止下载任务"
       : "按当前队列顺序开始下载";
     if (runnerCount > 1) {
       document.getElementById("ctl-message").textContent =
-        `检测到多个下载进程，建议点击「${running ? "重启下载" : "开始下载"}」清理`;
+        "检测到多个下载进程，建议先点「停止下载任务」，再重新开始";
     }
   } catch (error) {
     document.getElementById("ctl-running").textContent = "查询失败";
   }
 }
 
-document.getElementById("ctl-restart").addEventListener("click", async () => {
+document.getElementById("ctl-start").addEventListener("click", async () => {
   const message = document.getElementById("ctl-message");
-  const running = controlState.running;
-  const confirmText = running
-    ? "确认重启下载？\n将停止当前下载并重新排队；已完成分块会复用，任务会从断点继续。"
-    : "确认开始下载？\n将按当前队列顺序执行待下载任务；已完成分块会复用。";
-  if (!window.confirm(confirmText)) {
+  if (controlState.running) {
     return;
   }
-  message.textContent = running ? "正在重启下载…" : "正在启动下载…";
+  if (!window.confirm("确认开始下载？\n将按当前队列顺序执行待下载任务；已完成分块会复用。")) {
+    return;
+  }
+  message.textContent = "正在启动下载…";
   try {
     const response = await fetch("/api/restart", {
       method: "POST",
@@ -2827,15 +2826,15 @@ document.getElementById("ctl-restart").addEventListener("click", async () => {
     });
     const data = await response.json();
     if (!response.ok || !data.ok) {
-      message.textContent = (running ? "重启" : "启动") + "失败：" + (data.error || response.status);
+      message.textContent = "启动失败：" + (data.error || response.status);
       return;
     }
     const requeued = (data.requeued || []).length;
-    message.textContent = `${running ? "下载已重启" : "下载已启动"}：runner PID=${data.runner_pid}`
+    message.textContent = `下载已启动：runner PID=${data.runner_pid}`
       + (requeued ? `，${requeued} 个中断任务已回到队列` : "");
     await refreshControl();
   } catch (error) {
-    message.textContent = (running ? "重启" : "启动") + "请求失败：" + error;
+    message.textContent = "启动请求失败：" + error;
   }
 });
 
