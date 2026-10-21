@@ -1,8 +1,2 @@
-[SYNC] process_db=F:\建筑数据下载\DownloadGBA\data\shp_process_state.db 发现=10 新增=0 更新=10
-[PLAN 1/1] 亚洲|中国|天津市  prefix=tianjin  features=947601  shp=1  source=data/亚洲/中国/天津市
-[DONE] 亚洲|中国|天津市 status=OK tiles=7 features=947601
-[PROCESS] total=47 ok=43 pending=0 running=0 failed=4 blocked=0 waiting=0
-[FAILED] Africa|Benin|Benin  attempts=2  准备输入失败: [WinError 2] 系统找不到指定的文件。
-[FAILED] Africa|Ghana|Ghana  attempts=1  处理进程退出码 1；points = _representative_points(working_gdf) | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ | File "F:\建筑数据下载\DownloadGBA\Tools\Oneshp_pipline_qgis\src\shp_pipeline_qgis\splitter.py", line 97, in _representative_points | result.append((float(point.x), float(point.y))) | MemoryError
-[FAILED] Africa|Botswana|Botswana  attempts=3  准备输入失败: [WinError 3] 系统找不到指定的路径。
-[FAILED] Africa|Algeria|Algeria  attempts=3  准备输入失败: [WinError 2] 系统找不到指定的文件。
+[SYNC] process_db=F:\建筑数据下载\DownloadGBA\data\shp_process_state.db 发现=4 新增=0 更新=4
+[PLAN 1/1] 亚洲|中国|重庆市  prefix=chongqing  features=4530987  shp=1  source=data/亚洲/中国/重庆市

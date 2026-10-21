@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-20T15:22:35",
+  "updated_at": "2026-10-21T14:27:49",
   "rows": {
     "亚洲|中国|广西壮族自治区": {
       "updated": true,
@@ -181,6 +181,21 @@
       "updated": true,
       "updated_at": "2026-10-20T13:55:29",
       "note": ""
+    },
+    "亚洲|中国|天津市": {
+      "updated": true,
+      "updated_at": "2026-10-21T11:38:14",
+      "note": ""
+    },
+    "亚洲|中国|海南省": {
+      "updated": true,
+      "updated_at": "2026-10-21T13:47:11",
+      "note": "已完成闭环"
+    },
+    "亚洲|中国|河南省": {
+      "updated": true,
+      "updated_at": "2026-10-21T14:27:49",
+      "note": "已完成闭环"
     }
   }
 }
