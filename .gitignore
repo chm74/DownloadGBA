@@ -6,6 +6,9 @@
 !/data/logs/
 !/data/logs/**
 
+# 本地运行配置（含数据库口令，不入库）
+/data/config.json
+
 # SQLite 运行时文件（由 .db 自动生成，不纳入版本控制）
 /data/*.db-wal
 /data/*.db-shm
