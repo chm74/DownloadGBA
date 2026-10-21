@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T14:27:49",
+  "updated_at": "2026-10-21T15:23:23",
   "rows": {
     "亚洲|中国|广西壮族自治区": {
       "updated": true,
@@ -58,9 +58,9 @@
       "note": "巴林  林世界贸易中心(BWTC)"
     },
     "亚洲|中国|重庆市": {
-      "updated": false,
-      "updated_at": "",
-      "note": ""
+      "updated": true,
+      "updated_at": "2026-10-21T15:23:23",
+      "note": "已完成闭环"
     },
     "亚洲|中国|陕西省": {
       "updated": true,
