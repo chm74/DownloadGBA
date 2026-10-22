@@ -258,6 +258,7 @@
 
   <section>
     <h2>当前任务</h2>
+    <div class="muted" style="margin-bottom:8px;">先点「停止当前任务」；停止成功后卡片会保留为「已停止」，此时「加入队尾」才可用。加入队尾只调整队列顺序，不会自动开始下载。</div>
     <div id="running-list"><div class="empty">暂无运行中的任务</div></div>
   </section>
 
@@ -398,7 +399,7 @@
         <section>
           <h2>流程说明</h2>
           <ul class="plain-list">
-            <li>处理流程：切分（目标约 8 万要素/片）→ QGIS 有效性校验 → 清洗（空几何 / Height≤0 / 重复几何）→ 重投影 EPSG:3857</li>
+            <li>处理流程：切分（目标约 20 万要素/片）→ QGIS 有效性校验 → 清洗（空几何 / Height≤0 / 重复几何）→ 重投影 EPSG:3857</li>
             <li>处理工具：<code>Tools/Oneshp_pipline_qgis</code>，产物为 <code>out_data/&lt;数据集&gt;_pipeline/final/*_3857.shp</code></li>
             <li>队列命令：<code>python scripts/run_shp_process_tasks.py --sync / --dry-run / --run / --summary / --running</code></li>
             <li>下载完成的任务会自动登记到待处理队列（<code>run_world_building_tasks.py</code> 默认开启，<code>--no-process-sync</code> 关闭）；「同步队列」按钮等价于手动执行一次 <code>--sync</code>。</li>
@@ -657,6 +658,8 @@ let countdownTimer = null;
 let refreshSequence = 0;
 const controlState = { actionTokenRequired: false, running: false };
 const noteState = { editingKey: null };
+const stoppedTaskState = { taskId: "", item: null, message: "" };
+let lastRunningItems = [];
 const queueState = { page: 1, pageSize: 15, total: 0, search: "" };
 const downloadRecentState = { page: 1, pageSize: 10, total: 0 };
 const processingRecentState = { page: 1, pageSize: 10, total: 0 };
@@ -717,13 +720,41 @@ function batchLabel(state) {
   return ["未知", "unknown"];
 }
 
+function clearStoppedTask() {
+  stoppedTaskState.taskId = "";
+  stoppedTaskState.item = null;
+  stoppedTaskState.message = "";
+}
+
+function renderStoppedTask() {
+  if (!stoppedTaskState.taskId) return "";
+  const item = stoppedTaskState.item || {};
+  const dir = item.output_dir ? `<div class="meta">目录：${esc(item.output_dir)}</div>` : "";
+  return `
+    <div class="task">
+      <div class="title">${esc(stoppedTaskState.taskId)} <span style="color:var(--warn);font-weight:600;">已停止 · 待处理</span></div>
+      <div class="meta">${esc(stoppedTaskState.message || "已停止，任务已回到待执行队列原位置。")}</div>
+      ${dir}
+      <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <button type="button" class="mini" data-move-tail="${esc(stoppedTaskState.taskId)}" title="把该任务排到待执行队列末尾">加入队尾</button>
+        <button type="button" class="mini" data-dismiss-stopped title="关闭提示；任务仍保留在原队列位置">关闭</button>
+        <span class="meta stopped-task-message"></span>
+      </div>
+    </div>`;
+}
+
 function renderRunning(items) {
   const box = document.getElementById("running-list");
-  if (!items || items.length === 0) {
-    box.innerHTML = '<div class="empty">暂无运行中的任务</div>';
+  lastRunningItems = items || [];
+  if (stoppedTaskState.taskId && lastRunningItems.some(item => item.task_id === stoppedTaskState.taskId)) {
+    clearStoppedTask();
+  }
+  const stopped = renderStoppedTask();
+  if (!lastRunningItems.length) {
+    box.innerHTML = stopped || '<div class="empty">暂无运行中的任务</div>';
     return;
   }
-  box.innerHTML = items.map(item => {
+  box.innerHTML = lastRunningItems.map(item => {
     const percent = item.progress === null ? null : item.progress;
     let stalled = "";
     if (item.log_stale) {
@@ -748,41 +779,84 @@ function renderRunning(items) {
         <div class="meta">目录：${esc(item.output_dir)}</div>
         ${log ? `<div class="log">${log}</div>` : ""}
         <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <button type="button" class="mini" data-stop-current="${esc(item.task_id)}" style="color:#b91c1c;border-color:#b91c1c;">停止当前任务并加入队尾</button>
+          <button type="button" class="mini" data-stop-current="${esc(item.task_id)}" style="color:#b91c1c;border-color:#b91c1c;" title="停止下载进程，任务回到待执行队列并保持原排序">停止当前任务</button>
+          <button type="button" class="mini" disabled title="请先点击「停止当前任务」；停止成功后此按钮才启用">加入队尾</button>
           <span class="meta stop-current-message"></span>
         </div>
       </div>`;
-  }).join("");
+  }).join("") + stopped;
 }
 
 document.getElementById("running-list").addEventListener("click", async event => {
+  const dismissButton = event.target.closest("[data-dismiss-stopped]");
+  if (dismissButton) {
+    clearStoppedTask();
+    await refresh();
+    return;
+  }
+
+  const moveButton = event.target.closest("[data-move-tail]");
+  if (moveButton) {
+    const taskId = moveButton.dataset.moveTail;
+    if (!window.confirm(`确认将“${taskId}”加入队尾？\n任务仍保持待执行，不会立即开始下载。`)) {
+      return;
+    }
+    const message = moveButton.parentElement.querySelector(".stopped-task-message");
+    const buttons = moveButton.parentElement.querySelectorAll("button");
+    buttons.forEach(item => { item.disabled = true; });
+    message.textContent = "正在加入队尾…";
+    try {
+      const response = await fetch("/api/queue/reorder", {
+        method: "POST",
+        headers: actionHeaders(),
+        body: JSON.stringify({ task_id: taskId, direction: "tail" }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) {
+        message.textContent = "操作失败：" + (data.error || response.status);
+        buttons.forEach(item => { item.disabled = false; });
+        return;
+      }
+      clearStoppedTask();
+      await refresh();
+      showMessage("已加入队尾", "success");
+    } catch (error) {
+      message.textContent = "请求失败：" + error;
+      buttons.forEach(item => { item.disabled = false; });
+    }
+    return;
+  }
+
   const button = event.target.closest("[data-stop-current]");
   if (!button) return;
   const taskId = button.dataset.stopCurrent;
-  if (!window.confirm(`确认停止当前任务“${taskId}”并重新加入待执行队尾？\n已完成分块会保留，整个下载批处理将停止。`)) {
-    return;
-  }
+  const confirmed = window.confirm(`确认停止当前任务“${taskId}”？\n已完成分块会保留；任务将回到待执行队列的原位置，不会自动移到队尾。\n整个下载批处理将停止。`);
+  if (!confirmed) return;
   const message = button.parentElement.querySelector(".stop-current-message");
-  button.disabled = true;
-  message.textContent = "正在停止并重新入队…";
+  const buttons = button.parentElement.querySelectorAll("[data-stop-current]");
+  const currentItem = lastRunningItems.find(item => item.task_id === taskId) || null;
+  buttons.forEach(item => { item.disabled = true; });
+  message.textContent = "正在停止当前任务…";
   try {
     const response = await fetch("/api/queue/stop-current", {
       method: "POST",
       headers: actionHeaders(),
-      body: JSON.stringify({ task_id: taskId }),
+      body: JSON.stringify({ task_id: taskId, position: "keep" }),
     });
     const data = await response.json();
     if (!response.ok || !data.ok) {
       message.textContent = "操作失败：" + (data.error || response.status);
-      button.disabled = false;
+      buttons.forEach(item => { item.disabled = false; });
       return;
     }
-    message.textContent = `已停止并加入队尾（当前共 ${data.pending_total} 条待执行）`;
+    stoppedTaskState.taskId = taskId;
+    stoppedTaskState.item = currentItem;
+    stoppedTaskState.message = `已停止，任务已回到待执行队列原位置（当前共 ${data.pending_total} 条待执行）。需要排到最后时，请点「加入队尾」。`;
     await refresh();
     await refreshControl();
   } catch (error) {
     message.textContent = "请求失败：" + error;
-    button.disabled = false;
+    buttons.forEach(item => { item.disabled = false; });
   }
 });
 
@@ -806,12 +880,14 @@ function renderQueue(items, total, page, pageSize, totalAll) {
         const isFirst = item.order === 1;
         const isLast = item.order >= total;
         const isGlobalFirst = item.global_order === 1;
+        const isGlobalLast = item.global_order >= totalAll;
         return `
         <tr>
           <td>
             <button type="button" class="mini" data-reorder="${esc(item.task_id)}" data-direction="up" title="上移" ${isFirst ? "disabled" : ""}>↑</button>
             <button type="button" class="mini" data-reorder="${esc(item.task_id)}" data-direction="down" title="下移" ${isLast ? "disabled" : ""}>↓</button>
             <button type="button" class="mini" data-reorder="${esc(item.task_id)}" data-direction="top" title="置顶" ${isGlobalFirst ? "disabled" : ""}>⤒</button>
+            <button type="button" class="mini" data-reorder="${esc(item.task_id)}" data-direction="tail" title="移到队尾" ${isGlobalLast ? "disabled" : ""}>⤓</button>
           </td>
           <td>${esc(item.order)}</td>
           <td class="mono">${esc(item.task_id)}</td>
@@ -826,7 +902,7 @@ function renderQueue(items, total, page, pageSize, totalAll) {
 
 async function reorderDownload(taskId, direction) {
   const message = document.getElementById("queue-reorder-message");
-  const labels = { up: "上移", down: "下移", top: "置顶" };
+  const labels = { up: "上移", down: "下移", top: "置顶", tail: "移到队尾" };
   message.textContent = `${labels[direction] || direction}中…`;
   try {
     const response = await fetch("/api/queue/reorder", {
@@ -2040,9 +2116,17 @@ const downloadModal = document.getElementById("d-download-modal");
 document.getElementById("d-download-close").addEventListener("click", closeNotDownloadedModal);
 document.getElementById("d-download-close-footer").addEventListener("click", closeNotDownloadedModal);
 document.getElementById("d-download-refresh").addEventListener("click", loadNotDownloadedTasks);
-document.getElementById("d-download-search").addEventListener("input", (event) => {
-  notDownloadedModalState.search = event.target.value || "";
+const downloadSearchInput = document.getElementById("d-download-search");
+function applyDownloadSearch() {
+  notDownloadedModalState.search = (downloadSearchInput.value || "").trim();
   renderNotDownloadedModal();
+}
+downloadSearchInput.addEventListener("input", applyDownloadSearch);
+downloadSearchInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    applyDownloadSearch();
+  }
 });
 document.getElementById("d-download-tabs").addEventListener("click", (event) => {
   const button = event.target.closest("[data-dlmode]");
@@ -2831,6 +2915,7 @@ document.getElementById("ctl-start").addEventListener("click", async () => {
       return;
     }
     const requeued = (data.requeued || []).length;
+    clearStoppedTask();
     message.textContent = `下载已启动：runner PID=${data.runner_pid}`
       + (requeued ? `，${requeued} 个中断任务已回到队列` : "");
     await refreshControl();

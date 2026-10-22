@@ -576,6 +576,13 @@ class LocalBoundaryTests(unittest.TestCase):
                 queue = store.move_task(tasks[0].task_id, "up")
                 self.assertEqual(queue[0], tasks[0].task_id)
 
+                queue = store.move_task(tasks[0].task_id, "tail")
+                self.assertEqual(queue[-1], tasks[0].task_id)
+                self.assertEqual(store.pending_tasks()[-1]["task_id"], tasks[0].task_id)
+
+                with self.assertRaises(ValueError):
+                    store.move_task(tasks[0].task_id, "sideways")
+
                 with self.assertRaises(KeyError):
                     store.move_task("Africa|Nowhere|Nowhere", "up")
 

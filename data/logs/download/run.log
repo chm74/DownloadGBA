@@ -1,4 +1,9 @@
 [SYNC] manifest=F:\建筑数据下载\DownloadGBA\data\world_building_download_tasks.csv tasks=259 added=0 updated=0 reset=0
-[SELECT] 初始待执行 233 个任务（状态过滤=['PENDING', 'RUNNING']；每完成一个任务重新读取最新排序）
+[SELECT] 初始待执行 230 个任务（状态过滤=['PENDING', 'RUNNING']；每完成一个任务重新读取最新排序）
 --- [1] America|Colombia|Colombia ---
 [RUN] America|Colombia|Colombia -> F:\建筑数据下载\DownloadGBA\data\America\Colombia\Colombia
+[SHP] America|Colombia|Colombia -> 18 个分卷
+[PROCESS] 已登记处理队列: America|Colombia|Colombia added=1 updated=0
+[OK] America|Colombia|Colombia features=17910838 elapsed=33179s
+--- [2] America|Chile|Chile ---
+[RUN] America|Chile|Chile -> F:\建筑数据下载\DownloadGBA\data\America\Chile\Chile

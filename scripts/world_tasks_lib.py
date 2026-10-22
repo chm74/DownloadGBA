@@ -1156,7 +1156,7 @@ class StateStore:
                 )
 
     def move_task(self, task_id: str, direction: str) -> list[str]:
-        if direction not in ("up", "down", "top"):
+        if direction not in ("up", "down", "top", "tail"):
             raise ValueError(f"不支持的排序方向: {direction}")
         keys = [row["task_id"] for row in self.pending_tasks()]
         if task_id not in keys:
@@ -1164,6 +1164,8 @@ class StateStore:
         index = keys.index(task_id)
         if direction == "top":
             target = 0
+        elif direction == "tail":
+            target = len(keys) - 1
         elif direction == "up":
             target = max(index - 1, 0)
         else:

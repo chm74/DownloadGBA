@@ -1209,6 +1209,40 @@ class ControlTests(unittest.TestCase):
             finally:
                 store.close()
 
+    def test_stop_current_task_action_keeps_queue_position(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            state_db = build_repo_fixture(repo_root)
+            config = {"repo_root": repo_root, "state_db": state_db}
+            stopped = {
+                "runner": {"pid": 100},
+                "workers": [{"pid": 200}],
+            }
+            no_processes = {"runner": None, "runners": [], "workers": []}
+
+            with patch.object(
+                status_server,
+                "_stop_all_batch_processes",
+                return_value=(stopped, [100, 200]),
+            ):
+                with patch.object(status_server, "detect_batch", return_value=no_processes):
+                    result = status_server.stop_current_task_action(
+                        config,
+                        "Africa|Algeria|Algeria",
+                        "keep",
+                    )
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["task_id"], "Africa|Algeria|Algeria")
+            self.assertEqual(result["position"], "keep")
+            self.assertEqual(result["stopped_pids"], [100, 200])
+            self.assertEqual(result["queue"][0], "Africa|Algeria|Algeria")
+            store = lib.StateStore(state_db)
+            try:
+                self.assertEqual(store.get("Africa|Algeria|Algeria")["status"], lib.STATUS_PENDING)
+            finally:
+                store.close()
+
     def test_stop_current_task_action_keeps_running_state_when_processes_survive(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)
@@ -1240,23 +1274,23 @@ class ControlTests(unittest.TestCase):
                 result = {
                     "ok": True,
                     "task_id": "Africa|Algeria|Algeria",
-                    "position": "tail",
+                    "position": "keep",
                     "stopped_pids": [1, 2],
-                    "queue": ["Africa|Angola|Angola", "Africa|Algeria|Algeria"],
+                    "queue": ["Africa|Algeria|Algeria", "Africa|Angola|Angola"],
                     "pending_total": 2,
                 }
                 with patch.object(status_server, "stop_current_task_action", return_value=result) as action:
                     request = urllib.request.Request(
                         f"http://127.0.0.1:{port}/api/queue/stop-current",
-                        data=json.dumps({"task_id": "Africa|Algeria|Algeria"}).encode("utf-8"),
+                        data=json.dumps({"task_id": "Africa|Algeria|Algeria", "position": "keep"}).encode("utf-8"),
                         headers={"Content-Type": "application/json"},
                         method="POST",
                     )
                     with urllib.request.urlopen(request, timeout=10) as response:
                         payload = json.loads(response.read().decode("utf-8"))
                 self.assertTrue(payload["ok"])
-                self.assertEqual(payload["position"], "tail")
-                action.assert_called_once_with(server.config, "Africa|Algeria|Algeria")
+                self.assertEqual(payload["position"], "keep")
+                action.assert_called_once_with(server.config, "Africa|Algeria|Algeria", "keep")
             finally:
                 server.shutdown()
                 server.server_close()
@@ -1365,6 +1399,21 @@ class ControlTests(unittest.TestCase):
                     snapshot = json.loads(response.read().decode("utf-8"))
                 self.assertEqual(snapshot["queue"][0]["task_id"], "Africa|Benin|Benin")
                 self.assertEqual(snapshot["queue"][0]["order"], 1)
+
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{port}/api/queue/reorder",
+                    data=json.dumps({"task_id": "Africa|Benin|Benin", "direction": "tail"}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                self.assertTrue(payload["ok"])
+                self.assertEqual(payload["queue"][-1], "Africa|Benin|Benin")
+
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status", timeout=10) as response:
+                    snapshot = json.loads(response.read().decode("utf-8"))
+                self.assertEqual(snapshot["queue"][-1]["task_id"], "Africa|Benin|Benin")
             finally:
                 server.shutdown()
                 server.server_close()

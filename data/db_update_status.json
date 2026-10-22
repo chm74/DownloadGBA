@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T15:24:21",
+  "updated_at": "2026-10-21T18:52:17",
   "rows": {
     "亚洲|中国|广西壮族自治区": {
       "updated": true,
@@ -37,11 +37,6 @@
       "updated_at": "2026-09-18T18:40:37",
       "note": "迪拜-阿联酋   哈利法塔"
     },
-    "EXT|data/mongolia_gba_wfs": {
-      "updated": true,
-      "updated_at": "2026-10-19T17:10:21",
-      "note": ""
-    },
     "Asia|Malaysia|Malaysia": {
       "updated": true,
       "updated_at": "2026-09-21T16:11:11",
@@ -58,9 +53,9 @@
       "note": "巴林  林世界贸易中心(BWTC)"
     },
     "亚洲|中国|重庆市": {
-      "updated": false,
-      "updated_at": "",
-      "note": ""
+      "updated": true,
+      "updated_at": "2026-10-21T17:39:35",
+      "note": "已完成闭环"
     },
     "亚洲|中国|陕西省": {
       "updated": true,
@@ -195,6 +190,16 @@
     "亚洲|中国|河南省": {
       "updated": true,
       "updated_at": "2026-10-21T14:27:49",
+      "note": "已完成闭环"
+    },
+    "Asia|Mongolia|Mongolia": {
+      "updated": true,
+      "updated_at": "2026-10-21T18:06:13",
+      "note": "已完成闭环"
+    },
+    "亚洲|中国|山西省": {
+      "updated": true,
+      "updated_at": "2026-10-21T18:52:17",
       "note": "已完成闭环"
     }
   }
